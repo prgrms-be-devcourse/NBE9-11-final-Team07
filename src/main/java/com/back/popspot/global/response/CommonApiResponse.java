@@ -10,7 +10,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CommonApiResponse<T> {
 
-    // HTTP 상태코드는 ResponseEntity에서 관리하고, 이 클래스는 응답 바디만 담당한다.
     private String code;
     private String message;
     private T data;
@@ -46,9 +45,6 @@ public class CommonApiResponse<T> {
         );
     }
 
-    // 실패 응답
-    // 사용 예시: return ResponseEntity.status(errorCode.getStatus())
-    //         .body(CommonApiResponse.error(errorCode.name(), errorCode.getMessage()));
     public static CommonApiResponse<Void> error(String code, String message) {
         return new CommonApiResponse<>(
                 code,
@@ -57,9 +53,6 @@ public class CommonApiResponse<T> {
         );
     }
 
-    // 상세 데이터 포함 실패 응답
-    // 사용 예시: return ResponseEntity.badRequest()
-    //         .body(CommonApiResponse.error("INVALID_INPUT_VALUE", "잘못된 요청입니다.", errors));
     public static <T> CommonApiResponse<T> error(String code, String message, T data) {
         return new CommonApiResponse<>(
                 code,
