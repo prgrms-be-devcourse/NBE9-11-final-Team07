@@ -13,6 +13,8 @@ import com.back.popspot.domain.oauthAccount.entity.OauthProvider;
 import com.back.popspot.domain.oauthAccount.repository.OauthAccountRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
+import com.back.popspot.global.exception.BusinessException;
+import com.back.popspot.global.exception.ErrorCode;
 
 import lombok.RequiredArgsConstructor;
 
@@ -36,7 +38,13 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 		OauthProvider provider = OauthProvider.valueOf(registrationId.toUpperCase());
 
 		Map<String, Object> attributes = oAuth2User.getAttributes();
-		String providerId = String.valueOf(attributes.get("sub"));
+
+		Object sub = attributes.get("sub");
+		if (sub == null) {
+			throw new BusinessException(ErrorCode.OAUTH2_LOGIN_FAILED);
+		}
+
+		String providerId = String.valueOf(sub);
 		String email = (String) attributes.get("email");
 		String name = (String) attributes.get("name");
 
