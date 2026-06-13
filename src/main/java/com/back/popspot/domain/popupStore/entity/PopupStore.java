@@ -2,6 +2,7 @@ package com.back.popspot.domain.popupStore.entity;
 
 import java.time.LocalDateTime;
 
+import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.entity.BaseEntity;
 
@@ -55,6 +56,24 @@ public class PopupStore extends BaseEntity {
 
 	@Column(length = 255)
 	private String description;
+
+	private PopupStore(User user, PopupStoreCreateRequest request) {
+		this.user = user;
+		this.title = request.title();
+		this.location = request.location();
+		this.feeType = request.feeType();
+		this.price = request.price();
+		this.reservationStartAt = request.reservationStartAt();
+		this.reservationEndAt = request.reservationEndAt();
+		this.openDate = request.openDate();
+		this.closeDate = request.closeDate();
+		this.imageKey = request.imageKey();
+		this.description = request.description();
+	}
+
+	public static PopupStore of(User user, PopupStoreCreateRequest request) {
+		return new PopupStore(user, request);
+	}
 
 	/**
 	 * 예약 기간(reservationStartAt ~ reservationEndAt)과 기준 시각을 비교해 진행 상태를 계산한다.
