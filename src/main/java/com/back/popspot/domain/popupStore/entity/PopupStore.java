@@ -92,4 +92,45 @@ public class PopupStore extends BaseEntity {
 		}
 		return PopupStatus.CLOSED;
 	}
+
+	// 부분 수정용 - 호출 측에서 null 검사 후 필요한 필드만 호출한다.
+	public void updateTitle(String title) {
+		this.title = title;
+	}
+
+	public void updateLocation(String location) {
+		this.location = location;
+	}
+
+	public void updateFeeType(PopupFeeType feeType) {
+		this.feeType = feeType;
+	}
+
+	public void updatePrice(Integer price) {
+		this.price = price;
+	}
+
+	public void updateReservationStartAt(LocalDateTime reservationStartAt) {
+		this.reservationStartAt = reservationStartAt;
+	}
+
+	public void updateReservationEndAt(LocalDateTime reservationEndAt) {
+		this.reservationEndAt = reservationEndAt;
+	}
+
+	public void updateOpenDate(LocalDateTime openDate) {
+		this.openDate = openDate;
+	}
+
+	public void updateCloseDate(LocalDateTime closeDate) {
+		this.closeDate = closeDate;
+	}
+
+	public void updateImageKey(String imageKey) {
+		this.imageKey = imageKey;
+	}
+
+	public void updateDescription(String description) {
+		this.description = description;
+	}
 }

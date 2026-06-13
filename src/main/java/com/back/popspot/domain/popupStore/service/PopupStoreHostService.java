@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
+import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
@@ -48,5 +49,51 @@ public class PopupStoreHostService {
 		PopupStore popupStore = PopupStore.of(user, request);
 		popupStoreRepository.save(popupStore);
 		return popupStore.getId();
+	}
+
+	/**
+	 * 팝업스토어를 부분 수정한다. (주최자, 소유자만)
+	 * 없으면 RESOURCE_NOT_FOUND, 소유자가 아니면 FORBIDDEN.
+	 * null 이 아닌 필드만 반영하며, dirty checking 으로 자동 저장된다.
+	 */
+	@Transactional
+	public void updatePopupStore(Long userId, Long popupStoreId, PopupStoreUpdateRequest request) {
+		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+		if (!popupStore.getUser().getId().equals(userId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN);
+		}
+
+		if (request.title() != null) {
+			popupStore.updateTitle(request.title());
+		}
+		if (request.location() != null) {
+			popupStore.updateLocation(request.location());
+		}
+		if (request.feeType() != null) {
+			popupStore.updateFeeType(request.feeType());
+		}
+		if (request.price() != null) {
+			popupStore.updatePrice(request.price());
+		}
+		if (request.reservationStartAt() != null) {
+			popupStore.updateReservationStartAt(request.reservationStartAt());
+		}
+		if (request.reservationEndAt() != null) {
+			popupStore.updateReservationEndAt(request.reservationEndAt());
+		}
+		if (request.openDate() != null) {
+			popupStore.updateOpenDate(request.openDate());
+		}
+		if (request.closeDate() != null) {
+			popupStore.updateCloseDate(request.closeDate());
+		}
+		if (request.imageKey() != null) {
+			popupStore.updateImageKey(request.imageKey());
+		}
+		if (request.description() != null) {
+			popupStore.updateDescription(request.description());
+		}
 	}
 }
