@@ -38,7 +38,7 @@ import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 
 /**
- * PopupStoreService 분기/매핑 로직 단위 테스트 (repository 는 mock).
+ * PopupStoreService 조회(목록/상세/슬롯) 분기·매핑 로직 단위 테스트 (repository 는 mock).
  * JPQL 자체는 검증하지 않으며, status 분기와 calculateStatus 매핑만 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
