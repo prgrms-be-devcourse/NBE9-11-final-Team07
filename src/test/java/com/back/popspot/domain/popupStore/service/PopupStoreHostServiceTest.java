@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
+import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
@@ -117,6 +119,65 @@ class PopupStoreHostServiceTest {
 				.isInstanceOf(BusinessException.class)
 				.extracting(e -> ((BusinessException) e).getErrorCode())
 				.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+	}
+
+	@Test
+	@DisplayName("수정: 소유자가 부분 수정하면 null 아닌 필드만 반영된다")
+	void updatePopupStore_owner_appliesOnlyNonNullFields() {
+		PopupStore popupStore = existingPopup(USER_ID);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+
+		// title, price 만 수정 (나머지 null)
+		PopupStoreUpdateRequest request = new PopupStoreUpdateRequest(
+				"새 제목", null, null, 2000, null, null, null, null, null, null);
+
+		popupStoreHostService.updatePopupStore(USER_ID, 10L, request);
+
+		assertThat(popupStore.getTitle()).isEqualTo("새 제목");   // 반영됨
+		assertThat(popupStore.getPrice()).isEqualTo(2000);        // 반영됨
+		assertThat(popupStore.getLocation()).isEqualTo("기존 위치"); // null 이라 그대로
+	}
+
+	@Test
+	@DisplayName("수정: 팝업이 없으면 RESOURCE_NOT_FOUND")
+	void updatePopupStore_notFound_throws() {
+		when(popupStoreRepository.findById(99L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> popupStoreHostService.updatePopupStore(USER_ID, 99L, emptyUpdate()))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+	}
+
+	@Test
+	@DisplayName("수정: 소유자가 아니면 FORBIDDEN 이고 값이 바뀌지 않는다")
+	void updatePopupStore_notOwner_throwsForbidden() {
+		PopupStore popupStore = existingPopup(USER_ID); // 소유자 = 1L
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+
+		PopupStoreUpdateRequest request = new PopupStoreUpdateRequest(
+				"새 제목", null, null, null, null, null, null, null, null, null);
+
+		assertThatThrownBy(() -> popupStoreHostService.updatePopupStore(2L, 10L, request)) // 다른 사용자
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.FORBIDDEN);
+		assertThat(popupStore.getTitle()).isEqualTo("기존 제목"); // 변경 안 됨
+	}
+
+	private PopupStore existingPopup(Long ownerId) {
+		User owner = new User();
+		ReflectionTestUtils.setField(owner, "id", ownerId);
+		PopupStore popupStore = new PopupStore();
+		ReflectionTestUtils.setField(popupStore, "user", owner);
+		ReflectionTestUtils.setField(popupStore, "title", "기존 제목");
+		ReflectionTestUtils.setField(popupStore, "location", "기존 위치");
+		ReflectionTestUtils.setField(popupStore, "price", 1000);
+		return popupStore;
+	}
+
+	private PopupStoreUpdateRequest emptyUpdate() {
+		return new PopupStoreUpdateRequest(null, null, null, null, null, null, null, null, null, null);
 	}
 
 	private PopupStoreCreateRequest request(PopupFeeType feeType, Integer price,
