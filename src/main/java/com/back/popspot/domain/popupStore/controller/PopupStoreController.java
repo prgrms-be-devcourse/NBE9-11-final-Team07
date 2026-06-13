@@ -1,7 +1,11 @@
 package com.back.popspot.domain.popupStore.controller;
 
+import java.time.LocalDate;
+import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -11,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreDetailResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreListResponse;
+import com.back.popspot.domain.popupStore.dto.ReservationSlotResponse;
 import com.back.popspot.domain.popupStore.entity.PopupStatus;
 import com.back.popspot.domain.popupStore.service.PopupStoreService;
 import com.back.popspot.global.response.CommonApiResponse;
@@ -41,5 +46,15 @@ public class PopupStoreController {
 	) {
 		PopupStoreDetailResponse popupStore = popupStoreService.getPopupStore(popupStoreId);
 		return ResponseEntity.ok(CommonApiResponse.success(popupStore));
+	}
+
+	// 예약 슬롯 조회 (비회원 허용). 특정 날짜(date)의 슬롯 목록
+	@GetMapping("/{popupStoreId}/slots")
+	public ResponseEntity<CommonApiResponse<List<ReservationSlotResponse>>> getSlots(
+			@PathVariable Long popupStoreId,
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+	) {
+		List<ReservationSlotResponse> slots = popupStoreService.getSlots(popupStoreId, date);
+		return ResponseEntity.ok(CommonApiResponse.success(slots));
 	}
 }

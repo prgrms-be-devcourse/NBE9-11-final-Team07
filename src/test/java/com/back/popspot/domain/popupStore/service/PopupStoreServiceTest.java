@@ -7,7 +7,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,10 +27,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreDetailResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreListResponse;
+import com.back.popspot.domain.popupStore.dto.ReservationSlotResponse;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStatus;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
+import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
+import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 
@@ -42,10 +47,14 @@ class PopupStoreServiceTest {
 	@Mock
 	private PopupStoreRepository popupStoreRepository;
 
+	@Mock
+	private ReservationSlotRepository reservationSlotRepository;
+
 	@InjectMocks
 	private PopupStoreService popupStoreService;
 
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 6, 13, 12, 0);
+	private static final LocalDate DATE = LocalDate.of(2026, 6, 14);
 	private static final Pageable PAGE = PageRequest.of(0, 10);
 
 	@Test
@@ -122,6 +131,44 @@ class PopupStoreServiceTest {
 				.isInstanceOf(BusinessException.class)
 				.extracting(e -> ((BusinessException) e).getErrorCode())
 				.isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+	}
+
+	@Test
+	@DisplayName("슬롯 조회: 팝업 존재 시 슬롯 목록 반환 + available 계산(reservedCount < capacity)")
+	void getSlots_popupExists_returnsSlotsWithAvailability() {
+		when(popupStoreRepository.existsById(1L)).thenReturn(true);
+		when(reservationSlotRepository.findByPopupStoreIdAndSlotDate(1L, DATE))
+				.thenReturn(List.of(slot(100L, 10, 3), slot(101L, 5, 5)));
+
+		List<ReservationSlotResponse> result = popupStoreService.getSlots(1L, DATE);
+
+		assertThat(result).hasSize(2);
+		assertThat(result.get(0).slotId()).isEqualTo(100L);
+		assertThat(result.get(0).available()).isTrue();  // 3 < 10
+		assertThat(result.get(1).available()).isFalse(); // 5 == 5 (정원 마감)
+	}
+
+	@Test
+	@DisplayName("슬롯 조회: 팝업이 없으면 RESOURCE_NOT_FOUND 이고 슬롯 조회는 하지 않는다")
+	void getSlots_popupNotFound_throwsBusinessException() {
+		when(popupStoreRepository.existsById(99L)).thenReturn(false);
+
+		assertThatThrownBy(() -> popupStoreService.getSlots(99L, DATE))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+
+		verify(reservationSlotRepository, never()).findByPopupStoreIdAndSlotDate(any(), any());
+	}
+
+	private ReservationSlot slot(Long id, int capacity, int reservedCount) {
+		ReservationSlot slot = new ReservationSlot();
+		ReflectionTestUtils.setField(slot, "id", id);
+		ReflectionTestUtils.setField(slot, "slotDate", DATE);
+		ReflectionTestUtils.setField(slot, "startTime", LocalTime.of(10, 0));
+		ReflectionTestUtils.setField(slot, "capacity", capacity);
+		ReflectionTestUtils.setField(slot, "reservedCount", reservedCount);
+		return slot;
 	}
 
 	private PopupStore popupStore(Long id, LocalDateTime reservationStartAt, LocalDateTime reservationEndAt) {

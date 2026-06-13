@@ -1,6 +1,8 @@
 package com.back.popspot.domain.popupStore.service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -9,9 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreDetailResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreListResponse;
+import com.back.popspot.domain.popupStore.dto.ReservationSlotResponse;
 import com.back.popspot.domain.popupStore.entity.PopupStatus;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
+import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 
@@ -24,6 +28,7 @@ public class
 PopupStoreService {
 
 	private final PopupStoreRepository popupStoreRepository;
+	private final ReservationSlotRepository reservationSlotRepository;
 
 	/**
 	 * 팝업스토어 목록을 조회한다.
@@ -47,6 +52,21 @@ PopupStoreService {
 
 		PopupStatus status = popupStore.calculateStatus(LocalDateTime.now());
 		return PopupStoreDetailResponse.from(popupStore, status);
+	}
+
+	/**
+	 * 특정 팝업스토어의 특정 날짜 예약 슬롯 목록을 조회한다.
+	 * 팝업이 없으면 RESOURCE_NOT_FOUND.
+	 */
+	public List<ReservationSlotResponse> getSlots(Long popupStoreId, LocalDate date) {
+		if (!popupStoreRepository.existsById(popupStoreId)) {
+			throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+		}
+
+		return reservationSlotRepository.findByPopupStoreIdAndSlotDate(popupStoreId, date)
+				.stream()
+				.map(ReservationSlotResponse::from)
+				.toList();
 	}
 
 	private Page<PopupStore> findByStatus(PopupStatus status, LocalDateTime now, Pageable pageable) {
