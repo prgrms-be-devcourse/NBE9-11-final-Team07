@@ -11,12 +11,13 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
 @Getter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "oauth_account")
 public class OauthAccount extends BaseEntity {
 	@ManyToOne(fetch = FetchType.LAZY)
@@ -29,4 +30,14 @@ public class OauthAccount extends BaseEntity {
 
 	@Column(name = "provider_id", length = 100, nullable = false)
 	private String providerId;
+
+	private OauthAccount(User user, OauthProvider provider, String providerId) {
+		this.user = user;
+		this.provider = provider;
+		this.providerId = providerId;
+	}
+
+	public static OauthAccount create(User user, OauthProvider provider, String providerId) {
+		return new OauthAccount(user, provider, providerId);
+	}
 }
