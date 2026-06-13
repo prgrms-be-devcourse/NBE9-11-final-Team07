@@ -55,4 +55,22 @@ public class PopupStore extends BaseEntity {
 
 	@Column(length = 255)
 	private String description;
+
+	/**
+	 * 예약 기간(reservationStartAt ~ reservationEndAt)과 기준 시각을 비교해 진행 상태를 계산한다.
+	 * <ul>
+	 *     <li>예약 시작 전(start &gt; now) → UPCOMING</li>
+	 *     <li>예약 진행 중(start &le; now &lt; end) → OPEN</li>
+	 *     <li>예약 종료(end &le; now) → CLOSED</li>
+	 * </ul>
+	 */
+	public PopupStatus calculateStatus(LocalDateTime now) {
+		if (reservationStartAt != null && reservationStartAt.isAfter(now)) {
+			return PopupStatus.UPCOMING;
+		}
+		if (reservationEndAt != null && reservationEndAt.isAfter(now)) {
+			return PopupStatus.OPEN;
+		}
+		return PopupStatus.CLOSED;
+	}
 }
