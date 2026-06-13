@@ -43,7 +43,7 @@ public class SecurityConfig {
 				// 인가 규칙: 비회원은 GET /popups/** 만 허용, 나머지는 인증 필요
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(HttpMethod.GET, "/popups/**").permitAll()
-						.requestMatchers("/oauth2/**", "/login/**").permitAll()
+						.requestMatchers("/oauth2/**", "/login/**", "/error").permitAll()
 						.anyRequest().authenticated())
 
 				// 구글 OAuth2 로그인
