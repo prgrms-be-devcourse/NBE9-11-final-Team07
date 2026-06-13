@@ -4,10 +4,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.back.popspot.domain.popupStore.dto.PopupStoreDetailResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreListResponse;
 import com.back.popspot.domain.popupStore.entity.PopupStatus;
 import com.back.popspot.domain.popupStore.service.PopupStoreService;
@@ -30,5 +32,14 @@ public class PopupStoreController {
 	) {
 		Page<PopupStoreListResponse> popupStores = popupStoreService.getPopupStores(status, pageable);
 		return ResponseEntity.ok(CommonApiResponse.success(popupStores));
+	}
+
+	// 팝업스토어 상세 조회 (비회원 허용)
+	@GetMapping("/{popupStoreId}")
+	public ResponseEntity<CommonApiResponse<PopupStoreDetailResponse>> getPopupStore(
+			@PathVariable Long popupStoreId
+	) {
+		PopupStoreDetailResponse popupStore = popupStoreService.getPopupStore(popupStoreId);
+		return ResponseEntity.ok(CommonApiResponse.success(popupStore));
 	}
 }

@@ -7,10 +7,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.back.popspot.domain.popupStore.dto.PopupStoreDetailResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreListResponse;
 import com.back.popspot.domain.popupStore.entity.PopupStatus;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
+import com.back.popspot.global.exception.BusinessException;
+import com.back.popspot.global.exception.ErrorCode;
 
 import lombok.RequiredArgsConstructor;
 
@@ -32,6 +35,18 @@ PopupStoreService {
 		Page<PopupStore> popupStores = findByStatus(status, now, pageable);
 		return popupStores.map(popupStore ->
 			PopupStoreListResponse.from(popupStore, popupStore.calculateStatus(now)));
+	}
+
+	/**
+	 * 팝업스토어 단건 상세 조회. 없으면 RESOURCE_NOT_FOUND.
+	 * status 는 조회 시점 기준으로 계산해 응답에 담는다.
+	 */
+	public PopupStoreDetailResponse getPopupStore(Long popupStoreId) {
+		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+		PopupStatus status = popupStore.calculateStatus(LocalDateTime.now());
+		return PopupStoreDetailResponse.from(popupStore, status);
 	}
 
 	private Page<PopupStore> findByStatus(PopupStatus status, LocalDateTime now, Pageable pageable) {

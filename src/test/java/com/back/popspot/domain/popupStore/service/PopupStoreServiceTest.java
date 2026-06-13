@@ -1,6 +1,7 @@
 package com.back.popspot.domain.popupStore.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -8,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,10 +23,14 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.back.popspot.domain.popupStore.dto.PopupStoreDetailResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreListResponse;
+import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStatus;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
+import com.back.popspot.global.exception.BusinessException;
+import com.back.popspot.global.exception.ErrorCode;
 
 /**
  * PopupStoreService 분기/매핑 로직 단위 테스트 (repository 는 mock).
@@ -86,6 +92,36 @@ class PopupStoreServiceTest {
 		assertThat(response.location()).isEqualTo("location3");
 		assertThat(response.imageKey()).isEqualTo("image3");
 		assertThat(response.status()).isEqualTo(PopupStatus.UPCOMING);
+	}
+
+	@Test
+	@DisplayName("상세 조회: 존재하면 calculateStatus 로 status 를 채워 응답한다")
+	void getPopupStore_found_returnsDetailWithStatus() {
+		PopupStore openPopup = popupStore(10L, NOW.minusDays(1), NOW.plusDays(1)); // OPEN
+		ReflectionTestUtils.setField(openPopup, "description", "설명");
+		ReflectionTestUtils.setField(openPopup, "feeType", PopupFeeType.PAID);
+		ReflectionTestUtils.setField(openPopup, "price", 10000);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(openPopup));
+
+		PopupStoreDetailResponse response = popupStoreService.getPopupStore(10L);
+
+		assertThat(response.id()).isEqualTo(10L);
+		assertThat(response.title()).isEqualTo("title10");
+		assertThat(response.description()).isEqualTo("설명");
+		assertThat(response.feeType()).isEqualTo(PopupFeeType.PAID);
+		assertThat(response.price()).isEqualTo(10000);
+		assertThat(response.status()).isEqualTo(PopupStatus.OPEN);
+	}
+
+	@Test
+	@DisplayName("상세 조회: 존재하지 않으면 RESOURCE_NOT_FOUND 예외")
+	void getPopupStore_notFound_throwsBusinessException() {
+		when(popupStoreRepository.findById(99L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> popupStoreService.getPopupStore(99L))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
 	}
 
 	private PopupStore popupStore(Long id, LocalDateTime reservationStartAt, LocalDateTime reservationEndAt) {
