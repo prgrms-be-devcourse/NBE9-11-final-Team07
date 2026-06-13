@@ -1,3 +1,10 @@
 spring:
   application:
     name: popspot
+
+  profiles:
+    active: dev
+
+  output:
+    ansi:
+      enabled: always
