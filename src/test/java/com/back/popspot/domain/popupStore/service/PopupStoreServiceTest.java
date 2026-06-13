@@ -149,6 +149,18 @@ class PopupStoreServiceTest {
 	}
 
 	@Test
+	@DisplayName("슬롯 조회: 팝업은 있지만 그날 슬롯이 없으면 빈 리스트")
+	void getSlots_popupExistsButNoSlots_returnsEmpty() {
+		when(popupStoreRepository.existsById(1L)).thenReturn(true);
+		when(reservationSlotRepository.findByPopupStoreIdAndSlotDate(1L, DATE))
+				.thenReturn(List.of());
+
+		List<ReservationSlotResponse> result = popupStoreService.getSlots(1L, DATE);
+
+		assertThat(result).isEmpty();
+	}
+
+	@Test
 	@DisplayName("슬롯 조회: 팝업이 없으면 RESOURCE_NOT_FOUND 이고 슬롯 조회는 하지 않는다")
 	void getSlots_popupNotFound_throwsBusinessException() {
 		when(popupStoreRepository.existsById(99L)).thenReturn(false);
