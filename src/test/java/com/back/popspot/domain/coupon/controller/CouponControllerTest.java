@@ -1,0 +1,205 @@
+package com.back.popspot.domain.coupon.controller;
+
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import com.back.popspot.domain.coupon.dto.CouponCreateRequest;
+import com.back.popspot.domain.coupon.dto.CouponResponse;
+import com.back.popspot.domain.coupon.dto.UserCouponResponse;
+import com.back.popspot.domain.coupon.entity.CouponDiscountType;
+import com.back.popspot.domain.coupon.entity.CouponStatus;
+import com.back.popspot.domain.coupon.entity.UserCouponStatus;
+import com.back.popspot.domain.coupon.service.CouponService;
+import com.back.popspot.global.exception.BusinessException;
+import com.back.popspot.global.exception.ErrorCode;
+import com.back.popspot.global.exception.GlobalExceptionHandler;
+
+@ExtendWith(MockitoExtension.class)
+class CouponControllerTest {
+
+	@Mock
+	private CouponService couponService;
+
+	private MockMvc mockMvc;
+
+	@BeforeEach
+	void setUp() {
+		mockMvc = MockMvcBuilders.standaloneSetup(new CouponController(couponService))
+			.setControllerAdvice(new GlobalExceptionHandler())
+			.build();
+	}
+
+	@Test
+	void 호스트가_쿠폰을_생성하면_201을_반환한다() throws Exception {
+		Long hostUserId = 1L;
+		Long popupStoreId = 10L;
+		CouponCreateRequest request = validRequest();
+		CouponResponse response = couponResponse(popupStoreId);
+		given(couponService.createHostCoupon(hostUserId, popupStoreId, request)).willReturn(response);
+
+		mockMvc.perform(post("/host/popups/{popupStoreId}/coupons", popupStoreId)
+				.header("X-USER-ID", hostUserId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(toJson(request)))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.code").value("SUCCESS"))
+			.andExpect(jsonPath("$.message").value("쿠폰이 생성되었습니다."))
+			.andExpect(jsonPath("$.data.id").value(100L))
+			.andExpect(jsonPath("$.data.popupStoreId").value(popupStoreId))
+			.andExpect(jsonPath("$.data.name").value("신규 가입 쿠폰"));
+
+		verify(couponService).createHostCoupon(hostUserId, popupStoreId, request);
+	}
+
+	@Test
+	void 쿠폰_생성_요청이_유효하지_않으면_400을_반환한다() throws Exception {
+		CouponCreateRequest request = new CouponCreateRequest(
+			"",
+			CouponDiscountType.AMOUNT,
+			0,
+			null,
+			0,
+			0,
+			LocalDateTime.now().plusDays(1),
+			LocalDateTime.now().plusDays(10)
+		);
+
+		mockMvc.perform(post("/host/popups/{popupStoreId}/coupons", 10L)
+				.header("X-USER-ID", 1L)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(toJson(request)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+			.andExpect(jsonPath("$.message").value("잘못된 요청입니다."));
+	}
+
+	@Test
+	void 발급_가능한_쿠폰_목록을_조회한다() throws Exception {
+		Long popupStoreId = 10L;
+		given(couponService.getPublicCoupons(popupStoreId)).willReturn(List.of(couponResponse(popupStoreId)));
+
+		mockMvc.perform(get("/popups/{popupStoreId}/coupons", popupStoreId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.code").value("SUCCESS"))
+			.andExpect(jsonPath("$.data.length()").value(1))
+			.andExpect(jsonPath("$.data[0].remainingQuantity").value(100));
+	}
+
+	@Test
+	void 사용자에게_쿠폰을_발급하면_201을_반환한다() throws Exception {
+		Long userId = 1L;
+		Long couponId = 100L;
+		UserCouponResponse response = new UserCouponResponse(
+			200L,
+			couponId,
+			10L,
+			"테스트 팝업",
+			"신규 가입 쿠폰",
+			CouponDiscountType.AMOUNT,
+			1000,
+			null,
+			5000,
+			UserCouponStatus.ISSUED,
+			LocalDateTime.now().plusDays(10),
+			null,
+			LocalDateTime.now()
+		);
+		given(couponService.issueCoupon(userId, couponId)).willReturn(response);
+
+		mockMvc.perform(post("/coupons/{couponId}/issue", couponId)
+				.header("X-USER-ID", userId))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.code").value("SUCCESS"))
+			.andExpect(jsonPath("$.message").value("쿠폰이 발급되었습니다."))
+			.andExpect(jsonPath("$.data.id").value(200L))
+			.andExpect(jsonPath("$.data.status").value("ISSUED"));
+	}
+
+	@Test
+	void 중복_쿠폰_발급_요청이면_409를_반환한다() throws Exception {
+		Long userId = 1L;
+		Long couponId = 100L;
+		given(couponService.issueCoupon(userId, couponId))
+			.willThrow(new BusinessException(ErrorCode.CONFLICT));
+
+		mockMvc.perform(post("/coupons/{couponId}/issue", couponId)
+				.header("X-USER-ID", userId))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("CONFLICT"))
+			.andExpect(jsonPath("$.message").value("이미 처리된 요청입니다."))
+			.andExpect(jsonPath("$.data").doesNotExist());
+	}
+
+	private CouponCreateRequest validRequest() {
+		return new CouponCreateRequest(
+			"신규 가입 쿠폰",
+			CouponDiscountType.AMOUNT,
+			1000,
+			null,
+			5000,
+			100,
+			LocalDateTime.now().plusDays(1),
+			LocalDateTime.now().plusDays(10)
+		);
+	}
+
+	private CouponResponse couponResponse(Long popupStoreId) {
+		return new CouponResponse(
+			100L,
+			popupStoreId,
+			"테스트 팝업",
+			"신규 가입 쿠폰",
+			CouponDiscountType.AMOUNT,
+			1000,
+			null,
+			5000,
+			100,
+			0,
+			100,
+			CouponStatus.ACTIVE,
+			LocalDateTime.now().plusDays(1),
+			LocalDateTime.now().plusDays(10),
+			LocalDateTime.now()
+		);
+	}
+
+	private String toJson(CouponCreateRequest request) {
+		return """
+			{
+			  "name": "%s",
+			  "discountType": "%s",
+			  "discountValue": %d,
+			  "maxDiscountAmount": %s,
+			  "minOrderAmount": %s,
+			  "totalQuantity": %d,
+			  "startedAt": "%s",
+			  "expiredAt": "%s"
+			}
+			""".formatted(
+			request.name(),
+			request.discountType(),
+			request.discountValue(),
+			request.maxDiscountAmount(),
+			request.minOrderAmount(),
+			request.totalQuantity(),
+			request.startedAt(),
+			request.expiredAt()
+		);
+	}
+}

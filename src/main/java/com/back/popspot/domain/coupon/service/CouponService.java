@@ -32,6 +32,7 @@ public class CouponService {
 	private final PopupStoreRepository popupStoreRepository;
 	private final UserRepository userRepository;
 
+	// 호스트가 소유한 팝업스토어에 새로운 쿠폰을 생성
 	@Transactional
 	public CouponResponse createHostCoupon(Long hostUserId, Long popupStoreId, CouponCreateRequest request) {
 		validatePeriod(request.startedAt(), request.expiredAt());
@@ -42,6 +43,7 @@ public class CouponService {
 		return CouponResponse.from(coupon);
 	}
 
+	// 호스트가 소유한 팝업스토어의 전체 쿠폰을 최신순으로 조회
 	public List<CouponResponse> getHostCoupons(Long hostUserId, Long popupStoreId) {
 		PopupStore popupStore = getPopupStore(popupStoreId);
 		validateHostOwner(hostUserId, popupStore);
@@ -52,6 +54,7 @@ public class CouponService {
 			.toList();
 	}
 
+	// 호스트가 소유한 팝업스토어의 특정 쿠폰을 삭제
 	@Transactional
 	public void deleteHostCoupon(Long hostUserId, Long popupStoreId, Long couponId) {
 		PopupStore popupStore = getPopupStore(popupStoreId);
@@ -63,6 +66,7 @@ public class CouponService {
 		couponRepository.delete(coupon);
 	}
 
+	// 사용자가 현재 발급받을 수 있는 팝업스토어 쿠폰을 조회
 	public List<CouponResponse> getPublicCoupons(Long popupStoreId) {
 		if (!popupStoreRepository.existsById(popupStoreId)) {
 			throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
@@ -82,6 +86,7 @@ public class CouponService {
 			.toList();
 	}
 
+	// 사용자에게 쿠폰을 발급하고 쿠폰의 발급 수량을 갱신
 	@Transactional
 	public UserCouponResponse issueCoupon(Long userId, Long couponId) {
 		User user = getUser(userId);
@@ -101,6 +106,7 @@ public class CouponService {
 		return UserCouponResponse.from(userCoupon);
 	}
 
+	// 사용자가 발급받은 쿠폰을 최신순으로 조회
 	public List<UserCouponResponse> getMyCoupons(Long userId) {
 		if (!userRepository.existsById(userId)) {
 			throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
@@ -112,22 +118,26 @@ public class CouponService {
 			.toList();
 	}
 
+	// 팝업스토어를 조회하고 존재하지 않으면 예외를 발생
 	private PopupStore getPopupStore(Long popupStoreId) {
 		return popupStoreRepository.findById(popupStoreId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 	}
 
+	// 사용자를 조회하고 존재하지 않으면 예외를 발생
 	private User getUser(Long userId) {
 		return userRepository.findById(userId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 	}
 
+	// 요청한 호스트가 팝업스토어의 소유자인지 검증
 	private void validateHostOwner(Long hostUserId, PopupStore popupStore) {
 		if (!popupStore.getUser().getId().equals(hostUserId)) {
 			throw new BusinessException(ErrorCode.FORBIDDEN);
 		}
 	}
 
+	// 쿠폰 만료일이 시작일보다 이후인지 검증
 	private void validatePeriod(LocalDateTime startedAt, LocalDateTime expiredAt) {
 		if (!expiredAt.isAfter(startedAt)) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
