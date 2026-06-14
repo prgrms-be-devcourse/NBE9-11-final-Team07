@@ -47,6 +47,12 @@ public class Reservation extends BaseEntity {
 	@Column(name = "canceled_at")
 	private LocalDateTime canceledAt;
 
+	@Column(name = "reservation_name", length = 50)
+	private String reservationName;
+
+	@Column(name = "reservation_phone", length = 20)
+	private String reservationPhone;
+
 	private Reservation(
 		User member,
 		ReservationSlot slot,
@@ -68,5 +74,18 @@ public class Reservation extends BaseEntity {
 	public void cancel(LocalDateTime canceledAt) {
 		this.status = ReservationStatus.CANCELED;
 		this.canceledAt = canceledAt;
+	}
+
+	public void updateReservationInfo(String reservationName, String reservationPhone) {
+		this.reservationName = reservationName;
+		this.reservationPhone = reservationPhone;
+	}
+
+	public void confirm() {
+		this.status = ReservationStatus.CONFIRMED;
+	}
+
+	public void expire() {
+		this.status = ReservationStatus.EXPIRED;
 	}
 }

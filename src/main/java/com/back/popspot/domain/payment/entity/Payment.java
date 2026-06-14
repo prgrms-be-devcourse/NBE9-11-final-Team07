@@ -61,4 +61,47 @@ public class Payment extends BaseEntity {
 
 	@Column(name = "idempotency_key", length = 255, unique = true, nullable = false)
 	private String idempotencyKey;
+
+	private Payment(
+		User member,
+		Reservation reservation,
+		GoodsOrder goodsOrder,
+		PaymentType paymentType,
+		String orderId,
+		String orderName,
+		long amount,
+		String status,
+		String idempotencyKey
+	) {
+		this.member = member;
+		this.reservation = reservation;
+		this.goodsOrder = goodsOrder;
+		this.paymentType = paymentType;
+		this.orderId = orderId;
+		this.orderName = orderName;
+		this.amount = amount;
+		this.status = status;
+		this.idempotencyKey = idempotencyKey;
+	}
+
+	public static Payment createReadyReservationPayment(
+		User member,
+		Reservation reservation,
+		String orderId,
+		String orderName,
+		long amount,
+		String idempotencyKey
+	) {
+		return new Payment(
+			member,
+			reservation,
+			null,
+			PaymentType.POPUP,
+			orderId,
+			orderName,
+			amount,
+			"READY",
+			idempotencyKey
+		);
+	}
 }

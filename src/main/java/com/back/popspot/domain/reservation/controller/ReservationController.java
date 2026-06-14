@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.back.popspot.domain.reservation.dto.request.ReservationCreateRequest;
+import com.back.popspot.domain.reservation.dto.request.ReservationPaymentRequest;
+import com.back.popspot.domain.reservation.dto.response.ReservationPaymentResponse;
 import com.back.popspot.domain.reservation.dto.response.ReservationCreateResponse;
 import com.back.popspot.domain.reservation.service.ReservationService;
 import com.back.popspot.global.response.CommonApiResponse;
@@ -35,6 +37,17 @@ public class ReservationController {
 
 		return ResponseEntity.status(HttpStatus.CREATED)
 			.body(CommonApiResponse.created("예약 생성이 완료되었습니다.", response));
+	}
+
+	@PostMapping("/{reservationId}/payments")
+	public ResponseEntity<CommonApiResponse<ReservationPaymentResponse>> startReservationPayment(
+		@PathVariable Long reservationId,
+		@AuthenticationPrincipal Long userId,
+		@Valid @RequestBody ReservationPaymentRequest request
+	) {
+		ReservationPaymentResponse response = reservationService.startReservationPayment(reservationId, userId, request);
+
+		return ResponseEntity.ok(CommonApiResponse.success(response));
 	}
 
 	@DeleteMapping("/{reservationId}")
