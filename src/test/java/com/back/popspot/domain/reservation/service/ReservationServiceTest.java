@@ -30,14 +30,17 @@ import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.payment.entity.PaymentType;
+import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.reservation.dto.request.ReservationCreateRequest;
+import com.back.popspot.domain.reservation.dto.request.ReservationPaymentRequest;
 import com.back.popspot.domain.reservation.dto.response.MyReservationResponse;
 import com.back.popspot.domain.reservation.dto.response.ReservationCreateResponse;
+import com.back.popspot.domain.reservation.dto.response.ReservationPaymentResponse;
 import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
@@ -366,6 +369,178 @@ class ReservationServiceTest {
 	}
 
 	@Test
+	@DisplayName("유료 예약 결제 시작 성공")
+	void startReservationPayment_paidSuccess() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			userRepository
+		);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		Reservation reservation = createHeldReservation(100L, user, slot, LocalDateTime.now().plusMinutes(5));
+		ReservationPaymentRequest request = new ReservationPaymentRequest("홍길동", "010-1234-5678", "idem-paid-1");
+
+		ReflectionTestUtils.setField(popupStore, "title", "성수 빈티지 토이 팝업");
+		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.PAID);
+		ReflectionTestUtils.setField(popupStore, "price", 5000);
+
+		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, "DONE"))
+			.thenReturn(false);
+		when(paymentRepository.findByIdempotencyKeyAndReservationIdAndMemberIdAndPaymentType(
+			"idem-paid-1",
+			100L,
+			2L,
+			PaymentType.POPUP
+		)).thenReturn(Optional.empty());
+		when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+		// when
+		ReservationPaymentResponse response = reservationService.startReservationPayment(100L, 2L, request);
+
+		// then
+		assertEquals("성수 빈티지 토이 팝업 예약", response.orderName());
+		assertEquals(5000L, response.amount());
+		assertNotNull(response.orderId());
+		assertEquals("홍길동", ReflectionTestUtils.getField(reservation, "reservationName"));
+		assertEquals("010-1234-5678", ReflectionTestUtils.getField(reservation, "reservationPhone"));
+
+		verify(paymentRepository).save(argThat(payment ->
+			payment.getReservation().equals(reservation)
+				&& payment.getMember().equals(user)
+				&& payment.getPaymentType() == PaymentType.POPUP
+				&& "READY".equals(payment.getStatus())
+				&& "idem-paid-1".equals(payment.getIdempotencyKey())
+				&& "성수 빈티지 토이 팝업 예약".equals(payment.getOrderName())
+				&& payment.getAmount() == 5000L
+		));
+	}
+
+	@Test
+	@DisplayName("무료 예약 결제 시작 성공")
+	void startReservationPayment_freeSuccess() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			userRepository
+		);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		Reservation reservation = createHeldReservation(100L, user, slot, LocalDateTime.now().plusMinutes(5));
+		ReservationPaymentRequest request = new ReservationPaymentRequest("홍길동", "010-1234-5678", "idem-free-1");
+
+		ReflectionTestUtils.setField(popupStore, "title", "성수 빈티지 토이 팝업");
+		ReflectionTestUtils.setField(popupStore, "location", "서울 성동구 성수동");
+		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.FREE);
+		ReflectionTestUtils.setField(slot, "slotDate", LocalDate.of(2026, 6, 17));
+		ReflectionTestUtils.setField(slot, "startTime", LocalTime.of(15, 0));
+
+		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+
+		// when
+		ReservationPaymentResponse response = reservationService.startReservationPayment(100L, 2L, request);
+
+		// then
+		assertEquals(100L, response.reservationId());
+		assertEquals(ReservationStatus.CONFIRMED, response.status());
+		assertEquals("성수 빈티지 토이 팝업", response.popupName());
+		assertEquals("서울 성동구 성수동", response.location());
+		assertEquals(LocalDate.of(2026, 6, 17), response.reservationDate());
+		assertEquals(LocalTime.of(15, 0), response.reservationTime());
+		assertEquals(ReservationStatus.CONFIRMED, reservation.getStatus());
+		assertEquals("홍길동", ReflectionTestUtils.getField(reservation, "reservationName"));
+		assertEquals("010-1234-5678", ReflectionTestUtils.getField(reservation, "reservationPhone"));
+		verify(paymentRepository, never()).save(any(Payment.class));
+	}
+
+	@Test
+	@DisplayName("같은 멱등성 키 재요청이면 기존 결제를 재응답한다")
+	void startReservationPayment_success_reuseExistingPaymentByIdempotencyKey() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			userRepository
+		);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		Reservation reservation = createHeldReservation(100L, user, slot, LocalDateTime.now().plusMinutes(5));
+		ReservationPaymentRequest request = new ReservationPaymentRequest("홍길동", "010-1234-5678", "idem-paid-2");
+		Payment existingPayment = Payment.createReadyReservationPayment(
+			user,
+			reservation,
+			"order-123",
+			"성수 빈티지 토이 팝업 예약",
+			5000L,
+			"idem-paid-2"
+		);
+
+		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.PAID);
+
+		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, "DONE"))
+			.thenReturn(false);
+		when(paymentRepository.findByIdempotencyKeyAndReservationIdAndMemberIdAndPaymentType(
+			"idem-paid-2",
+			100L,
+			2L,
+			PaymentType.POPUP
+		)).thenReturn(Optional.of(existingPayment));
+
+		// when
+		ReservationPaymentResponse response = reservationService.startReservationPayment(100L, 2L, request);
+
+		// then
+		assertEquals("order-123", response.orderId());
+		assertEquals("성수 빈티지 토이 팝업 예약", response.orderName());
+		assertEquals(5000L, response.amount());
+		verify(paymentRepository, never()).save(any(Payment.class));
+	}
+
+	@Test
+	@DisplayName("선점 시간이 만료되면 예약을 만료 처리하고 결제 시작에 실패한다")
+	void startReservationPayment_fail_expiredHeldUntil() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			userRepository
+		);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		Reservation reservation = createHeldReservation(100L, user, slot, LocalDateTime.now().minusMinutes(1));
+		ReservationPaymentRequest request = new ReservationPaymentRequest("홍길동", "010-1234-5678", "idem-expired-1");
+
+		ReflectionTestUtils.setField(slot, "reservedCount", 1);
+
+		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
+
+		// when
+		BusinessException exception = assertThrows(
+			BusinessException.class,
+			() -> reservationService.startReservationPayment(100L, 2L, request)
+		);
+
+		// then
+		assertEquals(ErrorCode.RESERVATION_PAYMENT_EXPIRED, exception.getErrorCode());
+		assertEquals(ReservationStatus.EXPIRED, reservation.getStatus());
+		verify(reservationSlotRepository).decreaseReservedCount(1L);
+		verify(paymentRepository, never()).save(any(Payment.class));
+	}
+
+	@Test
 	@DisplayName("본인 예약이 아니면 취소 실패")
 	void cancelReservation_fail_forbidden() {
 		// given
@@ -516,6 +691,12 @@ class ReservationServiceTest {
 
 	private Reservation createConfirmedReservation(Long reservationId, User user, ReservationSlot slot) {
 		return createReservation(reservationId, user, slot, ReservationStatus.CONFIRMED);
+	}
+
+	private Reservation createHeldReservation(Long reservationId, User user, ReservationSlot slot, LocalDateTime heldUntil) {
+		Reservation reservation = createReservation(reservationId, user, slot, ReservationStatus.HELD);
+		ReflectionTestUtils.setField(reservation, "heldUntil", heldUntil);
+		return reservation;
 	}
 
 	private Reservation createReservation(Long reservationId, User user, ReservationSlot slot, ReservationStatus status) {
