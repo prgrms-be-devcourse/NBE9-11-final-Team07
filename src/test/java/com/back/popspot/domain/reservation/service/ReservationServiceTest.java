@@ -27,7 +27,6 @@ import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.reservation.dto.request.ReservationCreateRequest;
-import com.back.popspot.domain.reservation.dto.response.ReservationCancelResponse;
 import com.back.popspot.domain.reservation.dto.response.ReservationCreateResponse;
 import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
@@ -229,12 +228,16 @@ class ReservationServiceTest {
 		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
 
 		// when
-		ReservationCancelResponse response = reservationService.cancelReservation(100L, 2L);
+		reservationService.cancelReservation(100L, 2L);
 
 		// then
-		assertEquals(100L, response.reservationId());
-		assertEquals(ReservationStatus.CANCELED, response.status());
-		assertNotNull(response.canceledAt());
+		verify(reservationRepository).cancelConfirmedReservation(
+			eq(100L),
+			eq(ReservationStatus.CONFIRMED),
+			eq(ReservationStatus.CANCELED),
+			any(LocalDateTime.class)
+		);
+		verify(reservationSlotRepository).decreaseReservedCount(1L);
 	}
 
 	@Test

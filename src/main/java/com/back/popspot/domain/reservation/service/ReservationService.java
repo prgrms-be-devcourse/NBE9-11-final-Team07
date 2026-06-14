@@ -11,7 +11,6 @@ import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.reservation.dto.request.ReservationCreateRequest;
-import com.back.popspot.domain.reservation.dto.response.ReservationCancelResponse;
 import com.back.popspot.domain.reservation.dto.response.ReservationCreateResponse;
 import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
@@ -75,7 +74,7 @@ public class ReservationService {
 	}
 
 	@Transactional
-	public ReservationCancelResponse cancelReservation(Long reservationId, Long userId) {
+	public void cancelReservation(Long reservationId, Long userId) {
 		Reservation reservation = reservationRepository.findById(reservationId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
@@ -114,9 +113,5 @@ public class ReservationService {
 		if (updatedCount == 0) {
 			throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
 		}
-
-		reservation.cancel(now);
-
-		return ReservationCancelResponse.from(reservation);
 	}
 }

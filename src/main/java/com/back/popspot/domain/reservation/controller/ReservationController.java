@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.back.popspot.domain.reservation.dto.request.ReservationCreateRequest;
-import com.back.popspot.domain.reservation.dto.response.ReservationCancelResponse;
 import com.back.popspot.domain.reservation.dto.response.ReservationCreateResponse;
 import com.back.popspot.domain.reservation.service.ReservationService;
 import com.back.popspot.global.response.CommonApiResponse;
@@ -39,12 +38,12 @@ public class ReservationController {
 	}
 
 	@DeleteMapping("/{reservationId}")
-	public ResponseEntity<CommonApiResponse<ReservationCancelResponse>> cancelReservation(
+	public ResponseEntity<CommonApiResponse<Void>> cancelReservation(
 		@PathVariable Long reservationId,
 		@AuthenticationPrincipal Long userId
 	) {
-		ReservationCancelResponse response = reservationService.cancelReservation(reservationId, userId);
+		reservationService.cancelReservation(reservationId, userId);
 
-		return ResponseEntity.ok(CommonApiResponse.success(response));
+		return ResponseEntity.ok(CommonApiResponse.successMessage("예약 취소가 완료되었습니다."));
 	}
 }
