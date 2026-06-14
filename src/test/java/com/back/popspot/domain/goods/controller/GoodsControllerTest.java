@@ -4,9 +4,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import com.back.popspot.domain.goods.dto.GoodsListResponse;
 import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
 import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
 import com.back.popspot.domain.goods.service.GoodsService;
@@ -21,7 +25,7 @@ import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 import com.back.popspot.support.IntegrationTestSupport;
 
-@DisplayName("굿즈 등록 API")
+@DisplayName("굿즈 API")
 class GoodsControllerTest extends IntegrationTestSupport {
 
     @MockitoBean
@@ -110,5 +114,52 @@ class GoodsControllerTest extends IntegrationTestSupport {
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("굿즈 목록을 조회하면 200과 굿즈 목록을 반환한다")
+    void getGoodsList() throws Exception {
+        Long userId = 1L;
+        List<GoodsListResponse> response = List.of(
+            new GoodsListResponse(1L, "한정판 포스터", 15000, 30),
+            new GoodsListResponse(2L, "에코백", 25000, 50)
+        );
+
+        given(goodsService.getGoodsList(eq(userId))).willReturn(response);
+
+        mockMvc.perform(get("/host/goods")
+                .param("userId", String.valueOf(userId)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("SUCCESS"))
+            .andExpect(jsonPath("$.data.length()").value(2))
+            .andExpect(jsonPath("$.data[0].id").value(1))
+            .andExpect(jsonPath("$.data[0].name").value("한정판 포스터"))
+            .andExpect(jsonPath("$.data[0].price").value(15000))
+            .andExpect(jsonPath("$.data[0].stock").value(30));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("굿즈가 없으면 빈 배열을 반환한다")
+    void getGoodsList_empty() throws Exception {
+        Long userId = 1L;
+
+        given(goodsService.getGoodsList(eq(userId))).willReturn(List.of());
+
+        mockMvc.perform(get("/host/goods")
+                .param("userId", String.valueOf(userId)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("SUCCESS"))
+            .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("userId 파라미터가 없으면 500을 반환한다")
+    void getGoodsList_missingUserId() throws Exception {
+        mockMvc.perform(get("/host/goods"))
+            .andExpect(status().isInternalServerError())
+            .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
     }
 }
