@@ -21,6 +21,17 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Table(name = "goods")
 public class Goods extends BaseEntity {
+
+    public static Goods register(PopupStore popupStore, String name, int price, int stock, String description) {
+        Goods goods = new Goods();
+        goods.popupStore = popupStore;
+        goods.name = name;
+        goods.price = price;
+        goods.stock = stock;
+        goods.description = description;
+        goods.status = GoodsStatus.READY;
+        return goods;
+    }
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "popup_store_id", nullable = false)
 	private PopupStore popupStore;
