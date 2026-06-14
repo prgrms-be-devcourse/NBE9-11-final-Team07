@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -20,6 +21,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import com.back.popspot.domain.goods.dto.GoodsListResponse;
 import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
 import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
+import com.back.popspot.domain.goods.dto.GoodsUpdateRequest;
+import com.back.popspot.domain.goods.dto.GoodsUpdateResponse;
 import com.back.popspot.domain.goods.service.GoodsService;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
@@ -161,5 +164,94 @@ class GoodsControllerTest extends IntegrationTestSupport {
         mockMvc.perform(get("/host/goods"))
             .andExpect(status().isInternalServerError())
             .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("굿즈를 수정하면 200과 수정된 굿즈 정보를 반환한다")
+    void updateGoods() throws Exception {
+        Long goodsId = 1L;
+        GoodsUpdateRequest request = new GoodsUpdateRequest("수정된 포스터", 20000, 50, "수정된 설명");
+        GoodsUpdateResponse response = new GoodsUpdateResponse(goodsId, "수정된 포스터", 20000, 50, "수정된 설명");
+
+        given(goodsService.updateGoods(eq(goodsId), any())).willReturn(response);
+
+        mockMvc.perform(patch("/host/goods/{goodsId}", goodsId)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("SUCCESS"))
+            .andExpect(jsonPath("$.data.id").value(goodsId))
+            .andExpect(jsonPath("$.data.name").value("수정된 포스터"))
+            .andExpect(jsonPath("$.data.price").value(20000))
+            .andExpect(jsonPath("$.data.stock").value(50));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("일부 필드만 전달하면 200과 수정된 굿즈 정보를 반환한다")
+    void updateGoods_partial() throws Exception {
+        Long goodsId = 1L;
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, 20000, null, null);
+        GoodsUpdateResponse response = new GoodsUpdateResponse(goodsId, "기존 이름", 20000, 30, "기존 설명");
+
+        given(goodsService.updateGoods(eq(goodsId), any())).willReturn(response);
+
+        mockMvc.perform(patch("/host/goods/{goodsId}", goodsId)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("SUCCESS"))
+            .andExpect(jsonPath("$.data.price").value(20000))
+            .andExpect(jsonPath("$.data.name").value("기존 이름"));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("존재하지 않는 굿즈를 수정하면 404를 반환한다")
+    void updateGoods_goodsNotFound() throws Exception {
+        Long nonExistentId = 999L;
+        GoodsUpdateRequest request = new GoodsUpdateRequest("수정된 포스터", 20000, 50, null);
+
+        given(goodsService.updateGoods(eq(nonExistentId), any()))
+            .willThrow(new BusinessException(ErrorCode.GOODS_NOT_FOUND));
+
+        mockMvc.perform(patch("/host/goods/{goodsId}", nonExistentId)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("GOODS_NOT_FOUND"))
+            .andExpect(jsonPath("$.message").value("굿즈를 찾을 수 없습니다."));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("가격이 음수면 400을 반환한다")
+    void updateGoods_negativePrice() throws Exception {
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, -1, null, null);
+
+        mockMvc.perform(patch("/host/goods/{goodsId}", 1L)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("수량이 음수면 400을 반환한다")
+    void updateGoods_negativeStock() throws Exception {
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, -1, null);
+
+        mockMvc.perform(patch("/host/goods/{goodsId}", 1L)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"));
     }
 }
