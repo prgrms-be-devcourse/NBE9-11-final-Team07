@@ -3,7 +3,10 @@ package com.back.popspot.domain.goods.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willDoNothing;
+import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -253,5 +256,37 @@ class GoodsControllerTest extends IntegrationTestSupport {
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("굿즈를 삭제하면 200과 성공 메시지를 반환한다")
+    void deleteGoods() throws Exception {
+        Long goodsId = 1L;
+
+        willDoNothing().given(goodsService).deleteGoods(goodsId);
+
+        mockMvc.perform(delete("/host/goods/{goodsId}", goodsId)
+                .with(csrf()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("SUCCESS"))
+            .andExpect(jsonPath("$.message").value("굿즈가 삭제되었습니다."))
+            .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("존재하지 않는 굿즈를 삭제하면 404를 반환한다")
+    void deleteGoods_goodsNotFound() throws Exception {
+        Long nonExistentId = 999L;
+
+        willThrow(new BusinessException(ErrorCode.GOODS_NOT_FOUND))
+            .given(goodsService).deleteGoods(nonExistentId);
+
+        mockMvc.perform(delete("/host/goods/{goodsId}", nonExistentId)
+                .with(csrf()))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("GOODS_NOT_FOUND"))
+            .andExpect(jsonPath("$.message").value("굿즈를 찾을 수 없습니다."));
     }
 }
