@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
+import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
 import com.back.popspot.domain.popupStore.service.PopupStoreHostService;
 import com.back.popspot.global.response.CommonApiResponse;
 
@@ -60,5 +61,18 @@ public class PopupStoreHostController {
 	) {
 		popupStoreHostService.deletePopupStore(userId, popupStoreId);
 		return ResponseEntity.ok(CommonApiResponse.successMessage("삭제가 완료되었습니다."));
+	}
+
+	// 예약 슬롯 생성 (주최자, 소유자만)
+	@PostMapping("/{popupStoreId}/slots")
+	public ResponseEntity<CommonApiResponse<Long>> createSlot(
+			@AuthenticationPrincipal Long userId,
+			@PathVariable Long popupStoreId,
+			@RequestBody @Valid ReservationSlotCreateRequest request
+	) {
+		Long slotId = popupStoreHostService.createSlot(userId, popupStoreId, request);
+		return ResponseEntity
+				.status(HttpStatus.CREATED)
+				.body(CommonApiResponse.created("슬롯 생성이 완료되었습니다.", slotId));
 	}
 }

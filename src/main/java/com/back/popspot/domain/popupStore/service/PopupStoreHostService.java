@@ -1,5 +1,6 @@
 package com.back.popspot.domain.popupStore.service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import org.springframework.stereotype.Service;
@@ -7,9 +8,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
+import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
+import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
+import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
@@ -26,6 +30,7 @@ import lombok.RequiredArgsConstructor;
 public class PopupStoreHostService {
 
 	private final PopupStoreRepository popupStoreRepository;
+	private final ReservationSlotRepository reservationSlotRepository;
 
 	@PersistenceContext
 	private EntityManager entityManager;
@@ -119,5 +124,30 @@ public class PopupStoreHostService {
 		}
 
 		popupStoreRepository.delete(popupStore);
+	}
+
+	/**
+	 * 예약 슬롯을 생성한다. (주최자, 소유자만)
+	 * 없으면 RESOURCE_NOT_FOUND, 소유자가 아니면 FORBIDDEN,
+	 * 슬롯 날짜가 운영 기간(openDate~closeDate) 밖이면 INVALID_INPUT_VALUE.
+	 */
+	@Transactional
+	public Long createSlot(Long userId, Long popupStoreId, ReservationSlotCreateRequest request) {
+		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+		if (!popupStore.getUser().getId().equals(userId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN);
+		}
+
+		LocalDate openDate = popupStore.getOpenDate().toLocalDate();
+		LocalDate closeDate = popupStore.getCloseDate().toLocalDate();
+		if (request.slotDate().isBefore(openDate) || request.slotDate().isAfter(closeDate)) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		ReservationSlot slot = ReservationSlot.of(popupStore, request);
+		reservationSlotRepository.save(slot);
+		return slot.getId();
 	}
 }
