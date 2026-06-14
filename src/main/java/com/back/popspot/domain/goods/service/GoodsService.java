@@ -3,6 +3,9 @@ package com.back.popspot.domain.goods.service;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
+import com.back.popspot.domain.goods.dto.GoodsListResponse;
 import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
 import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
 import com.back.popspot.domain.goods.entity.Goods;
@@ -35,5 +38,13 @@ public class GoodsService {
         );
 
         return GoodsRegisterResponse.from(goodsRepository.save(goods));
+    }
+
+    @Transactional(readOnly = true)
+    public List<GoodsListResponse> getGoodsList(Long userId) {
+        return goodsRepository.findByPopupStoreUserIdAndDeletedAtIsNull(userId)
+            .stream()
+            .map(GoodsListResponse::from)
+            .toList();
     }
 }
