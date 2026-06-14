@@ -2,7 +2,9 @@ package com.back.popspot.domain.reservation.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -12,6 +14,7 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
@@ -19,14 +22,21 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
+import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.reservation.dto.request.ReservationCreateRequest;
+import com.back.popspot.domain.reservation.dto.response.MyReservationResponse;
 import com.back.popspot.domain.reservation.dto.response.ReservationCreateResponse;
 import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
@@ -50,6 +60,121 @@ class ReservationServiceTest {
 
 	@Mock
 	private UserRepository userRepository;
+
+	@Test
+	@DisplayName("내 예약 내역 조회 성공")
+	void getMyReservations_success() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			userRepository
+		);
+		PopupStore freePopupStore = createPopupStore();
+		PopupStore paidPopupStore = createPopupStore();
+		ReservationSlot freeSlot = createReservationSlot(freePopupStore);
+		ReservationSlot paidSlot = createReservationSlot(paidPopupStore);
+		User user = createUser(2L);
+		Reservation confirmedReservation = createReservation(100L, user, freeSlot, ReservationStatus.CONFIRMED);
+		Reservation canceledReservation = createReservation(101L, user, paidSlot, ReservationStatus.CANCELED);
+		Pageable pageable = PageRequest.of(0, 10);
+		Page<Reservation> reservations = new PageImpl<>(
+			List.of(confirmedReservation, canceledReservation),
+			PageRequest.of(0, 10),
+			2
+		);
+
+		ReflectionTestUtils.setField(freePopupStore, "title", "무료 팝업");
+		ReflectionTestUtils.setField(freePopupStore, "location", "서울");
+		ReflectionTestUtils.setField(freePopupStore, "feeType", PopupFeeType.FREE);
+		ReflectionTestUtils.setField(freePopupStore, "price", null);
+
+		ReflectionTestUtils.setField(paidPopupStore, "title", "유료 팝업");
+		ReflectionTestUtils.setField(paidPopupStore, "location", "부산");
+		ReflectionTestUtils.setField(paidPopupStore, "feeType", PopupFeeType.PAID);
+		ReflectionTestUtils.setField(paidPopupStore, "price", 15000);
+
+		ReflectionTestUtils.setField(freeSlot, "slotDate", LocalDate.of(2026, 6, 20));
+		ReflectionTestUtils.setField(freeSlot, "startTime", LocalTime.of(10, 0));
+		ReflectionTestUtils.setField(paidSlot, "slotDate", LocalDate.of(2026, 6, 21));
+		ReflectionTestUtils.setField(paidSlot, "startTime", LocalTime.of(14, 0));
+
+		when(reservationRepository.findByMemberIdAndStatusIn(
+			eq(2L),
+			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
+			any(Pageable.class)
+		)).thenReturn(reservations);
+
+		// when
+		Page<MyReservationResponse> response = reservationService.getMyReservations(2L, pageable);
+
+		// then
+		assertEquals(2, response.getContent().size());
+
+		MyReservationResponse confirmed = response.getContent().get(0);
+		assertEquals(100L, confirmed.reservationId());
+		assertEquals("무료 팝업", confirmed.popupName());
+		assertEquals("서울", confirmed.location());
+		assertEquals(LocalDate.of(2026, 6, 20), confirmed.reservationDate());
+		assertEquals(LocalTime.of(10, 0), confirmed.reservationTime());
+		assertEquals(0, confirmed.price());
+		assertEquals(ReservationStatus.CONFIRMED, confirmed.status());
+
+		MyReservationResponse canceled = response.getContent().get(1);
+		assertEquals(101L, canceled.reservationId());
+		assertEquals("유료 팝업", canceled.popupName());
+		assertEquals("부산", canceled.location());
+		assertEquals(LocalDate.of(2026, 6, 21), canceled.reservationDate());
+		assertEquals(LocalTime.of(14, 0), canceled.reservationTime());
+		assertEquals(15000, canceled.price());
+		assertEquals(ReservationStatus.CANCELED, canceled.status());
+
+		verify(reservationRepository).findByMemberIdAndStatusIn(
+			eq(2L),
+			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
+			argThat(requestedPageable ->
+				requestedPageable.getPageNumber() == 0
+					&& requestedPageable.getPageSize() == 10
+					&& requestedPageable.getSort().equals(Sort.by(
+						Sort.Order.desc("reservedAt"),
+						Sort.Order.desc("id")
+					))
+			)
+		);
+	}
+
+	@Test
+	@DisplayName("내 예약 내역이 없으면 빈 페이지를 반환한다")
+	void getMyReservations_emptyPage() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			userRepository
+		);
+		Pageable pageable = PageRequest.of(0, 10);
+		Page<Reservation> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
+
+		when(reservationRepository.findByMemberIdAndStatusIn(
+			eq(2L),
+			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
+			any(Pageable.class)
+		)).thenReturn(emptyPage);
+
+		// when
+		Page<MyReservationResponse> response = reservationService.getMyReservations(2L, pageable);
+
+		// then
+		assertTrue(response.getContent().isEmpty());
+		assertEquals(0, response.getTotalElements());
+		verify(reservationRepository).findByMemberIdAndStatusIn(
+			eq(2L),
+			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
+			any(Pageable.class)
+		);
+	}
 
 	@Test
 	@DisplayName("예약 선점 성공")
@@ -364,6 +489,7 @@ class ReservationServiceTest {
 
 		ReflectionTestUtils.setField(popupStore, "reservationStartAt", now.minusDays(1));
 		ReflectionTestUtils.setField(popupStore, "reservationEndAt", now.plusDays(1));
+		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.FREE);
 
 		return popupStore;
 	}
