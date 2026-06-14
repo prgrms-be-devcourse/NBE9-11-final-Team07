@@ -23,6 +23,8 @@ public enum ErrorCode {
 
 	POPUP_RESERVATION_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "현재 예약 가능한 팝업이 아닙니다."),
 	RESERVATION_SLOT_ALREADY_STARTED(HttpStatus.BAD_REQUEST, "이미 시작한 슬롯은 예약할 수 없습니다."),
+	RESERVATION_CANCEL_NOT_ALLOWED_STATUS(HttpStatus.BAD_REQUEST, "취소할 수 없는 예약 상태입니다."),
+	RESERVATION_CANCEL_DEADLINE_PASSED(HttpStatus.BAD_REQUEST, "예약 취소 가능 기한이 지났습니다."),
 
 	COUPON_ALREADY_ISSUED(HttpStatus.CONFLICT, "이미 발급받은 쿠폰입니다."),
 	RESERVATION_CAPACITY_EXCEEDED(HttpStatus.CONFLICT, "예약 가능한 인원이 가득 찼습니다."),

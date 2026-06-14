@@ -23,6 +23,7 @@ public interface ReservationSlotRepository extends JpaRepository<ReservationSlot
 		Long id
 	);
 
+	// 예약 가능 인원이 남아 있는 경우에만 슬롯 예약 수 증가
 	@Modifying
 	@Query("""
 		update ReservationSlot slot
@@ -31,4 +32,14 @@ public interface ReservationSlotRepository extends JpaRepository<ReservationSlot
 		and slot.reservedCount < slot.capacity
 		""")
 	int increaseReservedCountIfAvailable(@Param("slotId") Long slotId);
+
+	// 취소 가능한 예약 1건에 대해 슬롯 예약 수 감소
+	@Modifying
+	@Query("""
+		update ReservationSlot slot
+		set slot.reservedCount = slot.reservedCount - 1
+		where slot.id = :slotId
+		and slot.reservedCount > 0
+		""")
+	int decreaseReservedCount(@Param("slotId") Long slotId);
 }
