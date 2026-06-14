@@ -7,7 +7,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -21,9 +23,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
+import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
+import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
+import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
@@ -38,6 +43,9 @@ class PopupStoreHostServiceTest {
 
 	@Mock
 	private PopupStoreRepository popupStoreRepository;
+
+	@Mock
+	private ReservationSlotRepository reservationSlotRepository;
 
 	@Mock
 	private EntityManager entityManager;
@@ -213,6 +221,72 @@ class PopupStoreHostServiceTest {
 				.extracting(e -> ((BusinessException) e).getErrorCode())
 				.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
 		verify(popupStoreRepository, never()).delete(any());
+	}
+
+	@Test
+	@DisplayName("슬롯 생성: 소유자 + 운영 기간 내 날짜면 저장하고 id 를 반환한다")
+	void createSlot_validOwnerInRange_savesAndReturnsId() {
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupForSlot(USER_ID)));
+		when(reservationSlotRepository.save(any(ReservationSlot.class))).thenAnswer(invocation -> {
+			ReservationSlot saved = invocation.getArgument(0);
+			ReflectionTestUtils.setField(saved, "id", 500L);
+			return saved;
+		});
+
+		Long id = popupStoreHostService.createSlot(USER_ID, 10L, slotRequest(LocalDate.of(2026, 7, 5)));
+
+		assertThat(id).isEqualTo(500L);
+		verify(reservationSlotRepository).save(any(ReservationSlot.class));
+	}
+
+	@Test
+	@DisplayName("슬롯 생성: 팝업이 없으면 RESOURCE_NOT_FOUND")
+	void createSlot_notFound_throws() {
+		when(popupStoreRepository.findById(99L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> popupStoreHostService.createSlot(USER_ID, 99L, slotRequest(LocalDate.of(2026, 7, 5))))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+	}
+
+	@Test
+	@DisplayName("슬롯 생성: 소유자가 아니면 FORBIDDEN 이고 저장하지 않는다")
+	void createSlot_notOwner_throwsForbidden() {
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupForSlot(USER_ID)));
+
+		assertThatThrownBy(() -> popupStoreHostService.createSlot(2L, 10L, slotRequest(LocalDate.of(2026, 7, 5))))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.FORBIDDEN);
+		verify(reservationSlotRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("슬롯 생성: slotDate 가 운영 기간 밖이면 INVALID_INPUT_VALUE 이고 저장하지 않는다")
+	void createSlot_dateOutOfRange_throws() {
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupForSlot(USER_ID)));
+
+		// 운영기간 2026-07-01 ~ 07-10, 슬롯 날짜 07-11 (마감 이후)
+		assertThatThrownBy(() -> popupStoreHostService.createSlot(USER_ID, 10L, slotRequest(LocalDate.of(2026, 7, 11))))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+		verify(reservationSlotRepository, never()).save(any());
+	}
+
+	private PopupStore popupForSlot(Long ownerId) {
+		User owner = new User();
+		ReflectionTestUtils.setField(owner, "id", ownerId);
+		PopupStore popupStore = new PopupStore();
+		ReflectionTestUtils.setField(popupStore, "user", owner);
+		ReflectionTestUtils.setField(popupStore, "openDate", LocalDateTime.of(2026, 7, 1, 10, 0));
+		ReflectionTestUtils.setField(popupStore, "closeDate", LocalDateTime.of(2026, 7, 10, 18, 0));
+		return popupStore;
+	}
+
+	private ReservationSlotCreateRequest slotRequest(LocalDate slotDate) {
+		return new ReservationSlotCreateRequest(slotDate, LocalTime.of(13, 0), 10);
 	}
 
 	private PopupStore popupWithOpenDate(Long ownerId, LocalDateTime openDate) {
