@@ -1,7 +1,12 @@
 package com.back.popspot.domain.reservation.service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,6 +16,7 @@ import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.reservation.dto.request.ReservationCreateRequest;
+import com.back.popspot.domain.reservation.dto.response.MyReservationResponse;
 import com.back.popspot.domain.reservation.dto.response.ReservationCreateResponse;
 import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
@@ -28,11 +34,31 @@ public class ReservationService {
 
 	private static final long HOLD_MINUTES = 5L;
 	private static final String PAYMENT_STATUS_DONE = "DONE";
+	private static final Sort DEFAULT_RESERVATION_SORT = Sort.by(
+		Sort.Order.desc("reservedAt"),
+		Sort.Order.desc("id")
+	);
 
 	private final ReservationRepository reservationRepository;
 	private final ReservationSlotRepository reservationSlotRepository;
 	private final PaymentRepository paymentRepository;
 	private final UserRepository userRepository;
+
+	@Transactional(readOnly = true)
+	public Page<MyReservationResponse> getMyReservations(Long userId, Pageable pageable) {
+
+		Pageable effectivePageable = PageRequest.of(
+			pageable.getPageNumber(),
+			pageable.getPageSize(),
+			DEFAULT_RESERVATION_SORT
+		);
+
+		return reservationRepository.findByMemberIdAndStatusIn(
+			userId,
+			List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED),
+			effectivePageable
+		).map(MyReservationResponse::from);
+	}
 
 	@Transactional
 	public ReservationCreateResponse createReservation(ReservationCreateRequest request) {
