@@ -3,6 +3,7 @@ package com.back.popspot.domain.popupStore.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
+import com.back.popspot.domain.popupStore.dto.ReservationSlotUpdateRequest;
+import com.back.popspot.domain.popupStore.dto.ReservationSlotUpdateRequest;
 import com.back.popspot.domain.popupStore.service.PopupStoreHostService;
 import com.back.popspot.global.response.CommonApiResponse;
 
@@ -23,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 /**
  * 주최자(host) 전용 팝업스토어 API. 인증 필요.
  */
+@Validated
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/host/popups")
@@ -74,5 +78,26 @@ public class PopupStoreHostController {
 		return ResponseEntity
 				.status(HttpStatus.CREATED)
 				.body(CommonApiResponse.created("슬롯 생성이 완료되었습니다.", slotId));
+	}
+
+	@PatchMapping("/{popupStoreId}/slots/{slotId}")
+	public ResponseEntity<CommonApiResponse<Void>> updateSlot(
+		@AuthenticationPrincipal Long userId,
+		@PathVariable Long popupStoreId,
+		@PathVariable Long slotId,
+		@Valid @RequestBody ReservationSlotUpdateRequest request
+	) {
+		popupStoreHostService.updateSlot(userId, popupStoreId, slotId, request);
+		return ResponseEntity.ok(CommonApiResponse.successMessage("수정이 완료되었습니다."));
+	}
+
+	@DeleteMapping("/{popupStoreId}/slots/{slotId}")
+	public ResponseEntity<CommonApiResponse<Void>> deleteSlot(
+		@AuthenticationPrincipal Long userId,
+		@PathVariable Long popupStoreId,
+		@PathVariable Long slotId
+	) {
+		popupStoreHostService.deleteSlot(userId, popupStoreId, slotId);
+		return ResponseEntity.ok(CommonApiResponse.successMessage("삭제가 완료되었습니다."));
 	}
 }
