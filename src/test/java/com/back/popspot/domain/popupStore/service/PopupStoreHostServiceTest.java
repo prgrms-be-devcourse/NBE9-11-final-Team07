@@ -46,6 +46,8 @@ class PopupStoreHostServiceTest {
 	private PopupStoreHostService popupStoreHostService;
 
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 6, 13, 12, 0);
+	private static final LocalDateTime FUTURE = LocalDateTime.of(2999, 1, 1, 0, 0); // 운영 시작 전
+	private static final LocalDateTime PAST = LocalDateTime.of(2000, 1, 1, 0, 0);   // 운영 이미 시작
 	private static final Long USER_ID = 1L;
 
 	@BeforeEach
@@ -163,6 +165,63 @@ class PopupStoreHostServiceTest {
 				.extracting(e -> ((BusinessException) e).getErrorCode())
 				.isEqualTo(ErrorCode.FORBIDDEN);
 		assertThat(popupStore.getTitle()).isEqualTo("기존 제목"); // 변경 안 됨
+	}
+
+	@Test
+	@DisplayName("삭제: 소유자가 운영 시작 전이면 삭제한다")
+	void deletePopupStore_ownerBeforeOpen_deletes() {
+		PopupStore popupStore = popupWithOpenDate(USER_ID, FUTURE);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+
+		popupStoreHostService.deletePopupStore(USER_ID, 10L);
+
+		verify(popupStoreRepository).delete(popupStore);
+	}
+
+	@Test
+	@DisplayName("삭제: 팝업이 없으면 RESOURCE_NOT_FOUND")
+	void deletePopupStore_notFound_throws() {
+		when(popupStoreRepository.findById(99L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> popupStoreHostService.deletePopupStore(USER_ID, 99L))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+	}
+
+	@Test
+	@DisplayName("삭제: 소유자가 아니면 FORBIDDEN 이고 삭제하지 않는다")
+	void deletePopupStore_notOwner_throwsForbidden() {
+		PopupStore popupStore = popupWithOpenDate(USER_ID, FUTURE); // 소유자 1L
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+
+		assertThatThrownBy(() -> popupStoreHostService.deletePopupStore(2L, 10L)) // 다른 사용자
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.FORBIDDEN);
+		verify(popupStoreRepository, never()).delete(any());
+	}
+
+	@Test
+	@DisplayName("삭제: 운영이 이미 시작됐으면 INVALID_INPUT_VALUE 이고 삭제하지 않는다")
+	void deletePopupStore_afterOpen_throws() {
+		PopupStore popupStore = popupWithOpenDate(USER_ID, PAST); // openDate 가 과거 = 운영 시작됨
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+
+		assertThatThrownBy(() -> popupStoreHostService.deletePopupStore(USER_ID, 10L))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+		verify(popupStoreRepository, never()).delete(any());
+	}
+
+	private PopupStore popupWithOpenDate(Long ownerId, LocalDateTime openDate) {
+		User owner = new User();
+		ReflectionTestUtils.setField(owner, "id", ownerId);
+		PopupStore popupStore = new PopupStore();
+		ReflectionTestUtils.setField(popupStore, "user", owner);
+		ReflectionTestUtils.setField(popupStore, "openDate", openDate);
+		return popupStore;
 	}
 
 	private PopupStore existingPopup(Long ownerId) {
