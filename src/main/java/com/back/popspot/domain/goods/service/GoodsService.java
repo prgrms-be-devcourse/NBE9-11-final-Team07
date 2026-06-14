@@ -8,6 +8,8 @@ import java.util.List;
 import com.back.popspot.domain.goods.dto.GoodsListResponse;
 import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
 import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
+import com.back.popspot.domain.goods.dto.GoodsUpdateRequest;
+import com.back.popspot.domain.goods.dto.GoodsUpdateResponse;
 import com.back.popspot.domain.goods.entity.Goods;
 import com.back.popspot.domain.goods.repository.GoodsRepository;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
@@ -38,6 +40,16 @@ public class GoodsService {
         );
 
         return GoodsRegisterResponse.from(goodsRepository.save(goods));
+    }
+
+    @Transactional
+    public GoodsUpdateResponse updateGoods(Long goodsId, GoodsUpdateRequest request) {
+        Goods goods = goodsRepository.findById(goodsId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
+
+        goods.update(request.name(), request.price(), request.stock(), request.description());
+
+        return GoodsUpdateResponse.from(goods);
     }
 
     @Transactional(readOnly = true)

@@ -54,4 +54,11 @@ public class Goods extends BaseEntity {
 
 	@Column(name = "deleted_at")
 	private LocalDateTime deletedAt;
+
+    public void update(String name, Integer price, Integer stock, String description) {
+        if (name != null) this.name = name;
+        if (price != null) this.price = price;
+        if (stock != null) this.stock = stock;
+        if (description != null) this.description = description;
+    }
 }
