@@ -43,4 +43,8 @@ public class Goods extends BaseEntity {
 
 	@Column(name = "deleted_at")
 	private LocalDateTime deletedAt;
+
+	public void decreaseStock(int quantity) {
+		this.stock -= quantity;
+	}
 }
