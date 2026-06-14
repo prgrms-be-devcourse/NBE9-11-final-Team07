@@ -61,4 +61,9 @@ public class Goods extends BaseEntity {
         if (stock != null) this.stock = stock;
         if (description != null) this.description = description;
     }
+
+    public void softDelete() {
+        this.status = GoodsStatus.ENDED;
+        this.deletedAt = LocalDateTime.now();
+    }
 }

@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,6 +49,12 @@ public class GoodsController {
     ) {
         GoodsUpdateResponse response = goodsService.updateGoods(goodsId, request);
         return ResponseEntity.ok(CommonApiResponse.success(response));
+    }
+
+    @DeleteMapping("/goods/{goodsId}")
+    public ResponseEntity<CommonApiResponse<Void>> deleteGoods(@PathVariable Long goodsId) {
+        goodsService.deleteGoods(goodsId);
+        return ResponseEntity.ok(CommonApiResponse.successMessage("굿즈가 삭제되었습니다."));
     }
 
     @GetMapping("/goods")
