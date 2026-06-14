@@ -1,5 +1,7 @@
 package com.back.popspot.domain.popupStore.service;
 
+import java.time.LocalDateTime;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -95,5 +97,27 @@ public class PopupStoreHostService {
 		if (request.description() != null) {
 			popupStore.updateDescription(request.description());
 		}
+	}
+
+	/**
+	 * 팝업스토어를 삭제한다. (주최자, 소유자만)
+	 * 없으면 RESOURCE_NOT_FOUND, 소유자가 아니면 FORBIDDEN,
+	 * 운영 시작일(openDate) 이후면 INVALID_INPUT_VALUE.
+	 */
+	@Transactional
+	public void deletePopupStore(Long userId, Long popupStoreId) {
+		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+		if (!popupStore.getUser().getId().equals(userId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN);
+		}
+
+		// 운영이 이미 시작됐으면(now >= openDate) 삭제 불가
+		if (!LocalDateTime.now().isBefore(popupStore.getOpenDate())) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		popupStoreRepository.delete(popupStore);
 	}
 }

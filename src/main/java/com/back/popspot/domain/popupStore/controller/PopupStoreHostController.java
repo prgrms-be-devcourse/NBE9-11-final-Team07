@@ -3,6 +3,7 @@ package com.back.popspot.domain.popupStore.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -49,5 +50,15 @@ public class PopupStoreHostController {
 	) {
 		popupStoreHostService.updatePopupStore(userId, popupStoreId, request);
 		return ResponseEntity.ok(CommonApiResponse.successMessage("수정이 완료되었습니다."));
+	}
+
+	// 팝업스토어 삭제 (주최자, 소유자만 / 운영 시작 전까지)
+	@DeleteMapping("/{popupStoreId}")
+	public ResponseEntity<CommonApiResponse<Void>> deletePopupStore(
+			@AuthenticationPrincipal Long userId,
+			@PathVariable Long popupStoreId
+	) {
+		popupStoreHostService.deletePopupStore(userId, popupStoreId);
+		return ResponseEntity.ok(CommonApiResponse.successMessage("삭제가 완료되었습니다."));
 	}
 }
