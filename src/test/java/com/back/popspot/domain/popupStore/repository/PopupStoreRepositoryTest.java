@@ -1,6 +1,6 @@
 package com.back.popspot.domain.popupStore.repository;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
 import java.time.LocalDateTime;
 
@@ -53,8 +53,8 @@ class PopupStoreRepositoryTest {
 		Page<PopupStore> result = popupStoreRepository.findUpcoming(NOW, PAGE);
 
 		assertThat(result.getContent())
-				.extracting(PopupStore::getId)
-				.containsExactly(upcoming.getId());
+			.extracting(PopupStore::getId)
+			.containsExactly(upcoming.getId());
 	}
 
 	@Test
@@ -63,8 +63,8 @@ class PopupStoreRepositoryTest {
 		Page<PopupStore> result = popupStoreRepository.findOpen(NOW, PAGE);
 
 		assertThat(result.getContent())
-				.extracting(PopupStore::getId)
-				.containsExactly(open.getId());
+			.extracting(PopupStore::getId)
+			.containsExactly(open.getId());
 	}
 
 	@Test
@@ -73,8 +73,8 @@ class PopupStoreRepositoryTest {
 		Page<PopupStore> result = popupStoreRepository.findClosed(NOW, PAGE);
 
 		assertThat(result.getContent())
-				.extracting(PopupStore::getId)
-				.containsExactly(closed.getId());
+			.extracting(PopupStore::getId)
+			.containsExactly(closed.getId());
 	}
 
 	private User persistUser() {
