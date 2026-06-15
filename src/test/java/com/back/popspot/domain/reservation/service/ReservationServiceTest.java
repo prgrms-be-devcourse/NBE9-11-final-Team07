@@ -28,7 +28,6 @@ import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
 import com.back.popspot.domain.user.entity.User;
-import com.back.popspot.domain.user.entity.UserRole;
 import com.back.popspot.domain.user.repository.UserRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
@@ -214,10 +213,8 @@ class ReservationServiceTest {
 	}
 
 	private User createUser(Long userId) {
-		User user = new User();
-
+		User user = User.create("user@test.com", "user");
 		ReflectionTestUtils.setField(user, "id", userId);
-		ReflectionTestUtils.setField(user, "role", UserRole.USER);
 
 		return user;
 	}
