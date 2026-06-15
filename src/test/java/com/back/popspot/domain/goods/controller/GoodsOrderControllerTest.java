@@ -59,7 +59,7 @@ class GoodsOrderControllerTest {
 
 	@BeforeEach
 	void setUp() {
-		user = new User();
+		user = User.create("test@test.com", "테스터");
 		ReflectionTestUtils.setField(user, "id", 1L);
 
 		goods = new Goods();

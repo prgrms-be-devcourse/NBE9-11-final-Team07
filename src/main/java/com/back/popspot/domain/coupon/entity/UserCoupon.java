@@ -45,4 +45,12 @@ public class UserCoupon extends BaseEntity {
 
 	@Column(name = "used_at")
 	private LocalDateTime usedAt;
+
+	public static UserCoupon issue(User user, Coupon coupon) {
+		UserCoupon userCoupon = new UserCoupon();
+		userCoupon.user = user;
+		userCoupon.coupon = coupon;
+		userCoupon.status = UserCouponStatus.ISSUED;
+		return userCoupon;
+	}
 }

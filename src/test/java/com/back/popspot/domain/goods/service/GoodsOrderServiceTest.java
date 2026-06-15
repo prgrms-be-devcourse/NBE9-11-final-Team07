@@ -67,7 +67,7 @@ class GoodsOrderServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		user = new User();
+		user = User.create("test@test.com", "테스터");
 		ReflectionTestUtils.setField(user, "id", 1L);
 
 		goods = new Goods();
@@ -128,7 +128,7 @@ class GoodsOrderServiceTest {
 
 	@Test
 	void createOrder_판매중이_아닌_굿즈_GOODS_NOT_ON_SALE() {
-		ReflectionTestUtils.setField(goods, "status", GoodsStatus.READY);
+		ReflectionTestUtils.setField(goods, "status", GoodsStatus.ENDED);
 		given(userRepository.findById(1L)).willReturn(Optional.of(user));
 		given(goodsRepository.findByIdAndDeletedAtIsNull(10L)).willReturn(Optional.of(goods));
 
