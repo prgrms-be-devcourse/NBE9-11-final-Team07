@@ -29,88 +29,82 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class GoodsService {
 
-    private final GoodsRepository goodsRepository;
-    private final GoodsImageRepository goodsImageRepository;
-    private final PopupStoreRepository popupStoreRepository;
-    private final S3Service s3Service;
+	private final GoodsRepository goodsRepository;
+	private final GoodsImageRepository goodsImageRepository;
+	private final PopupStoreRepository popupStoreRepository;
+	private final S3Service s3Service;
 
-    @Transactional
-    public GoodsRegisterResponse registerGoods(Long popupStoreId, GoodsRegisterRequest request) {
-        PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
-            .orElseThrow(() -> new BusinessException(ErrorCode.POPUP_STORE_NOT_FOUND));
+	@Transactional
+	public GoodsRegisterResponse registerGoods(Long popupStoreId, GoodsRegisterRequest request) {
+		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.POPUP_STORE_NOT_FOUND));
 
-        List<GoodsRegisterRequest.ImageKeyEntry> imageKeys =
-            request.imageKeys() != null ? request.imageKeys() : List.of();
+		List<GoodsRegisterRequest.ImageKeyEntry> imageKeys =
+			request.imageKeys() != null ? request.imageKeys() : List.of();
 
-        boolean hasProductImage = imageKeys.stream()
-            .anyMatch(entry -> entry.imageType() == GoodsImageType.PRODUCT);
-        if (!hasProductImage) {
-            throw new BusinessException(ErrorCode.GOODS_PRODUCT_IMAGE_REQUIRED);
-        }
+		boolean hasProductImage = imageKeys.stream()
+			.anyMatch(entry -> entry.imageType() == GoodsImageType.PRODUCT);
+		if (!hasProductImage) {
+			throw new BusinessException(ErrorCode.GOODS_PRODUCT_IMAGE_REQUIRED);
+		}
 
-        Goods goods = Goods.register(
-            popupStore,
-            request.name(),
-            request.price(),
-            request.stock(),
-            request.description()
-        );
-        goodsRepository.save(goods);
+		Goods goods = Goods.register(
+			popupStore,
+			request.name(),
+			request.price(),
+			request.stock(),
+			request.description()
+		);
+		goodsRepository.save(goods);
 
-        if (!imageKeys.isEmpty()) {
-            List<GoodsImage> images = imageKeys.stream()
-                .map(entry -> GoodsImage.create(goods, entry.imageKey(), entry.imageType()))
-                .toList();
-            goodsImageRepository.saveAll(images);
-        }
+		List<GoodsImage> images = imageKeys.stream()
+			.map(entry -> {
+				String finalKey = s3Service.moveToFinalPath(entry.imageKey(), goods.getId(), entry.imageType());
+				return GoodsImage.create(goods, finalKey, entry.imageType());
+			})
+			.toList();
+		goodsImageRepository.saveAll(images);
 
-        return GoodsRegisterResponse.from(goods);
-    }
+		return GoodsRegisterResponse.from(goods);
+	}
 
-    @Transactional
-    public List<GoodsImagePresignResponse> generatePresignedUrls(Long goodsId, GoodsImagePresignRequest request) {
-        Goods goods = goodsRepository.findById(goodsId)
-            .orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
+	@Transactional(readOnly = true)
+	public List<GoodsImagePresignResponse> generatePresignedUrls(Long goodsId, GoodsImagePresignRequest request) {
+		goodsRepository.findById(goodsId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
 
-        List<GoodsImagePresignResponse> responses = request.fileNames().stream()
-            .map(fileName -> {
-                String key = s3Service.buildGoodsImageKey(goodsId, request.imageType(), fileName);
-                String presignedUrl = s3Service.generatePresignedPutUrl(key);
-                return new GoodsImagePresignResponse(key, presignedUrl);
-            })
-            .toList();
+		return request.fileNames().stream()
+			.map(fileName -> {
+				String key = s3Service.buildTempImageKey(fileName);
+				String presignedUrl = s3Service.generatePresignedPutUrl(key);
+				return new GoodsImagePresignResponse(key, presignedUrl);
+			})
+			.toList();
+	}
 
-        List<GoodsImage> images = responses.stream()
-            .map(res -> GoodsImage.create(goods, res.imageKey(), request.imageType()))
-            .toList();
-        goodsImageRepository.saveAll(images);
+	@Transactional
+	public GoodsUpdateResponse updateGoods(Long goodsId, GoodsUpdateRequest request) {
+		Goods goods = goodsRepository.findById(goodsId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
 
-        return responses;
-    }
+		goods.update(request.name(), request.price(), request.stock(), request.description());
 
-    @Transactional
-    public GoodsUpdateResponse updateGoods(Long goodsId, GoodsUpdateRequest request) {
-        Goods goods = goodsRepository.findById(goodsId)
-            .orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
+		return GoodsUpdateResponse.from(goods);
+	}
 
-        goods.update(request.name(), request.price(), request.stock(), request.description());
+	@Transactional
+	public void deleteGoods(Long goodsId) {
+		Goods goods = goodsRepository.findById(goodsId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
 
-        return GoodsUpdateResponse.from(goods);
-    }
+		goods.softDelete();
+	}
 
-    @Transactional
-    public void deleteGoods(Long goodsId) {
-        Goods goods = goodsRepository.findById(goodsId)
-            .orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
-
-        goods.softDelete();
-    }
-
-    @Transactional(readOnly = true)
-    public List<GoodsListResponse> getGoodsList(Long userId) {
-        return goodsRepository.findByPopupStoreUserIdAndDeletedAtIsNull(userId)
-            .stream()
-            .map(GoodsListResponse::from)
-            .toList();
-    }
+	@Transactional(readOnly = true)
+	public List<GoodsListResponse> getGoodsList(Long userId) {
+		return goodsRepository.findByPopupStoreUserIdAndDeletedAtIsNull(userId)
+			.stream()
+			.map(GoodsListResponse::from)
+			.toList();
+	}
 }

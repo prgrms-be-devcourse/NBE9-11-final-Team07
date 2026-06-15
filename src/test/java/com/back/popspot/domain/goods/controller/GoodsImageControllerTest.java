@@ -1,6 +1,7 @@
 package com.back.popspot.domain.goods.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -77,13 +78,11 @@ class GoodsImageControllerTest extends IntegrationTestSupport {
     @WithMockUser
     @DisplayName("presigned URL 발급에 성공한다")
     void generatePresignedUrls() throws Exception {
-        String imageKey = "goods/" + goodsId + "/product/test-uuid.jpg";
-        String presignedUrl = "https://bucket.s3.amazonaws.com/" + imageKey + "?signed=true";
+        String tempKey = "temp/goods/test-uuid.jpg";
+        String presignedUrl = "https://bucket.s3.amazonaws.com/" + tempKey + "?signed=true";
 
-        given(s3Service.buildGoodsImageKey(eq(goodsId), eq(GoodsImageType.PRODUCT), eq("test.jpg")))
-            .willReturn(imageKey);
-        given(s3Service.generatePresignedPutUrl(imageKey))
-            .willReturn(presignedUrl);
+        given(s3Service.buildTempImageKey(eq("test.jpg"))).willReturn(tempKey);
+        given(s3Service.generatePresignedPutUrl(tempKey)).willReturn(presignedUrl);
 
         GoodsImagePresignRequest request = new GoodsImagePresignRequest(
             GoodsImageType.PRODUCT, List.of("test.jpg")
@@ -96,7 +95,7 @@ class GoodsImageControllerTest extends IntegrationTestSupport {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("SUCCESS"))
             .andExpect(jsonPath("$.data.length()").value(1))
-            .andExpect(jsonPath("$.data[0].imageKey").value(imageKey))
+            .andExpect(jsonPath("$.data[0].imageKey").value(tempKey))
             .andExpect(jsonPath("$.data[0].presignedUrl").value(presignedUrl));
     }
 
@@ -119,13 +118,23 @@ class GoodsImageControllerTest extends IntegrationTestSupport {
 
     @Test
     @WithMockUser
-    @DisplayName("굿즈 등록 시 imageKey를 포함하면 GoodsImage가 DB에 저장된다")
-    void registerGoods_withImages_savesGoodsImage() throws Exception {
+    @DisplayName("굿즈 등록 시 temp 이미지가 final 경로로 이동되고 GoodsImage가 DB에 저장된다")
+    void registerGoods_withImages_movesToFinalPathAndSavesGoodsImage() throws Exception {
+        String tempProductKey = "temp/goods/product-uuid.jpg";
+        String tempDetailKey = "temp/goods/detail-uuid.jpg";
+        String finalProductKey = "goods/1/product/product-uuid.jpg";
+        String finalDetailKey = "goods/1/detail/detail-uuid.jpg";
+
+        given(s3Service.moveToFinalPath(eq(tempProductKey), any(Long.class), eq(GoodsImageType.PRODUCT)))
+            .willReturn(finalProductKey);
+        given(s3Service.moveToFinalPath(eq(tempDetailKey), any(Long.class), eq(GoodsImageType.DETAIL)))
+            .willReturn(finalDetailKey);
+
         GoodsRegisterRequest request = new GoodsRegisterRequest(
             "신상 굿즈", 15000, 30, "상세 설명",
             List.of(
-                new GoodsRegisterRequest.ImageKeyEntry("goods/product/uuid-1.jpg", GoodsImageType.PRODUCT),
-                new GoodsRegisterRequest.ImageKeyEntry("goods/detail/uuid-2.jpg", GoodsImageType.DETAIL)
+                new GoodsRegisterRequest.ImageKeyEntry(tempProductKey, GoodsImageType.PRODUCT),
+                new GoodsRegisterRequest.ImageKeyEntry(tempDetailKey, GoodsImageType.DETAIL)
             )
         );
 
@@ -139,10 +148,10 @@ class GoodsImageControllerTest extends IntegrationTestSupport {
         List<GoodsImage> savedImages = goodsImageRepository.findAll();
         assertThat(savedImages).hasSize(2);
         assertThat(savedImages)
+            .extracting(GoodsImage::getImageKey)
+            .containsExactlyInAnyOrder(finalProductKey, finalDetailKey);
+        assertThat(savedImages)
             .extracting(GoodsImage::getImageType)
             .containsExactlyInAnyOrder(GoodsImageType.PRODUCT, GoodsImageType.DETAIL);
-        assertThat(savedImages)
-            .extracting(GoodsImage::getImageKey)
-            .containsExactlyInAnyOrder("goods/product/uuid-1.jpg", "goods/detail/uuid-2.jpg");
     }
 }

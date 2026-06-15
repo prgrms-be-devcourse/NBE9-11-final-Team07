@@ -16,8 +16,28 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class S3Service {
 
+    private static final String TEMP_PREFIX = "temp/goods/";
+
     private final AmazonS3 amazonS3;
     private final S3Properties s3Properties;
+
+    public String buildTempImageKey(String fileName) {
+        String uuid = UUID.randomUUID().toString();
+        String extension = extractExtension(fileName);
+        String suffix = extension.isEmpty() ? uuid : uuid + "." + extension;
+        return TEMP_PREFIX + suffix;
+    }
+
+    public String moveToFinalPath(String tempKey, Long goodsId, GoodsImageType imageType) {
+        String fileName = tempKey.substring(TEMP_PREFIX.length());
+        String finalKey = String.format("goods/%d/%s/%s", goodsId, imageType.name().toLowerCase(), fileName);
+
+        String bucket = s3Properties.getBucket();
+        amazonS3.copyObject(bucket, tempKey, bucket, finalKey);
+        amazonS3.deleteObject(bucket, tempKey);
+
+        return finalKey;
+    }
 
     public String generatePresignedPutUrl(String key) {
         Date expiration = new Date(System.currentTimeMillis() + s3Properties.getPresignedUrlExpiration() * 1000);
@@ -25,13 +45,6 @@ public class S3Service {
             .withMethod(HttpMethod.PUT)
             .withExpiration(expiration);
         return amazonS3.generatePresignedUrl(request).toString();
-    }
-
-    public String buildGoodsImageKey(Long goodsId, GoodsImageType imageType, String fileName) {
-        String uuid = UUID.randomUUID().toString();
-        String extension = extractExtension(fileName);
-        String suffix = extension.isEmpty() ? uuid : uuid + "." + extension;
-        return String.format("goods/%d/%s/%s", goodsId, imageType.name().toLowerCase(), suffix);
     }
 
     private String extractExtension(String fileName) {
