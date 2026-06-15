@@ -22,3 +22,8 @@ output "vpc_id" {
   description = "VPC ID"
   value       = aws_vpc.main.id
 }
+
+output "ec2_iam_role_arn" {
+  description = "IAM Role ARN attached to EC2 instance"
+  value       = aws_iam_role.ec2.arn
+}
