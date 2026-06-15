@@ -1,0 +1,2 @@
+org.springframework.boot.EnvironmentPostProcessor=\
+  com.back.popspot.global.config.DotenvEnvironmentPostProcessor
