@@ -1,14 +1,12 @@
 package com.back.popspot.domain.coupon.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.BDDMockito.*;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -51,7 +49,8 @@ class CouponServiceTest {
 	private CouponService couponService;
 
 	@Test
-	void 호스트가_소유한_팝업스토어에_쿠폰을_생성한다() {
+	@DisplayName("주최자가 소유한 팝업스토어에 쿠폰을 생성")
+	void test1() {
 		Long hostUserId = 1L;
 		Long popupStoreId = 10L;
 		PopupStore popupStore = createPopupStore(popupStoreId, hostUserId);
@@ -80,7 +79,8 @@ class CouponServiceTest {
 	}
 
 	@Test
-	void 쿠폰_만료일이_시작일보다_빠르면_생성할_수_없다() {
+	@DisplayName("쿠폰 만료일이 시작일보다 빠르면 생성 금지")
+	void test2() {
 		LocalDateTime startedAt = LocalDateTime.now().plusDays(10);
 		CouponCreateRequest request = createRequest(startedAt, startedAt.minusDays(1), 100);
 
@@ -91,7 +91,8 @@ class CouponServiceTest {
 	}
 
 	@Test
-	void 팝업스토어_소유자가_아니면_쿠폰을_생성할_수_없다() {
+	@DisplayName("팝업스토어 주최자가 아니면 쿠폰을 생성 금지")
+	void test3() {
 		Long popupStoreId = 10L;
 		PopupStore popupStore = createPopupStore(popupStoreId, 2L);
 		CouponCreateRequest request = createRequest(
@@ -108,7 +109,8 @@ class CouponServiceTest {
 	}
 
 	@Test
-	void 이미_발급받은_쿠폰은_중복_발급할_수_없다() {
+	@DisplayName("이미 발급받은 쿠폰 중복 발급 금지")
+	void test4() {
 		Long userId = 1L;
 		Long couponId = 100L;
 		User user = createUser(userId);
@@ -124,7 +126,8 @@ class CouponServiceTest {
 	}
 
 	@Test
-	void 쿠폰을_발급하면_발급_수량이_증가한다() {
+	@DisplayName("쿠폰 발급 시 발급 수량 증가")
+	void test5() {
 		Long userId = 1L;
 		Long couponId = 100L;
 		User user = createUser(userId);
@@ -149,7 +152,8 @@ class CouponServiceTest {
 	}
 
 	@Test
-	void 마지막_수량을_발급하면_쿠폰이_품절된다() {
+	@DisplayName("마지막 수량 발급 시 쿠폰 품절")
+	void test6() {
 		Long userId = 1L;
 		Long couponId = 100L;
 		User user = createUser(userId);

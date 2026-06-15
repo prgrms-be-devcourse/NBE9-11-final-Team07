@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -43,7 +44,8 @@ class CouponControllerTest {
 	}
 
 	@Test
-	void 호스트가_쿠폰을_생성하면_201을_반환한다() throws Exception {
+	@DisplayName("주최자가 쿠폰 생성 시 201 반환")
+	void test1() throws Exception {
 		Long hostUserId = 1L;
 		Long popupStoreId = 10L;
 		CouponCreateRequest request = validRequest();
@@ -65,7 +67,8 @@ class CouponControllerTest {
 	}
 
 	@Test
-	void 쿠폰_생성_요청이_유효하지_않으면_400을_반환한다() throws Exception {
+	@DisplayName("쿠폰 생성 요청이 유효하지 않으면 400 반환")
+	void test2() throws Exception {
 		CouponCreateRequest request = new CouponCreateRequest(
 			"",
 			CouponDiscountType.AMOUNT,
@@ -87,7 +90,8 @@ class CouponControllerTest {
 	}
 
 	@Test
-	void 발급_가능한_쿠폰_목록을_조회한다() throws Exception {
+	@DisplayName("발급 가능한 쿠폰 목록 조회")
+	void test3() throws Exception {
 		Long popupStoreId = 10L;
 		given(couponService.getPublicCoupons(popupStoreId)).willReturn(List.of(couponResponse(popupStoreId)));
 
@@ -99,7 +103,8 @@ class CouponControllerTest {
 	}
 
 	@Test
-	void 사용자에게_쿠폰을_발급하면_201을_반환한다() throws Exception {
+	@DisplayName("사용자에게 쿠폰 발급 시 201 반환")
+	void test4() throws Exception {
 		Long userId = 1L;
 		Long couponId = 100L;
 		UserCouponResponse response = new UserCouponResponse(
@@ -129,7 +134,8 @@ class CouponControllerTest {
 	}
 
 	@Test
-	void 중복_쿠폰_발급_요청이면_409를_반환한다() throws Exception {
+	@DisplayName("중복 쿠폰 발급 요청 시 409 반환")
+	void test5() throws Exception {
 		Long userId = 1L;
 		Long couponId = 100L;
 		given(couponService.issueCoupon(userId, couponId))

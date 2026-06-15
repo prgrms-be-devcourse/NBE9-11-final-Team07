@@ -10,6 +10,7 @@ import com.back.popspot.domain.coupon.dto.CouponCreateRequest;
 import com.back.popspot.domain.coupon.dto.CouponResponse;
 import com.back.popspot.domain.coupon.dto.UserCouponResponse;
 import com.back.popspot.domain.coupon.entity.Coupon;
+import com.back.popspot.domain.coupon.entity.CouponDiscountType;
 import com.back.popspot.domain.coupon.entity.CouponStatus;
 import com.back.popspot.domain.coupon.entity.UserCoupon;
 import com.back.popspot.domain.coupon.repository.CouponRepository;
@@ -36,6 +37,7 @@ public class CouponService {
 	@Transactional
 	public CouponResponse createHostCoupon(Long hostUserId, Long popupStoreId, CouponCreateRequest request) {
 		validatePeriod(request.startedAt(), request.expiredAt());
+		validateDiscount(request.discountType(), request.discountValue());
 		PopupStore popupStore = getPopupStore(popupStoreId);
 		validateHostOwner(hostUserId, popupStore);
 
@@ -63,6 +65,11 @@ public class CouponService {
 		Coupon coupon = couponRepository.findByIdAndPopupStoreId(couponId, popupStoreId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
+		// DB 외래 키 제약 조건으로 예외가 발생
+		// 영속성 전이에 따라 사용자 쿠폰데이터가 함께 삭제될 위험이 존재하기 때문
+		if (coupon.getIssuedQuantity() > 0) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
 		couponRepository.delete(coupon);
 	}
 
@@ -140,6 +147,13 @@ public class CouponService {
 	// 쿠폰 만료일이 시작일보다 이후인지 검증
 	private void validatePeriod(LocalDateTime startedAt, LocalDateTime expiredAt) {
 		if (!expiredAt.isAfter(startedAt)) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+	}
+
+	// 할인 타입이 PERCENT일 때 할인율이 올바른 범위(1 ~ 100%) 내에 있는지 검증하는 메서드
+	private void validateDiscount(CouponDiscountType discountType, int discountValue) {
+		if (discountType == CouponDiscountType.PERCENT && (discountValue < 1 || discountValue > 100)) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 	}

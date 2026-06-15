@@ -26,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 public class CouponController {
 	private final CouponService couponService;
 
+	// 쿠폰 생성
 	@PostMapping("/host/popups/{popupStoreId}/coupons")
 	public ResponseEntity<CommonApiResponse<CouponResponse>> createHostCoupon(
 		@RequestHeader("X-USER-ID") Long hostUserId,
@@ -37,6 +38,7 @@ public class CouponController {
 			.body(CommonApiResponse.created("쿠폰이 생성되었습니다.", response));
 	}
 
+	// 쿠폰 목록 조회
 	@GetMapping("/host/popups/{popupStoreId}/coupons")
 	public ResponseEntity<CommonApiResponse<List<CouponResponse>>> getHostCoupons(
 		@RequestHeader("X-USER-ID") Long hostUserId,
@@ -45,6 +47,7 @@ public class CouponController {
 		return ResponseEntity.ok(CommonApiResponse.success(couponService.getHostCoupons(hostUserId, popupStoreId)));
 	}
 
+	// 쿠폰 삭제
 	@DeleteMapping("/host/popups/{popupStoreId}/coupons/{couponId}")
 	public ResponseEntity<CommonApiResponse<Void>> deleteHostCoupon(
 		@RequestHeader("X-USER-ID") Long hostUserId,
@@ -55,6 +58,7 @@ public class CouponController {
 		return ResponseEntity.ok(CommonApiResponse.successMessage("쿠폰이 삭제되었습니다."));
 	}
 
+	// 팝업스토어 쿠폰 목록 조회
 	@GetMapping("/popups/{popupStoreId}/coupons")
 	public ResponseEntity<CommonApiResponse<List<CouponResponse>>> getPublicCoupons(
 		@PathVariable Long popupStoreId
@@ -62,6 +66,7 @@ public class CouponController {
 		return ResponseEntity.ok(CommonApiResponse.success(couponService.getPublicCoupons(popupStoreId)));
 	}
 
+	// 선착순 쿠폰 발급
 	@PostMapping("/coupons/{couponId}/issue")
 	public ResponseEntity<CommonApiResponse<UserCouponResponse>> issueCoupon(
 		@RequestHeader("X-USER-ID") Long userId,
@@ -71,6 +76,7 @@ public class CouponController {
 			.body(CommonApiResponse.created("쿠폰이 발급되었습니다.", couponService.issueCoupon(userId, couponId)));
 	}
 
+	// 내 쿠폰 목록 조회
 	@GetMapping("/me/coupons")
 	public ResponseEntity<CommonApiResponse<List<UserCouponResponse>>> getMyCoupons(
 		@RequestHeader("X-USER-ID") Long userId
