@@ -27,4 +27,6 @@ jwt:
   access-token-validity-seconds: 3600
 
 
-
+toss-payments:
+  client-key: ${TOSS_PAYMENTS_CLIENT_KEY}
+  secret-key: ${TOSS_PAYMENTS_SECRET_KEY}

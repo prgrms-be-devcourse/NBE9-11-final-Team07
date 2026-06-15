@@ -1,10 +1,8 @@
 HELP.md
 .gradle
 build/
-.DS_Store
 
 ### Environment ###
-.env
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
@@ -39,6 +37,11 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### env ###
+.env
+.env.*
+!.env.example
 
 ### OS ###
 .DS_Store
