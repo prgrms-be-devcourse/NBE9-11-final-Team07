@@ -1,6 +1,0 @@
-spring:
-  config:
-    activate:
-      on-profile: local
-
-# 로컬 DB, 로그 설정 등이 생기면 아래에 추가합니다.

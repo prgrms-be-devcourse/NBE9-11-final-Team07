@@ -1,6 +1,7 @@
 spring:
   application:
     name: popspot
+
   security:
     oauth2:
       client:
@@ -13,11 +14,18 @@ spring:
             scope:
               - email
               - profile
+  profiles:
+    active: dev
+
+  output:
+    ansi:
+      enabled: always
 
 jwt:
   secret: ${JWT_SECRET}
   # access token 유효시간 (초 단위, 기본 1시간)
   access-token-validity-seconds: 3600
+
 
 toss-payments:
   client-key: ${TOSS_PAYMENTS_CLIENT_KEY}
