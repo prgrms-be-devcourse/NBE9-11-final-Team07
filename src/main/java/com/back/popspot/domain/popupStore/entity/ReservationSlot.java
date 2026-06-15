@@ -47,4 +47,16 @@ public class ReservationSlot extends BaseEntity {
 	public static ReservationSlot of(PopupStore popupStore, ReservationSlotCreateRequest request) {
 		return new ReservationSlot(popupStore, request.slotDate(), request.startTime(), request.capacity());
 	}
+
+	public void updateSlotDate(LocalDate slotDate) {
+		this.slotDate = slotDate;
+	}
+
+	public void updateStartTime(LocalTime startTime) {
+		this.startTime = startTime;
+	}
+
+	public void updateCapacity(int capacity) {
+		this.capacity = capacity;
+	}
 }

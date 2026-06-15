@@ -2,6 +2,7 @@ package com.back.popspot.domain.popupStore.service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
+import com.back.popspot.domain.popupStore.dto.ReservationSlotUpdateRequest;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
@@ -149,5 +151,77 @@ public class PopupStoreHostService {
 		ReservationSlot slot = ReservationSlot.of(popupStore, request);
 		reservationSlotRepository.save(slot);
 		return slot.getId();
+	}
+
+	@Transactional
+	public void updateSlot(Long userId, Long popupStoreId, Long slotId, ReservationSlotUpdateRequest request) {
+		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+		ReservationSlot slot = reservationSlotRepository.findById(slotId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_SLOT_NOT_FOUND));
+
+		if (!slot.getPopupStore().getId().equals(popupStoreId)) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		if (!popupStore.getUser().getId().equals(userId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN);
+		}
+
+		if (!LocalDateTime.now().isBefore(popupStore.getReservationStartAt())) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		LocalDate targetSlotDate = request.slotDate() != null ? request.slotDate() : slot.getSlotDate();
+		LocalTime targetStartTime = request.startTime() != null ? request.startTime() : slot.getStartTime();
+
+		LocalDate openDate = popupStore.getOpenDate().toLocalDate();
+		LocalDate closeDate = popupStore.getCloseDate().toLocalDate();
+		if (targetSlotDate.isBefore(openDate) || targetSlotDate.isAfter(closeDate)) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		if (reservationSlotRepository.existsByPopupStoreIdAndSlotDateAndStartTimeAndIdNot(
+			popupStoreId,
+			targetSlotDate,
+			targetStartTime,
+			slotId
+		)) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		if (request.slotDate() != null) {
+			slot.updateSlotDate(request.slotDate());
+		}
+		if (request.startTime() != null) {
+			slot.updateStartTime(request.startTime());
+		}
+		if (request.capacity() != null) {
+			slot.updateCapacity(request.capacity());
+		}
+	}
+
+	@Transactional
+	public void deleteSlot(Long userId, Long popupStoreId, Long slotId) {
+		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+		ReservationSlot slot = reservationSlotRepository.findById(slotId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_SLOT_NOT_FOUND));
+
+		if (!slot.getPopupStore().getId().equals(popupStoreId)) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		if (!popupStore.getUser().getId().equals(userId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN);
+		}
+
+		if (!LocalDateTime.now().isBefore(popupStore.getReservationStartAt())) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		reservationSlotRepository.delete(slot);
 	}
 }
