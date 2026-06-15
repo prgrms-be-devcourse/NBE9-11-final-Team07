@@ -4,11 +4,9 @@ build/
 .DS_Store
 
 ### Environment ###
-.env
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
-.DS_Store
 
 ### STS ###
 .apt_generated

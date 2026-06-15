@@ -153,8 +153,8 @@ class CouponControllerTest {
 		mockMvc.perform(post("/coupons/{couponId}/issue", couponId)
 				.principal(authentication(userId)))
 			.andExpect(status().isConflict())
-			.andExpect(jsonPath("$.code").value("CONFLICT"))
-			.andExpect(jsonPath("$.message").value("이미 처리된 요청입니다."))
+			.andExpect(jsonPath("$.code").value("COUPON_ALREADY_ISSUED"))
+			.andExpect(jsonPath("$.message").value("이미 발급받은 쿠폰입니다."))
 			.andExpect(jsonPath("$.data").doesNotExist());
 	}
 
