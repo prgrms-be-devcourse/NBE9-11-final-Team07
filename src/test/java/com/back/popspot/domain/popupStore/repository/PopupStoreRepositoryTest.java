@@ -78,10 +78,7 @@ class PopupStoreRepositoryTest {
 	}
 
 	private User persistUser() {
-		User user = new User();
-		ReflectionTestUtils.setField(user, "email", "owner@test.com");
-		ReflectionTestUtils.setField(user, "name", "owner");
-		ReflectionTestUtils.setField(user, "role", UserRole.ORGANIZER);
+		User user = User.create("owner@test.com", "owner");
 		return entityManager.persist(user);
 	}
 

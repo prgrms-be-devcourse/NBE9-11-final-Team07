@@ -101,7 +101,7 @@ public class CouponService {
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		if (userCouponRepository.existsByUserIdAndCouponId(userId, couponId)) {
-			throw new BusinessException(ErrorCode.CONFLICT);
+			throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
 		}
 
 		if (!coupon.isIssuable(LocalDateTime.now())) {

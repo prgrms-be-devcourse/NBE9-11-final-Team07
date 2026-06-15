@@ -4,12 +4,12 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.back.popspot.domain.coupon.dto.CouponCreateRequest;
@@ -29,7 +29,7 @@ public class CouponController {
 	// 쿠폰 생성
 	@PostMapping("/host/popups/{popupStoreId}/coupons")
 	public ResponseEntity<CommonApiResponse<CouponResponse>> createHostCoupon(
-		@RequestHeader("X-USER-ID") Long hostUserId,
+		@AuthenticationPrincipal Long hostUserId,
 		@PathVariable Long popupStoreId,
 		@Valid @RequestBody CouponCreateRequest request
 	) {
@@ -41,7 +41,7 @@ public class CouponController {
 	// 쿠폰 목록 조회
 	@GetMapping("/host/popups/{popupStoreId}/coupons")
 	public ResponseEntity<CommonApiResponse<List<CouponResponse>>> getHostCoupons(
-		@RequestHeader("X-USER-ID") Long hostUserId,
+		@AuthenticationPrincipal Long hostUserId,
 		@PathVariable Long popupStoreId
 	) {
 		return ResponseEntity.ok(CommonApiResponse.success(couponService.getHostCoupons(hostUserId, popupStoreId)));
@@ -50,7 +50,7 @@ public class CouponController {
 	// 쿠폰 삭제
 	@DeleteMapping("/host/popups/{popupStoreId}/coupons/{couponId}")
 	public ResponseEntity<CommonApiResponse<Void>> deleteHostCoupon(
-		@RequestHeader("X-USER-ID") Long hostUserId,
+		@AuthenticationPrincipal Long hostUserId,
 		@PathVariable Long popupStoreId,
 		@PathVariable Long couponId
 	) {
@@ -69,7 +69,7 @@ public class CouponController {
 	// 선착순 쿠폰 발급
 	@PostMapping("/coupons/{couponId}/issue")
 	public ResponseEntity<CommonApiResponse<UserCouponResponse>> issueCoupon(
-		@RequestHeader("X-USER-ID") Long userId,
+		@AuthenticationPrincipal Long userId,
 		@PathVariable Long couponId
 	) {
 		return ResponseEntity.status(HttpStatus.CREATED)
@@ -79,7 +79,7 @@ public class CouponController {
 	// 내 쿠폰 목록 조회
 	@GetMapping("/me/coupons")
 	public ResponseEntity<CommonApiResponse<List<UserCouponResponse>>> getMyCoupons(
-		@RequestHeader("X-USER-ID") Long userId
+		@AuthenticationPrincipal Long userId
 	) {
 		return ResponseEntity.ok(CommonApiResponse.success(couponService.getMyCoupons(userId)));
 	}

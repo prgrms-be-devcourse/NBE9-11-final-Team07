@@ -13,9 +13,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.support.WebDataBinderFactory;
+import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.method.support.ModelAndViewContainer;
 
 import com.back.popspot.domain.coupon.dto.CouponCreateRequest;
 import com.back.popspot.domain.coupon.dto.CouponResponse;
@@ -40,6 +48,7 @@ class CouponControllerTest {
 	void setUp() {
 		mockMvc = MockMvcBuilders.standaloneSetup(new CouponController(couponService))
 			.setControllerAdvice(new GlobalExceptionHandler())
+			.setCustomArgumentResolvers(new AuthenticationPrincipalResolver())
 			.build();
 	}
 
@@ -53,7 +62,7 @@ class CouponControllerTest {
 		given(couponService.createHostCoupon(hostUserId, popupStoreId, request)).willReturn(response);
 
 		mockMvc.perform(post("/host/popups/{popupStoreId}/coupons", popupStoreId)
-				.header("X-USER-ID", hostUserId)
+				.principal(authentication(hostUserId))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(toJson(request)))
 			.andExpect(status().isCreated())
@@ -81,7 +90,7 @@ class CouponControllerTest {
 		);
 
 		mockMvc.perform(post("/host/popups/{popupStoreId}/coupons", 10L)
-				.header("X-USER-ID", 1L)
+				.principal(authentication(1L))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(toJson(request)))
 			.andExpect(status().isBadRequest())
@@ -125,7 +134,7 @@ class CouponControllerTest {
 		given(couponService.issueCoupon(userId, couponId)).willReturn(response);
 
 		mockMvc.perform(post("/coupons/{couponId}/issue", couponId)
-				.header("X-USER-ID", userId))
+				.principal(authentication(userId)))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.code").value("SUCCESS"))
 			.andExpect(jsonPath("$.message").value("쿠폰이 발급되었습니다."))
@@ -139,10 +148,10 @@ class CouponControllerTest {
 		Long userId = 1L;
 		Long couponId = 100L;
 		given(couponService.issueCoupon(userId, couponId))
-			.willThrow(new BusinessException(ErrorCode.CONFLICT));
+			.willThrow(new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED));
 
 		mockMvc.perform(post("/coupons/{couponId}/issue", couponId)
-				.header("X-USER-ID", userId))
+				.principal(authentication(userId)))
 			.andExpect(status().isConflict())
 			.andExpect(jsonPath("$.code").value("CONFLICT"))
 			.andExpect(jsonPath("$.message").value("이미 처리된 요청입니다."))
@@ -160,6 +169,28 @@ class CouponControllerTest {
 			LocalDateTime.now().plusDays(1),
 			LocalDateTime.now().plusDays(10)
 		);
+	}
+
+	private UsernamePasswordAuthenticationToken authentication(Long userId) {
+		return new UsernamePasswordAuthenticationToken(userId, null, List.of());
+	}
+
+	private static class AuthenticationPrincipalResolver implements HandlerMethodArgumentResolver {
+		@Override
+		public boolean supportsParameter(MethodParameter parameter) {
+			return parameter.hasParameterAnnotation(AuthenticationPrincipal.class);
+		}
+
+		@Override
+		public Object resolveArgument(
+			MethodParameter parameter,
+			ModelAndViewContainer mavContainer,
+			NativeWebRequest webRequest,
+			WebDataBinderFactory binderFactory
+		) {
+			Authentication authentication = (Authentication)webRequest.getUserPrincipal();
+			return authentication.getPrincipal();
+		}
 	}
 
 	private CouponResponse couponResponse(Long popupStoreId) {

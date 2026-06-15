@@ -121,7 +121,7 @@ class CouponServiceTest {
 
 		assertThatThrownBy(() -> couponService.issueCoupon(userId, couponId))
 			.isInstanceOfSatisfying(BusinessException.class,
-				exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CONFLICT));
+				exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_ALREADY_ISSUED));
 		verify(userCouponRepository, never()).save(org.mockito.ArgumentMatchers.any(UserCoupon.class));
 	}
 
@@ -204,7 +204,7 @@ class CouponServiceTest {
 	}
 
 	private User createUser(Long userId) {
-		User user = new User();
+		User user = User.create("owner@test.com", "owner");
 		ReflectionTestUtils.setField(user, "id", userId);
 		return user;
 	}
