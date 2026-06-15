@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import com.amazonaws.HttpMethod;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
-import com.back.popspot.domain.goods.entity.GoodsImageType;
 
 import lombok.RequiredArgsConstructor;
 
@@ -16,27 +15,30 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class S3Service {
 
-    private static final String TEMP_PREFIX = "temp/goods/";
+    private static final String TEMP_PREFIX = "temp/";
 
     private final AmazonS3 amazonS3;
     private final S3Properties s3Properties;
 
-    public String buildTempImageKey(String fileName) {
+    public String buildTempKey(String fileName) {
         String uuid = UUID.randomUUID().toString();
         String extension = extractExtension(fileName);
         String suffix = extension.isEmpty() ? uuid : uuid + "." + extension;
         return TEMP_PREFIX + suffix;
     }
 
-    public String moveToFinalPath(String tempKey, Long goodsId, GoodsImageType imageType) {
-        String fileName = tempKey.substring(TEMP_PREFIX.length());
-        String finalKey = String.format("goods/%d/%s/%s", goodsId, imageType.name().toLowerCase(), fileName);
-
+    public void move(String sourceKey, String destKey) {
         String bucket = s3Properties.getBucket();
-        amazonS3.copyObject(bucket, tempKey, bucket, finalKey);
-        amazonS3.deleteObject(bucket, tempKey);
+        amazonS3.copyObject(bucket, sourceKey, bucket, destKey);
+        amazonS3.deleteObject(bucket, sourceKey);
+    }
 
-        return finalKey;
+    public boolean isTempKey(String key) {
+        return key != null && key.startsWith(TEMP_PREFIX);
+    }
+
+    public String extractFileName(String key) {
+        return key.substring(key.lastIndexOf('/') + 1);
     }
 
     public String generatePresignedPutUrl(String key) {

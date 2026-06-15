@@ -21,6 +21,7 @@ import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
+import com.back.popspot.global.s3.ImageDomain;
 import com.back.popspot.global.s3.S3Service;
 
 import lombok.RequiredArgsConstructor;
@@ -59,7 +60,13 @@ public class GoodsService {
 
 		List<GoodsImage> images = imageKeys.stream()
 			.map(entry -> {
-				String finalKey = s3Service.moveToFinalPath(entry.imageKey(), goods.getId(), entry.imageType());
+				String tempKey = entry.imageKey();
+				if (!s3Service.isTempKey(tempKey)) {
+					throw new BusinessException(ErrorCode.INVALID_IMAGE_TEMP_KEY);
+				}
+				String fileName = s3Service.extractFileName(tempKey);
+				String finalKey = ImageDomain.GOODS.finalKey(goods.getId(), entry.imageType().code(), fileName);
+				s3Service.move(tempKey, finalKey);
 				return GoodsImage.create(goods, finalKey, entry.imageType());
 			})
 			.toList();
@@ -75,7 +82,7 @@ public class GoodsService {
 
 		return request.fileNames().stream()
 			.map(fileName -> {
-				String key = s3Service.buildTempImageKey(fileName);
+				String key = s3Service.buildTempKey(fileName);
 				String presignedUrl = s3Service.generatePresignedPutUrl(key);
 				return new GoodsImagePresignResponse(key, presignedUrl);
 			})

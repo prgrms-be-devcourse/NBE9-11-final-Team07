@@ -1,5 +1,9 @@
 package com.back.popspot.domain.goods.entity;
 
 public enum GoodsImageType {
-    PRODUCT, DETAIL
+    PRODUCT, DETAIL;
+
+    public String code() {
+        return name().toLowerCase();
+    }
 }
