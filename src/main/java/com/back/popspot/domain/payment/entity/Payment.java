@@ -23,6 +23,27 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Table(name = "payment")
 public class Payment extends BaseEntity {
+	public static final String READY_STATUS = "READY";
+
+	public static Payment createReady(
+		User member,
+		PaymentType paymentType,
+		String orderId,
+		String orderName,
+		long amount,
+		String idempotencyKey
+	) {
+		Payment payment = new Payment();
+		payment.member = member;
+		payment.paymentType = paymentType;
+		payment.orderId = orderId;
+		payment.orderName = orderName;
+		payment.amount = amount;
+		payment.status = READY_STATUS;
+		payment.idempotencyKey = idempotencyKey;
+		return payment;
+	}
+
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "member_id", nullable = false)
 	private User member;
@@ -61,4 +82,47 @@ public class Payment extends BaseEntity {
 
 	@Column(name = "idempotency_key", length = 255, unique = true, nullable = false)
 	private String idempotencyKey;
+
+	private Payment(
+		User member,
+		Reservation reservation,
+		GoodsOrder goodsOrder,
+		PaymentType paymentType,
+		String orderId,
+		String orderName,
+		long amount,
+		String status,
+		String idempotencyKey
+	) {
+		this.member = member;
+		this.reservation = reservation;
+		this.goodsOrder = goodsOrder;
+		this.paymentType = paymentType;
+		this.orderId = orderId;
+		this.orderName = orderName;
+		this.amount = amount;
+		this.status = status;
+		this.idempotencyKey = idempotencyKey;
+	}
+
+	public static Payment createReadyReservationPayment(
+		User member,
+		Reservation reservation,
+		String orderId,
+		String orderName,
+		long amount,
+		String idempotencyKey
+	) {
+		return new Payment(
+			member,
+			reservation,
+			null,
+			PaymentType.POPUP,
+			orderId,
+			orderName,
+			amount,
+			"READY",
+			idempotencyKey
+		);
+	}
 }

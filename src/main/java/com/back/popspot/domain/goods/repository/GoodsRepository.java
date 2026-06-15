@@ -1,12 +1,14 @@
 package com.back.popspot.domain.goods.repository;
 
+import java.util.List;
 import java.util.Optional;
 
-import com.back.popspot.domain.goods.entity.Goods;
-import com.back.popspot.domain.goods.entity.GoodsStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.back.popspot.domain.goods.entity.Goods;
+import com.back.popspot.domain.goods.entity.GoodsStatus;
 
 public interface GoodsRepository extends JpaRepository<Goods, Long> {
 
@@ -21,4 +23,6 @@ public interface GoodsRepository extends JpaRepository<Goods, Long> {
     );
 
     Optional<Goods> findByIdAndDeletedAtIsNull(Long id);
+
+    List<Goods> findByPopupStoreUserIdAndDeletedAtIsNull(Long userId);
 }
