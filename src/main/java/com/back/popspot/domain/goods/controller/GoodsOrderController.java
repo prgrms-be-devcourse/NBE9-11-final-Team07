@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.back.popspot.domain.goods.dto.GoodsOrderCreateRequest;
 import com.back.popspot.domain.goods.dto.GoodsOrderCreateResponse;
 import com.back.popspot.domain.goods.dto.GoodsOrderDetailResponse;
-import com.back.popspot.domain.goods.dto.GoodsOrderRefundRequest;
 import com.back.popspot.domain.goods.dto.GoodsOrderRefundResponse;
 import com.back.popspot.domain.goods.dto.GoodsOrderSummaryResponse;
 import com.back.popspot.domain.goods.entity.GoodsOrderStatus;
@@ -46,8 +45,7 @@ public class GoodsOrderController {
 	@PostMapping("/goods-orders/{goodsOrderId}/refund")
 	public ResponseEntity<CommonApiResponse<GoodsOrderRefundResponse>> refundOrder(
 			@AuthenticationPrincipal Long userId,
-			@PathVariable Long goodsOrderId,
-			@RequestBody(required = false) GoodsOrderRefundRequest request) {
+			@PathVariable Long goodsOrderId) {
 		GoodsOrderRefundResponse response = goodsOrderService.refundOrder(userId, goodsOrderId);
 		return ResponseEntity.ok(CommonApiResponse.success(response));
 	}

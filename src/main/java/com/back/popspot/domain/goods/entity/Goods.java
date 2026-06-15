@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.global.entity.BaseEntity;
+import com.back.popspot.global.exception.BusinessException;
+import com.back.popspot.global.exception.ErrorCode;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -56,6 +58,12 @@ public class Goods extends BaseEntity {
 	private LocalDateTime deletedAt;
 
 	public void decreaseStock(int quantity) {
+		if (quantity <= 0) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+		if (this.stock < quantity) {
+			throw new BusinessException(ErrorCode.GOODS_OUT_OF_STOCK);
+		}
 		this.stock -= quantity;
 	}
 

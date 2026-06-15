@@ -1,5 +1,6 @@
 package com.back.popspot.domain.goods.service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -49,17 +50,26 @@ public class GoodsOrderService {
 		User user = userRepository.findById(userId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
+		Map<Long, Integer> quantityByGoodsId = request.getItems().stream()
+				.collect(Collectors.groupingBy(
+						GoodsOrderCreateRequest.OrderItemRequest::getGoodsId,
+						Collectors.summingInt(GoodsOrderCreateRequest.OrderItemRequest::getQuantity)
+				));
+
+		Map<Long, Goods> goodsMap = new HashMap<>();
 		int totalAmount = 0;
-		for (GoodsOrderCreateRequest.OrderItemRequest itemReq : request.getItems()) {
-			Goods goods = goodsRepository.findByIdAndDeletedAtIsNull(itemReq.getGoodsId())
+		for (Map.Entry<Long, Integer> entry : quantityByGoodsId.entrySet()) {
+			Goods goods = goodsRepository.findByIdAndDeletedAtIsNull(entry.getKey())
 					.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 			if (goods.getStatus() != GoodsStatus.ON_SALE) {
 				throw new BusinessException(ErrorCode.GOODS_NOT_ON_SALE);
 			}
-			if (goods.getStock() < itemReq.getQuantity()) {
+			if (goods.getStock() < entry.getValue()) {
 				throw new BusinessException(ErrorCode.GOODS_OUT_OF_STOCK);
 			}
-			totalAmount += goods.getPrice() * itemReq.getQuantity();
+			goods.decreaseStock(entry.getValue());
+			totalAmount += goods.getPrice() * entry.getValue();
+			goodsMap.put(entry.getKey(), goods);
 		}
 
 		int discountAmount = 0;
@@ -74,9 +84,7 @@ public class GoodsOrderService {
 
 		List<GoodsOrderItem> savedItems = request.getItems().stream()
 				.map(itemReq -> {
-					Goods goods = goodsRepository.findByIdAndDeletedAtIsNull(itemReq.getGoodsId())
-							.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
-					goods.decreaseStock(itemReq.getQuantity());
+					Goods goods = goodsMap.get(itemReq.getGoodsId());
 					int itemAmount = goods.getPrice() * itemReq.getQuantity();
 					return goodsOrderItemRepository.save(
 							new GoodsOrderItem(order, goods, itemReq.getQuantity(), goods.getPrice(), itemAmount)
