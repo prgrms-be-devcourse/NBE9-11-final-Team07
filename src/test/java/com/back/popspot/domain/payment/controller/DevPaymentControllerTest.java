@@ -69,7 +69,9 @@ class DevPaymentControllerTest {
 					"""))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.code").value("SUCCESS"))
+			.andExpect(jsonPath("$.data.paymentId").value(10))
 			.andExpect(jsonPath("$.data.orderId").value("dev-order-id"))
+			.andExpect(jsonPath("$.data.orderName").value("테스트 상품"))
 			.andExpect(jsonPath("$.data.amount").value(1000))
 			.andExpect(jsonPath("$.data.status").value("READY"));
 	}
