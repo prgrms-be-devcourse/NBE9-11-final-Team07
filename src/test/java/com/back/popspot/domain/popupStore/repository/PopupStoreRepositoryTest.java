@@ -17,7 +17,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.user.entity.User;
-import com.back.popspot.domain.user.entity.UserRole;
 
 /**
  * status 별 @Query(JPQL)가 예약 기간 조건대로 필터링하는지 실제 H2 로 검증.
@@ -79,11 +78,7 @@ class PopupStoreRepositoryTest {
 	}
 
 	private User persistUser() {
-		User user = new User();
-		ReflectionTestUtils.setField(user, "email", "owner@test.com");
-		ReflectionTestUtils.setField(user, "name", "owner");
-		ReflectionTestUtils.setField(user, "role", UserRole.ORGANIZER);
-		return entityManager.persist(user);
+		return entityManager.persist(User.create("owner@test.com", "owner"));
 	}
 
 	private PopupStore persistPopup(User user, LocalDateTime reservationStartAt, LocalDateTime reservationEndAt) {

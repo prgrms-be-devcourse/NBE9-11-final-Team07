@@ -69,7 +69,7 @@ class PopupStoreHostServiceTest {
 	void createPopupStore_valid_savesAndReturnsId() {
 		PopupStoreCreateRequest request = request(PopupFeeType.FREE, null,
 				NOW, NOW.plusDays(1), NOW.plusDays(2), NOW.plusDays(3));
-		when(entityManager.getReference(User.class, USER_ID)).thenReturn(new User());
+		when(entityManager.getReference(User.class, USER_ID)).thenReturn(User.create("owner@test.com", "owner"));
 		when(popupStoreRepository.save(any(PopupStore.class))).thenAnswer(invocation -> {
 			PopupStore saved = invocation.getArgument(0);
 			ReflectionTestUtils.setField(saved, "id", 100L);
@@ -276,7 +276,7 @@ class PopupStoreHostServiceTest {
 	}
 
 	private PopupStore popupForSlot(Long ownerId) {
-		User owner = new User();
+		User owner = User.create("owner@test.com", "owner");
 		ReflectionTestUtils.setField(owner, "id", ownerId);
 		PopupStore popupStore = new PopupStore();
 		ReflectionTestUtils.setField(popupStore, "user", owner);
@@ -290,7 +290,7 @@ class PopupStoreHostServiceTest {
 	}
 
 	private PopupStore popupWithOpenDate(Long ownerId, LocalDateTime openDate) {
-		User owner = new User();
+		User owner = User.create("owner@test.com", "owner");
 		ReflectionTestUtils.setField(owner, "id", ownerId);
 		PopupStore popupStore = new PopupStore();
 		ReflectionTestUtils.setField(popupStore, "user", owner);
@@ -299,7 +299,7 @@ class PopupStoreHostServiceTest {
 	}
 
 	private PopupStore existingPopup(Long ownerId) {
-		User owner = new User();
+		User owner = User.create("owner@test.com", "owner");
 		ReflectionTestUtils.setField(owner, "id", ownerId);
 		PopupStore popupStore = new PopupStore();
 		ReflectionTestUtils.setField(popupStore, "user", owner);
