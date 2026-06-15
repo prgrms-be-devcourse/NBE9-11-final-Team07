@@ -1,9 +1,15 @@
 package com.back.popspot.domain.goods.service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.back.popspot.domain.goods.dto.GoodsImagePresignRequest;
 import com.back.popspot.domain.goods.dto.GoodsImagePresignResponse;
@@ -96,6 +102,40 @@ public class GoodsService {
 
 		goods.update(request.name(), request.price(), request.stock(), request.description());
 
+		List<GoodsUpdateRequest.ImageKeyEntry> changes =
+			request.imageKeys() != null ? request.imageKeys() : List.of();
+
+		if (!changes.isEmpty()) {
+			long distinctCount = changes.stream()
+				.map(GoodsUpdateRequest.ImageKeyEntry::imageType)
+				.distinct()
+				.count();
+			if (distinctCount != changes.size()) {
+				throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+			}
+
+			Map<GoodsImageType, GoodsImage> existing = goodsImageRepository.findByGoods(goods).stream()
+				.collect(Collectors.toMap(GoodsImage::getImageType, Function.identity()));
+
+			List<String> oldKeys = new ArrayList<>();
+			for (GoodsUpdateRequest.ImageKeyEntry entry : changes) {
+				String tempKey = entry.imageKey();
+				if (!s3Service.isTempKey(tempKey)) {
+					throw new BusinessException(ErrorCode.INVALID_IMAGE_TEMP_KEY);
+				}
+				GoodsImage image = existing.get(entry.imageType());
+				if (image == null) {
+					throw new BusinessException(ErrorCode.GOODS_IMAGE_NOT_FOUND);
+				}
+				String fileName = s3Service.extractFileName(tempKey);
+				String newKey = ImageDomain.GOODS.finalKey(goodsId, entry.imageType().code(), fileName);
+				s3Service.move(tempKey, newKey);
+				oldKeys.add(image.getImageKey());
+				image.changeImageKey(newKey);
+			}
+			registerAfterCommitDeletion(oldKeys);
+		}
+
 		return GoodsUpdateResponse.from(goods);
 	}
 
@@ -113,5 +153,15 @@ public class GoodsService {
 			.stream()
 			.map(GoodsListResponse::from)
 			.toList();
+	}
+
+	private void registerAfterCommitDeletion(List<String> keys) {
+		if (keys.isEmpty()) return;
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCommit() {
+				keys.forEach(s3Service::delete);
+			}
+		});
 	}
 }

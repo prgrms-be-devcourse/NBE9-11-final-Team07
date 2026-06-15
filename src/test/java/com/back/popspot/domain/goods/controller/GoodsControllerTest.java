@@ -174,7 +174,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @DisplayName("굿즈를 수정하면 200과 수정된 굿즈 정보를 반환한다")
     void updateGoods() throws Exception {
         Long goodsId = 1L;
-        GoodsUpdateRequest request = new GoodsUpdateRequest("수정된 포스터", 20000, 50, "수정된 설명");
+        GoodsUpdateRequest request = new GoodsUpdateRequest("수정된 포스터", 20000, 50, "수정된 설명", null);
         GoodsUpdateResponse response = new GoodsUpdateResponse(goodsId, "수정된 포스터", 20000, 50, "수정된 설명");
 
         given(goodsService.updateGoods(eq(goodsId), any())).willReturn(response);
@@ -196,7 +196,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @DisplayName("일부 필드만 전달하면 200과 수정된 굿즈 정보를 반환한다")
     void updateGoods_partial() throws Exception {
         Long goodsId = 1L;
-        GoodsUpdateRequest request = new GoodsUpdateRequest(null, 20000, null, null);
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, 20000, null, null, null);
         GoodsUpdateResponse response = new GoodsUpdateResponse(goodsId, "기존 이름", 20000, 30, "기존 설명");
 
         given(goodsService.updateGoods(eq(goodsId), any())).willReturn(response);
@@ -216,7 +216,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @DisplayName("존재하지 않는 굿즈를 수정하면 404를 반환한다")
     void updateGoods_goodsNotFound() throws Exception {
         Long nonExistentId = 999L;
-        GoodsUpdateRequest request = new GoodsUpdateRequest("수정된 포스터", 20000, 50, null);
+        GoodsUpdateRequest request = new GoodsUpdateRequest("수정된 포스터", 20000, 50, null, null);
 
         given(goodsService.updateGoods(eq(nonExistentId), any()))
             .willThrow(new BusinessException(ErrorCode.GOODS_NOT_FOUND));
@@ -234,7 +234,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @WithMockUser
     @DisplayName("가격이 음수면 400을 반환한다")
     void updateGoods_negativePrice() throws Exception {
-        GoodsUpdateRequest request = new GoodsUpdateRequest(null, -1, null, null);
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, -1, null, null, null);
 
         mockMvc.perform(patch("/host/goods/{goodsId}", 1L)
                 .with(csrf())
@@ -248,7 +248,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @WithMockUser
     @DisplayName("수량이 음수면 400을 반환한다")
     void updateGoods_negativeStock() throws Exception {
-        GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, -1, null);
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, -1, null, null);
 
         mockMvc.perform(patch("/host/goods/{goodsId}", 1L)
                 .with(csrf())

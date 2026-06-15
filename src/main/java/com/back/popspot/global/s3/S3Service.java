@@ -45,6 +45,13 @@ public class S3Service {
             .build());
     }
 
+    public void delete(String key) {
+        s3Client.deleteObject(DeleteObjectRequest.builder()
+            .bucket(s3Properties.getBucket())
+            .key(key)
+            .build());
+    }
+
     public boolean isTempKey(String key) {
         return key != null && key.startsWith(TEMP_PREFIX);
     }

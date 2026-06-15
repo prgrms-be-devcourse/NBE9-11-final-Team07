@@ -36,4 +36,8 @@ public class GoodsImage extends BaseEntity {
 	@Enumerated(EnumType.STRING)
 	@Column(name = "image_type", nullable = false)
 	private GoodsImageType imageType;
+
+    public void changeImageKey(String newImageKey) {
+        this.imageKey = newImageKey;
+    }
 }
