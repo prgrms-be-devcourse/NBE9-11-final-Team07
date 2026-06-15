@@ -1,0 +1,6 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+# 운영 DB, 로그 설정 등이 생기면 여기에 추가
