@@ -2,6 +2,7 @@ package com.back.popspot.domain.popupStore.entity;
 
 import java.time.LocalDateTime;
 
+import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.entity.BaseEntity;
 
@@ -56,6 +57,24 @@ public class PopupStore extends BaseEntity {
 	@Column(length = 255)
 	private String description;
 
+	private PopupStore(User user, PopupStoreCreateRequest request) {
+		this.user = user;
+		this.title = request.title();
+		this.location = request.location();
+		this.feeType = request.feeType();
+		this.price = request.price();
+		this.reservationStartAt = request.reservationStartAt();
+		this.reservationEndAt = request.reservationEndAt();
+		this.openDate = request.openDate();
+		this.closeDate = request.closeDate();
+		this.imageKey = request.imageKey();
+		this.description = request.description();
+	}
+
+	public static PopupStore of(User user, PopupStoreCreateRequest request) {
+		return new PopupStore(user, request);
+	}
+
 	/**
 	 * 예약 기간(reservationStartAt ~ reservationEndAt)과 기준 시각을 비교해 진행 상태를 계산한다.
 	 * <ul>
@@ -72,5 +91,46 @@ public class PopupStore extends BaseEntity {
 			return PopupStatus.OPEN;
 		}
 		return PopupStatus.CLOSED;
+	}
+
+	// 부분 수정용 - 호출 측에서 null 검사 후 필요한 필드만 호출한다.
+	public void updateTitle(String title) {
+		this.title = title;
+	}
+
+	public void updateLocation(String location) {
+		this.location = location;
+	}
+
+	public void updateFeeType(PopupFeeType feeType) {
+		this.feeType = feeType;
+	}
+
+	public void updatePrice(Integer price) {
+		this.price = price;
+	}
+
+	public void updateReservationStartAt(LocalDateTime reservationStartAt) {
+		this.reservationStartAt = reservationStartAt;
+	}
+
+	public void updateReservationEndAt(LocalDateTime reservationEndAt) {
+		this.reservationEndAt = reservationEndAt;
+	}
+
+	public void updateOpenDate(LocalDateTime openDate) {
+		this.openDate = openDate;
+	}
+
+	public void updateCloseDate(LocalDateTime closeDate) {
+		this.closeDate = closeDate;
+	}
+
+	public void updateImageKey(String imageKey) {
+		this.imageKey = imageKey;
+	}
+
+	public void updateDescription(String description) {
+		this.description = description;
 	}
 }
