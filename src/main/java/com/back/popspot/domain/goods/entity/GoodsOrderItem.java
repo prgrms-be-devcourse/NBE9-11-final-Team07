@@ -32,4 +32,12 @@ public class GoodsOrderItem extends BaseEntity {
 
 	@Column(name = "item_amount", nullable = false)
 	private int itemAmount;
+
+	public GoodsOrderItem(GoodsOrder goodsOrder, Goods goods, int quantity, int unitPrice, int itemAmount) {
+		this.goodsOrder = goodsOrder;
+		this.goods = goods;
+		this.quantity = quantity;
+		this.unitPrice = unitPrice;
+		this.itemAmount = itemAmount;
+	}
 }

@@ -49,3 +49,6 @@ out/
 ### Local DB ###
 *.mv.db
 *.trace.db
+
+### Terraform ###
+.terraform/

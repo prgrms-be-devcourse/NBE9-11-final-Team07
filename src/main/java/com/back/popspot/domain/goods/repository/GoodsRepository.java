@@ -12,17 +12,17 @@ import com.back.popspot.domain.goods.entity.GoodsStatus;
 
 public interface GoodsRepository extends JpaRepository<Goods, Long> {
 
-    Page<Goods> findByDeletedAtIsNull(Pageable pageable);
+	Page<Goods> findByDeletedAtIsNull(Pageable pageable);
 
-    Page<Goods> findByStatusAndDeletedAtIsNull(GoodsStatus status, Pageable pageable);
+	Page<Goods> findByStatusAndDeletedAtIsNull(GoodsStatus status, Pageable pageable);
 
-    Page<Goods> findByPopupStore_IdAndDeletedAtIsNull(Long popupStoreId, Pageable pageable);
+	Page<Goods> findByPopupStore_IdAndDeletedAtIsNull(Long popupStoreId, Pageable pageable);
 
-    Page<Goods> findByPopupStore_IdAndStatusAndDeletedAtIsNull(
-        Long popupStoreId, GoodsStatus status, Pageable pageable
-    );
+	Page<Goods> findByPopupStore_IdAndStatusAndDeletedAtIsNull(
+		Long popupStoreId, GoodsStatus status, Pageable pageable
+	);
 
-    Optional<Goods> findByIdAndDeletedAtIsNull(Long id);
+	Optional<Goods> findByIdAndDeletedAtIsNull(Long id);
 
-    List<Goods> findByPopupStoreUserIdAndDeletedAtIsNull(Long userId);
+	List<Goods> findByPopupStoreUserIdAndDeletedAtIsNull(Long userId);
 }

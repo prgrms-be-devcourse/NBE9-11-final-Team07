@@ -33,7 +33,12 @@ public enum ErrorCode {
 	RESERVATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 예약한 슬롯입니다."),
 	RESERVATION_PAYMENT_ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 승인 완료된 예약 결제입니다."),
 
+	GOODS_OUT_OF_STOCK(HttpStatus.CONFLICT, "재고가 부족합니다."),
+	GOODS_NOT_ON_SALE(HttpStatus.BAD_REQUEST, "현재 판매 중인 굿즈가 아닙니다."),
+	GOODS_ORDER_REFUND_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "환불할 수 없는 주문 상태입니다."),
+
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
-    private final HttpStatus status;
-    private final String message;
+
+	private final HttpStatus status;
+	private final String message;
 }
