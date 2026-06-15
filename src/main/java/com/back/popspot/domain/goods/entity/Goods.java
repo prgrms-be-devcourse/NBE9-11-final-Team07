@@ -29,7 +29,7 @@ public class Goods extends BaseEntity {
         goods.price = price;
         goods.stock = stock;
         goods.description = description;
-        goods.status = GoodsStatus.READY;
+        goods.status = GoodsStatus.ON_SALE;
         return goods;
     }
 	@ManyToOne(fetch = FetchType.LAZY)

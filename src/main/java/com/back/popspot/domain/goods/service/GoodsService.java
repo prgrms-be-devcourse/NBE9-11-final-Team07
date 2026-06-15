@@ -11,7 +11,6 @@ import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
 import com.back.popspot.domain.goods.dto.GoodsUpdateRequest;
 import com.back.popspot.domain.goods.dto.GoodsUpdateResponse;
 import com.back.popspot.domain.goods.entity.Goods;
-import com.back.popspot.domain.goods.entity.GoodsStatus;
 import com.back.popspot.domain.goods.repository.GoodsRepository;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
@@ -63,7 +62,7 @@ public class GoodsService {
 
     @Transactional(readOnly = true)
     public List<GoodsListResponse> getGoodsList(Long userId) {
-        return goodsRepository.findByPopupStoreUserIdAndStatusNot(userId, GoodsStatus.ENDED)
+        return goodsRepository.findByPopupStoreUserIdAndDeletedAtIsNull(userId)
             .stream()
             .map(GoodsListResponse::from)
             .toList();
