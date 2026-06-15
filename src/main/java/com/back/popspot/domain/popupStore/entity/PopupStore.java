@@ -38,10 +38,10 @@ public class PopupStore extends BaseEntity {
 	@Column
 	private Integer price;
 
-	@Column(name = "reservation_start_at")
+	@Column(name = "reservation_start_at", nullable = false)
 	private LocalDateTime reservationStartAt;
 
-	@Column(name = "reservation_end_at")
+	@Column(name = "reservation_end_at", nullable = false)
 	private LocalDateTime reservationEndAt;
 
 	@Column(name = "open_date")
@@ -65,10 +65,10 @@ public class PopupStore extends BaseEntity {
 	 * </ul>
 	 */
 	public PopupStatus calculateStatus(LocalDateTime now) {
-		if (reservationStartAt != null && reservationStartAt.isAfter(now)) {
+		if (reservationStartAt.isAfter(now)) {
 			return PopupStatus.UPCOMING;
 		}
-		if (reservationEndAt != null && reservationEndAt.isAfter(now)) {
+		if (reservationEndAt.isAfter(now)) {
 			return PopupStatus.OPEN;
 		}
 		return PopupStatus.CLOSED;

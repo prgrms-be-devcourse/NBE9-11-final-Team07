@@ -53,7 +53,8 @@ class PopupStoreServiceTest {
 	@InjectMocks
 	private PopupStoreService popupStoreService;
 
-	private static final LocalDateTime NOW = LocalDateTime.of(2026, 6, 13, 12, 0);
+	// 서비스가 calculateStatus 에 실제 LocalDateTime.now() 를 사용하므로, 기준 시각도 now 상대값으로 둔다.
+	private static final LocalDateTime NOW = LocalDateTime.now();
 	private static final LocalDate DATE = LocalDate.of(2026, 6, 14);
 	private static final Pageable PAGE = PageRequest.of(0, 10);
 
