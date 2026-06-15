@@ -3,6 +3,7 @@ package com.back.popspot.domain.popupStore.entity;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
+import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
 import com.back.popspot.global.entity.BaseEntity;
 
 import jakarta.persistence.Column;
@@ -34,4 +35,16 @@ public class ReservationSlot extends BaseEntity {
 
 	@Column(name = "reserved_count", nullable = false)
 	private int reservedCount;
+
+	private ReservationSlot(PopupStore popupStore, LocalDate slotDate, LocalTime startTime, int capacity) {
+		this.popupStore = popupStore;
+		this.slotDate = slotDate;
+		this.startTime = startTime;
+		this.capacity = capacity;
+		this.reservedCount = 0; // 생성 시 예약 0 으로 초기화
+	}
+
+	public static ReservationSlot of(PopupStore popupStore, ReservationSlotCreateRequest request) {
+		return new ReservationSlot(popupStore, request.slotDate(), request.startTime(), request.capacity());
+	}
 }
