@@ -46,4 +46,22 @@ public class Reservation extends BaseEntity {
 
 	@Column(name = "canceled_at")
 	private LocalDateTime canceledAt;
+
+	private Reservation(
+		User member,
+		ReservationSlot slot,
+		ReservationStatus status,
+		LocalDateTime heldUntil,
+		LocalDateTime reservedAt
+	) {
+		this.member = member;
+		this.slot = slot;
+		this.status = status;
+		this.heldUntil = heldUntil;
+		this.reservedAt = reservedAt;
+	}
+
+	public static Reservation createHeld(User member, ReservationSlot slot, LocalDateTime now, LocalDateTime heldUntil) {
+		return new Reservation(member, slot, ReservationStatus.HELD, heldUntil, now);
+	}
 }
