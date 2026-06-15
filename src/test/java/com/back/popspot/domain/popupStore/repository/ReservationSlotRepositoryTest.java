@@ -75,8 +75,7 @@ class ReservationSlotRepositoryTest {
 	}
 
 	private User persistUser() {
-		User user = User.create("owner@test.com", "owner");
-		return entityManager.persist(user);
+		return entityManager.persist(User.create("owner@test.com", "owner"));
 	}
 
 	private PopupStore persistPopup(User user) {
