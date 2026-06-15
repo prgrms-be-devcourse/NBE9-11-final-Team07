@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.back.popspot.domain.payment.client.TossPaymentsClient;
 import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import tools.jackson.databind.JsonNode;
 
@@ -21,7 +22,7 @@ public class PaymentController {
 
 	@PostMapping("/confirm")
 	public JsonNode confirm(
-		@RequestBody PaymentConfirmRequest request
+		@Valid @RequestBody PaymentConfirmRequest request
 	) {
 		// 실제 구현에서는 DB 주문번호와 금액을 먼저 검증해야 한다
 		return tossPaymentsClient.confirm(request);
