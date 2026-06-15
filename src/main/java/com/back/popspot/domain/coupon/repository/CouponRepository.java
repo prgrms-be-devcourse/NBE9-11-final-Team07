@@ -27,7 +27,8 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
 
 	Optional<Coupon> findByIdAndPopupStoreId(Long id, Long popupStoreId);
 
+	// 쿠폰 발급 시 쿠폰 자체의 수량만 제어하면 되므로 락 획득 시점에는 @EntityGraph 없이 쿠폰 조회
+	// 이후 필요한 시점에 Lazy Loading으로 팝업스토어 정보를 가져옴
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@EntityGraph(attributePaths = "popupStore")
 	Optional<Coupon> findWithPopupStoreById(Long id);
 }
