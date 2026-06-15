@@ -194,14 +194,14 @@ public class ReservationService {
 		}
 
 		// 재요청이면 기존 결제를 그대로 반환한다.
-		Payment existingIdempotentPayment = paymentRepository.findByIdempotencyKeyAndReservationIdAndMemberIdAndPaymentType(
-			request.idempotencyKey(),
-			reservationId,
-			userId,
-			PaymentType.POPUP
-		)
+		Payment existingIdempotentPayment = paymentRepository.findByIdempotencyKey(request.idempotencyKey())
 			.orElse(null);
 		if (existingIdempotentPayment != null) {
+			if (!existingIdempotentPayment.getReservation().getId().equals(reservationId)
+				|| !existingIdempotentPayment.getMember().getId().equals(userId)
+				|| existingIdempotentPayment.getPaymentType() != PaymentType.POPUP) {
+				throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+			}
 			return ReservationPaymentResponse.paid(existingIdempotentPayment);
 		}
 

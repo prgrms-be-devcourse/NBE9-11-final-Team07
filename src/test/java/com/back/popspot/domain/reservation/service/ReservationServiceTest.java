@@ -391,12 +391,7 @@ class ReservationServiceTest {
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, "DONE"))
 			.thenReturn(false);
-		when(paymentRepository.findByIdempotencyKeyAndReservationIdAndMemberIdAndPaymentType(
-			"idem-paid-1",
-			100L,
-			2L,
-			PaymentType.POPUP
-		)).thenReturn(Optional.empty());
+		when(paymentRepository.findByIdempotencyKey("idem-paid-1")).thenReturn(Optional.empty());
 		when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
 		// when
@@ -489,12 +484,7 @@ class ReservationServiceTest {
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, "DONE"))
 			.thenReturn(false);
-		when(paymentRepository.findByIdempotencyKeyAndReservationIdAndMemberIdAndPaymentType(
-			"idem-paid-2",
-			100L,
-			2L,
-			PaymentType.POPUP
-		)).thenReturn(Optional.of(existingPayment));
+		when(paymentRepository.findByIdempotencyKey("idem-paid-2")).thenReturn(Optional.of(existingPayment));
 
 		// when
 		ReservationPaymentResponse response = reservationService.startReservationPayment(100L, 2L, request);
