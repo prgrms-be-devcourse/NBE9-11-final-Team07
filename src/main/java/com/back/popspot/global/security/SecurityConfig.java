@@ -40,9 +40,11 @@ public class SecurityConfig {
 				.sessionManagement(session ->
 						session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-				// 인가 규칙: 비회원은 GET /popups/** 만 허용, 나머지는 인증 필요
+				// 인가 규칙: 비회원은 GET /popups/**, GET /api/v1/goods/** 허용, 나머지는 인증 필요
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(HttpMethod.GET, "/popups/**").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/v1/goods/**").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/v1/popups/*/goods").permitAll()
 						.requestMatchers("/oauth2/**", "/login/**", "/error").permitAll()
 						.anyRequest().authenticated())
 
