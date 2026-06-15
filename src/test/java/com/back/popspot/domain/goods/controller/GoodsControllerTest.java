@@ -26,6 +26,7 @@ import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
 import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
 import com.back.popspot.domain.goods.dto.GoodsUpdateRequest;
 import com.back.popspot.domain.goods.dto.GoodsUpdateResponse;
+import com.back.popspot.domain.goods.entity.GoodsImageType;
 import com.back.popspot.domain.goods.service.GoodsService;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
@@ -213,7 +214,27 @@ class GoodsControllerTest extends IntegrationTestSupport {
 
     @Test
     @WithMockUser
-    @DisplayName("존재하지 않는 굿즈를 수정하면 404를 반환한다")
+    @DisplayName("이미지 키를 포함해 수정하면 200과 수정된 굿즈 정보를 반환한다")
+    void updateGoods_withImages() throws Exception {
+        Long goodsId = 1L;
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, null, null,
+            List.of(new GoodsUpdateRequest.ImageKeyEntry("temp/new-product.jpg", GoodsImageType.PRODUCT)));
+        GoodsUpdateResponse response = new GoodsUpdateResponse(goodsId, "원본 굿즈", 10000, 50, "원본 설명");
+
+        given(goodsService.updateGoods(eq(goodsId), any())).willReturn(response);
+
+        mockMvc.perform(patch("/host/goods/{goodsId}", goodsId)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("SUCCESS"))
+            .andExpect(jsonPath("$.data.id").value(goodsId));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("존재하지 않는 goodsId 수정 시 404를 반환한다")
     void updateGoods_goodsNotFound() throws Exception {
         Long nonExistentId = 999L;
         GoodsUpdateRequest request = new GoodsUpdateRequest("수정된 포스터", 20000, 50, null, null);
@@ -228,6 +249,67 @@ class GoodsControllerTest extends IntegrationTestSupport {
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value("GOODS_NOT_FOUND"))
             .andExpect(jsonPath("$.message").value("굿즈를 찾을 수 없습니다."));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("동일한 imageType을 중복 전달하면 400을 반환한다")
+    void updateGoods_duplicateImageType() throws Exception {
+        Long goodsId = 1L;
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, null, null,
+            List.of(
+                new GoodsUpdateRequest.ImageKeyEntry("temp/img1.jpg", GoodsImageType.PRODUCT),
+                new GoodsUpdateRequest.ImageKeyEntry("temp/img2.jpg", GoodsImageType.PRODUCT)
+            ));
+
+        given(goodsService.updateGoods(eq(goodsId), any()))
+            .willThrow(new BusinessException(ErrorCode.INVALID_INPUT_VALUE));
+
+        mockMvc.perform(patch("/host/goods/{goodsId}", goodsId)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("temp 경로가 아닌 키 전달 시 400을 반환한다")
+    void updateGoods_invalidTempKey() throws Exception {
+        Long goodsId = 1L;
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, null, null,
+            List.of(new GoodsUpdateRequest.ImageKeyEntry("goods/already-final.jpg", GoodsImageType.PRODUCT)));
+
+        given(goodsService.updateGoods(eq(goodsId), any()))
+            .willThrow(new BusinessException(ErrorCode.INVALID_IMAGE_TEMP_KEY));
+
+        mockMvc.perform(patch("/host/goods/{goodsId}", goodsId)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_IMAGE_TEMP_KEY"));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("해당 타입의 기존 이미지가 없으면 404를 반환한다")
+    void updateGoods_imageNotFound() throws Exception {
+        Long goodsId = 1L;
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, null, null,
+            List.of(new GoodsUpdateRequest.ImageKeyEntry("temp/detail.jpg", GoodsImageType.DETAIL)));
+
+        given(goodsService.updateGoods(eq(goodsId), any()))
+            .willThrow(new BusinessException(ErrorCode.GOODS_IMAGE_NOT_FOUND));
+
+        mockMvc.perform(patch("/host/goods/{goodsId}", goodsId)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("GOODS_IMAGE_NOT_FOUND"))
+            .andExpect(jsonPath("$.message").value("굿즈 이미지를 찾을 수 없습니다."));
     }
 
     @Test
