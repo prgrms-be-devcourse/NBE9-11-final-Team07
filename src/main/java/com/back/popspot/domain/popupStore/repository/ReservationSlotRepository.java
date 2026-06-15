@@ -12,6 +12,7 @@ public interface ReservationSlotRepository extends JpaRepository<ReservationSlot
 
 	// 특정 팝업스토어의 특정 날짜 예약 슬롯 목록
 	List<ReservationSlot> findByPopupStoreIdAndSlotDate(Long popupStoreId, LocalDate slotDate);
+
 	boolean existsByPopupStoreIdAndSlotDateAndStartTimeAndIdNot(
 		Long popupStoreId,
 		LocalDate slotDate,

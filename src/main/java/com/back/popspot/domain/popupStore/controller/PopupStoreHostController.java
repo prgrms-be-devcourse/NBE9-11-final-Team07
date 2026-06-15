@@ -16,7 +16,6 @@ import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotUpdateRequest;
-import com.back.popspot.domain.popupStore.dto.ReservationSlotUpdateRequest;
 import com.back.popspot.domain.popupStore.service.PopupStoreHostService;
 import com.back.popspot.global.response.CommonApiResponse;
 
