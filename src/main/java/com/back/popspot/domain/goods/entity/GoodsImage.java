@@ -18,6 +18,14 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Table(name = "goods_image")
 public class GoodsImage extends BaseEntity {
+
+    public static GoodsImage create(Goods goods, String imageKey, GoodsImageType imageType) {
+        GoodsImage image = new GoodsImage();
+        image.goods = goods;
+        image.imageKey = imageKey;
+        image.imageType = imageType;
+        return image;
+    }
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "goods_id", nullable = false)
 	private Goods goods;

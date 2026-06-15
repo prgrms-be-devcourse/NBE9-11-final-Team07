@@ -5,17 +5,23 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.back.popspot.domain.goods.dto.GoodsImagePresignRequest;
+import com.back.popspot.domain.goods.dto.GoodsImagePresignResponse;
 import com.back.popspot.domain.goods.dto.GoodsListResponse;
 import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
 import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
 import com.back.popspot.domain.goods.dto.GoodsUpdateRequest;
 import com.back.popspot.domain.goods.dto.GoodsUpdateResponse;
 import com.back.popspot.domain.goods.entity.Goods;
+import com.back.popspot.domain.goods.entity.GoodsImage;
+import com.back.popspot.domain.goods.entity.GoodsImageType;
+import com.back.popspot.domain.goods.repository.GoodsImageRepository;
 import com.back.popspot.domain.goods.repository.GoodsRepository;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
+import com.back.popspot.global.s3.S3Service;
 
 import lombok.RequiredArgsConstructor;
 
@@ -24,12 +30,23 @@ import lombok.RequiredArgsConstructor;
 public class GoodsService {
 
     private final GoodsRepository goodsRepository;
+    private final GoodsImageRepository goodsImageRepository;
     private final PopupStoreRepository popupStoreRepository;
+    private final S3Service s3Service;
 
     @Transactional
     public GoodsRegisterResponse registerGoods(Long popupStoreId, GoodsRegisterRequest request) {
         PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
             .orElseThrow(() -> new BusinessException(ErrorCode.POPUP_STORE_NOT_FOUND));
+
+        List<GoodsRegisterRequest.ImageKeyEntry> imageKeys =
+            request.imageKeys() != null ? request.imageKeys() : List.of();
+
+        boolean hasProductImage = imageKeys.stream()
+            .anyMatch(entry -> entry.imageType() == GoodsImageType.PRODUCT);
+        if (!hasProductImage) {
+            throw new BusinessException(ErrorCode.GOODS_PRODUCT_IMAGE_REQUIRED);
+        }
 
         Goods goods = Goods.register(
             popupStore,
@@ -38,8 +55,37 @@ public class GoodsService {
             request.stock(),
             request.description()
         );
+        goodsRepository.save(goods);
 
-        return GoodsRegisterResponse.from(goodsRepository.save(goods));
+        if (!imageKeys.isEmpty()) {
+            List<GoodsImage> images = imageKeys.stream()
+                .map(entry -> GoodsImage.create(goods, entry.imageKey(), entry.imageType()))
+                .toList();
+            goodsImageRepository.saveAll(images);
+        }
+
+        return GoodsRegisterResponse.from(goods);
+    }
+
+    @Transactional
+    public List<GoodsImagePresignResponse> generatePresignedUrls(Long goodsId, GoodsImagePresignRequest request) {
+        Goods goods = goodsRepository.findById(goodsId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
+
+        List<GoodsImagePresignResponse> responses = request.fileNames().stream()
+            .map(fileName -> {
+                String key = s3Service.buildGoodsImageKey(goodsId, request.imageType(), fileName);
+                String presignedUrl = s3Service.generatePresignedPutUrl(key);
+                return new GoodsImagePresignResponse(key, presignedUrl);
+            })
+            .toList();
+
+        List<GoodsImage> images = responses.stream()
+            .map(res -> GoodsImage.create(goods, res.imageKey(), request.imageType()))
+            .toList();
+        goodsImageRepository.saveAll(images);
+
+        return responses;
     }
 
     @Transactional

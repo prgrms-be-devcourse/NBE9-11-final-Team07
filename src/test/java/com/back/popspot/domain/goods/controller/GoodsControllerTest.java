@@ -42,7 +42,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @DisplayName("굿즈를 등록하면 201과 등록된 굿즈 정보를 반환한다")
     void registerGoods() throws Exception {
         Long popupStoreId = 1L;
-        GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, 30, "고화질 포스터");
+        GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, 30, "고화질 포스터", null);
         GoodsRegisterResponse response = new GoodsRegisterResponse(1L, popupStoreId, "한정판 포스터", 15000, 30, "고화질 포스터");
 
         given(goodsService.registerGoods(eq(popupStoreId), any())).willReturn(response);
@@ -66,7 +66,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @DisplayName("존재하지 않는 팝업스토어에 굿즈를 등록하면 404를 반환한다")
     void registerGoods_popupStoreNotFound() throws Exception {
         Long nonExistentId = 999L;
-        GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, 30, null);
+        GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, 30, null, null);
 
         given(goodsService.registerGoods(eq(nonExistentId), any()))
             .willThrow(new BusinessException(ErrorCode.POPUP_STORE_NOT_FOUND));
@@ -84,7 +84,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @WithMockUser
     @DisplayName("상품명이 공백이면 400을 반환한다")
     void registerGoods_blankName() throws Exception {
-        GoodsRegisterRequest request = new GoodsRegisterRequest("   ", 15000, 30, null);
+        GoodsRegisterRequest request = new GoodsRegisterRequest("   ", 15000, 30, null, null);
 
         mockMvc.perform(post("/host/popups/{popupStoreId}/goods", 1L)
                 .with(csrf())
@@ -98,7 +98,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @WithMockUser
     @DisplayName("가격이 null이면 400을 반환한다")
     void registerGoods_nullPrice() throws Exception {
-        GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", null, 30, null);
+        GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", null, 30, null, null);
 
         mockMvc.perform(post("/host/popups/{popupStoreId}/goods", 1L)
                 .with(csrf())
@@ -112,7 +112,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @WithMockUser
     @DisplayName("수량이 음수면 400을 반환한다")
     void registerGoods_negativeStock() throws Exception {
-        GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, -1, null);
+        GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, -1, null, null);
 
         mockMvc.perform(post("/host/popups/{popupStoreId}/goods", 1L)
                 .with(csrf())

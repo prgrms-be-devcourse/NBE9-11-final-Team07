@@ -38,6 +38,9 @@ dependencies {
     testAnnotationProcessor("org.projectlombok:lombok")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
+    // AWS S3
+    implementation("com.amazonaws:aws-java-sdk-s3:1.12.783")
+
     // JWT
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")

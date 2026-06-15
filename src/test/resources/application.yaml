@@ -1,0 +1,20 @@
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: test-client-id
+            client-secret: test-client-secret
+
+jwt:
+  secret: test-secret-key-for-test-environment-only-min-256-bits
+  access-token-validity-seconds: 3600
+
+aws:
+  s3:
+    access-key: test-access-key
+    secret-key: test-secret-key
+    region: ap-northeast-2
+    bucket: test-bucket
+    presigned-url-expiration: 600

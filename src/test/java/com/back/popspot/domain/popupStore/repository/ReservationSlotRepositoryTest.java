@@ -19,7 +19,6 @@ import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.user.entity.User;
-import com.back.popspot.domain.user.entity.UserRole;
 
 /**
  * findByPopupStoreIdAndSlotDate 파생 쿼리가 popupStoreId + slotDate 로 정확히 거르는지 실제 H2 로 검증.
@@ -76,10 +75,7 @@ class ReservationSlotRepositoryTest {
 	}
 
 	private User persistUser() {
-		User user = new User();
-		ReflectionTestUtils.setField(user, "email", "owner@test.com");
-		ReflectionTestUtils.setField(user, "name", "owner");
-		ReflectionTestUtils.setField(user, "role", UserRole.ORGANIZER);
+		User user = User.create("owner@test.com", "owner");
 		return entityManager.persist(user);
 	}
 
