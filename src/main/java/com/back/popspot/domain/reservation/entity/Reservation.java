@@ -64,4 +64,9 @@ public class Reservation extends BaseEntity {
 	public static Reservation createHeld(User member, ReservationSlot slot, LocalDateTime now, LocalDateTime heldUntil) {
 		return new Reservation(member, slot, ReservationStatus.HELD, heldUntil, now);
 	}
+
+	public void cancel(LocalDateTime canceledAt) {
+		this.status = ReservationStatus.CANCELED;
+		this.canceledAt = canceledAt;
+	}
 }

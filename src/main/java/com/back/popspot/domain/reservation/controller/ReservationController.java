@@ -2,7 +2,10 @@ package com.back.popspot.domain.reservation.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,5 +35,15 @@ public class ReservationController {
 
 		return ResponseEntity.status(HttpStatus.CREATED)
 			.body(CommonApiResponse.created("예약 생성이 완료되었습니다.", response));
+	}
+
+	@DeleteMapping("/{reservationId}")
+	public ResponseEntity<CommonApiResponse<Void>> cancelReservation(
+		@PathVariable Long reservationId,
+		@AuthenticationPrincipal Long userId
+	) {
+		reservationService.cancelReservation(reservationId, userId);
+
+		return ResponseEntity.ok(CommonApiResponse.successMessage("예약 취소가 완료되었습니다."));
 	}
 }

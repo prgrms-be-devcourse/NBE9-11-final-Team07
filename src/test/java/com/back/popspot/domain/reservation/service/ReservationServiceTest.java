@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +21,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.back.popspot.domain.payment.entity.PaymentType;
+import com.back.popspot.domain.payment.repository.PaymentRepository;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
@@ -42,6 +46,9 @@ class ReservationServiceTest {
 	private ReservationSlotRepository reservationSlotRepository;
 
 	@Mock
+	private PaymentRepository paymentRepository;
+
+	@Mock
 	private UserRepository userRepository;
 
 	@Test
@@ -51,6 +58,7 @@ class ReservationServiceTest {
 		ReservationService reservationService = new ReservationService(
 			reservationRepository,
 			reservationSlotRepository,
+			paymentRepository,
 			userRepository
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
@@ -88,6 +96,7 @@ class ReservationServiceTest {
 		ReservationService reservationService = new ReservationService(
 			reservationRepository,
 			reservationSlotRepository,
+			paymentRepository,
 			userRepository
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
@@ -116,6 +125,7 @@ class ReservationServiceTest {
 		ReservationService reservationService = new ReservationService(
 			reservationRepository,
 			reservationSlotRepository,
+			paymentRepository,
 			userRepository
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
@@ -139,6 +149,7 @@ class ReservationServiceTest {
 		ReservationService reservationService = new ReservationService(
 			reservationRepository,
 			reservationSlotRepository,
+			paymentRepository,
 			userRepository
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
@@ -167,6 +178,7 @@ class ReservationServiceTest {
 		ReservationService reservationService = new ReservationService(
 			reservationRepository,
 			reservationSlotRepository,
+			paymentRepository,
 			userRepository
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
@@ -187,6 +199,163 @@ class ReservationServiceTest {
 
 		// then
 		assertEquals(ErrorCode.RESERVATION_CAPACITY_EXCEEDED, exception.getErrorCode());
+	}
+
+	@Test
+	@DisplayName("예약 취소 성공")
+	void cancelReservation_success() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			userRepository
+		);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		Reservation reservation = createConfirmedReservation(100L, user, slot);
+
+		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, "DONE"))
+			.thenReturn(false);
+		when(reservationRepository.cancelConfirmedReservation(
+			eq(100L),
+			eq(ReservationStatus.CONFIRMED),
+			eq(ReservationStatus.CANCELED),
+			any(LocalDateTime.class)
+		)).thenReturn(1);
+		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
+
+		// when
+		reservationService.cancelReservation(100L, 2L);
+
+		// then
+		verify(reservationRepository).cancelConfirmedReservation(
+			eq(100L),
+			eq(ReservationStatus.CONFIRMED),
+			eq(ReservationStatus.CANCELED),
+			any(LocalDateTime.class)
+		);
+		verify(reservationSlotRepository).decreaseReservedCount(1L);
+	}
+
+	@Test
+	@DisplayName("본인 예약이 아니면 취소 실패")
+	void cancelReservation_fail_forbidden() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			userRepository
+		);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		Reservation reservation = createConfirmedReservation(100L, user, slot);
+
+		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+
+		// when
+		BusinessException exception = assertThrows(
+			BusinessException.class,
+			() -> reservationService.cancelReservation(100L, 3L)
+		);
+
+		// then
+		assertEquals(ErrorCode.FORBIDDEN, exception.getErrorCode());
+	}
+
+	@Test
+	@DisplayName("확정 상태가 아니면 취소 실패")
+	void cancelReservation_fail_notConfirmed() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			userRepository
+		);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		Reservation reservation = createReservation(100L, user, slot, ReservationStatus.HELD);
+
+		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+
+		// when
+		BusinessException exception = assertThrows(
+			BusinessException.class,
+			() -> reservationService.cancelReservation(100L, 2L)
+		);
+
+		// then
+		assertEquals(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS, exception.getErrorCode());
+	}
+
+	@Test
+	@DisplayName("취소 기한이 지나면 취소 실패")
+	void cancelReservation_fail_deadlinePassed() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			userRepository
+		);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		Reservation reservation = createConfirmedReservation(100L, user, slot);
+		ReflectionTestUtils.setField(slot, "slotDate", LocalDate.now());
+
+		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+
+		// when
+		BusinessException exception = assertThrows(
+			BusinessException.class,
+			() -> reservationService.cancelReservation(100L, 2L)
+		);
+
+		// then
+		assertEquals(ErrorCode.RESERVATION_CANCEL_DEADLINE_PASSED, exception.getErrorCode());
+	}
+
+	@Test
+	@DisplayName("조건부 상태 변경에 실패하면 취소 실패")
+	void cancelReservation_fail_conditionalCancelUpdate() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			userRepository
+		);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		Reservation reservation = createConfirmedReservation(100L, user, slot);
+
+		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, "DONE"))
+			.thenReturn(false);
+		when(reservationRepository.cancelConfirmedReservation(
+			eq(100L),
+			eq(ReservationStatus.CONFIRMED),
+			eq(ReservationStatus.CANCELED),
+			any(LocalDateTime.class)
+		)).thenReturn(0);
+
+		// when
+		BusinessException exception = assertThrows(
+			BusinessException.class,
+			() -> reservationService.cancelReservation(100L, 2L)
+		);
+
+		// then
+		assertEquals(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS, exception.getErrorCode());
+		verify(reservationSlotRepository, never()).decreaseReservedCount(any(Long.class));
 	}
 
 	private PopupStore createPopupStore() {
@@ -217,5 +386,20 @@ class ReservationServiceTest {
 		ReflectionTestUtils.setField(user, "id", userId);
 
 		return user;
+	}
+
+	private Reservation createConfirmedReservation(Long reservationId, User user, ReservationSlot slot) {
+		return createReservation(reservationId, user, slot, ReservationStatus.CONFIRMED);
+	}
+
+	private Reservation createReservation(Long reservationId, User user, ReservationSlot slot, ReservationStatus status) {
+		Reservation reservation = new Reservation();
+
+		ReflectionTestUtils.setField(reservation, "id", reservationId);
+		ReflectionTestUtils.setField(reservation, "member", user);
+		ReflectionTestUtils.setField(reservation, "slot", slot);
+		ReflectionTestUtils.setField(reservation, "status", status);
+
+		return reservation;
 	}
 }

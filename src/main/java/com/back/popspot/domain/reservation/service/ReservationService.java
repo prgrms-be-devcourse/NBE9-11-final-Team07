@@ -5,12 +5,15 @@ import java.time.LocalDateTime;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.back.popspot.domain.payment.entity.PaymentType;
+import com.back.popspot.domain.payment.repository.PaymentRepository;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.reservation.dto.request.ReservationCreateRequest;
 import com.back.popspot.domain.reservation.dto.response.ReservationCreateResponse;
 import com.back.popspot.domain.reservation.entity.Reservation;
+import com.back.popspot.domain.reservation.entity.ReservationStatus;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
@@ -24,9 +27,11 @@ import lombok.RequiredArgsConstructor;
 public class ReservationService {
 
 	private static final long HOLD_MINUTES = 5L;
+	private static final String PAYMENT_STATUS_DONE = "DONE";
 
 	private final ReservationRepository reservationRepository;
 	private final ReservationSlotRepository reservationSlotRepository;
+	private final PaymentRepository paymentRepository;
 	private final UserRepository userRepository;
 
 	@Transactional
@@ -66,5 +71,47 @@ public class ReservationService {
 		reservationRepository.save(reservation);
 
 		return ReservationCreateResponse.from(reservation);
+	}
+
+	@Transactional
+	public void cancelReservation(Long reservationId, Long userId) {
+		Reservation reservation = reservationRepository.findById(reservationId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+		if (!reservation.getMember().getId().equals(userId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN);
+		}
+
+		if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
+			throw new BusinessException(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS);
+		}
+
+		LocalDateTime now = LocalDateTime.now();
+		if (!now.isBefore(reservation.getSlot().getSlotDate().atStartOfDay())) {
+			throw new BusinessException(ErrorCode.RESERVATION_CANCEL_DEADLINE_PASSED);
+		}
+
+		if (paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(
+			reservationId,
+			PaymentType.POPUP,
+			PAYMENT_STATUS_DONE
+		)) {
+			// TODO: 결제 도메인 환불 요청 연동
+		}
+
+		int canceledCount = reservationRepository.cancelConfirmedReservation(
+			reservationId,
+			ReservationStatus.CONFIRMED,
+			ReservationStatus.CANCELED,
+			now
+		);
+		if (canceledCount == 0) {
+			throw new BusinessException(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS);
+		}
+
+		int updatedCount = reservationSlotRepository.decreaseReservedCount(reservation.getSlot().getId());
+		if (updatedCount == 0) {
+			throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+		}
 	}
 }
