@@ -1,6 +1,20 @@
 spring:
   config:
     activate:
-      on-profile: prod
+      on-profile: dev
 
-# 운영 DB, 로그 설정 등이 생기면 여기에 추가
+  datasource:
+    url: jdbc:h2:./db_dev;MODE=MySQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+        highlight_sql: true
+        use_sql_comments: true
+    hibernate:
+      ddl-auto: update
+    show-sql: true

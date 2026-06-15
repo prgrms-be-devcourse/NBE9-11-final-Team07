@@ -43,3 +43,7 @@ out/
 .env
 .env.*
 !.env.example
+
+
+### db ###
+db_dev.mv.db

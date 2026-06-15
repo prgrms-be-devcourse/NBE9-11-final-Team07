@@ -23,6 +23,27 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Table(name = "payment")
 public class Payment extends BaseEntity {
+	public static final String READY_STATUS = "READY";
+
+	public static Payment createReady(
+		User member,
+		PaymentType paymentType,
+		String orderId,
+		String orderName,
+		long amount,
+		String idempotencyKey
+	) {
+		Payment payment = new Payment();
+		payment.member = member;
+		payment.paymentType = paymentType;
+		payment.orderId = orderId;
+		payment.orderName = orderName;
+		payment.amount = amount;
+		payment.status = READY_STATUS;
+		payment.idempotencyKey = idempotencyKey;
+		return payment;
+	}
+
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "member_id", nullable = false)
 	private User member;
