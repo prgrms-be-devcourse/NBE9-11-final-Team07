@@ -46,4 +46,46 @@ public class Reservation extends BaseEntity {
 
 	@Column(name = "canceled_at")
 	private LocalDateTime canceledAt;
+
+	@Column(name = "reservation_name", length = 50)
+	private String reservationName;
+
+	@Column(name = "reservation_phone", length = 20)
+	private String reservationPhone;
+
+	private Reservation(
+		User member,
+		ReservationSlot slot,
+		ReservationStatus status,
+		LocalDateTime heldUntil,
+		LocalDateTime reservedAt
+	) {
+		this.member = member;
+		this.slot = slot;
+		this.status = status;
+		this.heldUntil = heldUntil;
+		this.reservedAt = reservedAt;
+	}
+
+	public static Reservation createHeld(User member, ReservationSlot slot, LocalDateTime now, LocalDateTime heldUntil) {
+		return new Reservation(member, slot, ReservationStatus.HELD, heldUntil, now);
+	}
+
+	public void cancel(LocalDateTime canceledAt) {
+		this.status = ReservationStatus.CANCELED;
+		this.canceledAt = canceledAt;
+	}
+
+	public void updateReservationInfo(String reservationName, String reservationPhone) {
+		this.reservationName = reservationName;
+		this.reservationPhone = reservationPhone;
+	}
+
+	public void confirm() {
+		this.status = ReservationStatus.CONFIRMED;
+	}
+
+	public void expire() {
+		this.status = ReservationStatus.EXPIRED;
+	}
 }

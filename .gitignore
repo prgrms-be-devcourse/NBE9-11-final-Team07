@@ -1,7 +1,6 @@
 HELP.md
 .gradle
 build/
-.DS_Store
 
 ### Environment ###
 !gradle/wrapper/gradle-wrapper.jar
@@ -44,6 +43,9 @@ out/
 .env.*
 !.env.example
 
+### OS ###
+.DS_Store
 
-### db ###
-db_dev.mv.db
+### Local DB ###
+*.mv.db
+*.trace.db
