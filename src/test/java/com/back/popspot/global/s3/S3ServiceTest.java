@@ -11,14 +11,20 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.amazonaws.services.s3.AmazonS3;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 @DisplayName("S3Service")
 @ExtendWith(MockitoExtension.class)
 class S3ServiceTest {
 
     @Mock
-    private AmazonS3 amazonS3;
+    private S3Client s3Client;
+
+    @Mock
+    private S3Presigner s3Presigner;
 
     @Mock
     private S3Properties s3Properties;
@@ -35,8 +41,16 @@ class S3ServiceTest {
 
         s3Service.move(src, dest);
 
-        verify(amazonS3).copyObject("test-bucket", src, "test-bucket", dest);
-        verify(amazonS3).deleteObject("test-bucket", src);
+        verify(s3Client).copyObject(CopyObjectRequest.builder()
+            .sourceBucket("test-bucket")
+            .sourceKey(src)
+            .destinationBucket("test-bucket")
+            .destinationKey(dest)
+            .build());
+        verify(s3Client).deleteObject(DeleteObjectRequest.builder()
+            .bucket("test-bucket")
+            .key(src)
+            .build());
     }
 
     @Test

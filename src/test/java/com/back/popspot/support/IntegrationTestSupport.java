@@ -8,7 +8,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.amazonaws.services.s3.AmazonS3;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -29,5 +30,8 @@ public abstract class IntegrationTestSupport {
 
     // 테스트에서 실제 AWS 연결을 막기 위해 모킹
     @MockitoBean
-    private AmazonS3 amazonS3;
+    private S3Client s3Client;
+
+    @MockitoBean
+    private S3Presigner s3Presigner;
 }

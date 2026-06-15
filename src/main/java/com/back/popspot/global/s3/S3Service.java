@@ -1,15 +1,18 @@
 package com.back.popspot.global.s3;
 
-import java.util.Date;
+import java.time.Duration;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
-import com.amazonaws.HttpMethod;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
-
 import lombok.RequiredArgsConstructor;
+
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -17,7 +20,8 @@ public class S3Service {
 
     private static final String TEMP_PREFIX = "temp/";
 
-    private final AmazonS3 amazonS3;
+    private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
     private final S3Properties s3Properties;
 
     public String buildTempKey(String fileName) {
@@ -29,8 +33,16 @@ public class S3Service {
 
     public void move(String sourceKey, String destKey) {
         String bucket = s3Properties.getBucket();
-        amazonS3.copyObject(bucket, sourceKey, bucket, destKey);
-        amazonS3.deleteObject(bucket, sourceKey);
+        s3Client.copyObject(CopyObjectRequest.builder()
+            .sourceBucket(bucket)
+            .sourceKey(sourceKey)
+            .destinationBucket(bucket)
+            .destinationKey(destKey)
+            .build());
+        s3Client.deleteObject(DeleteObjectRequest.builder()
+            .bucket(bucket)
+            .key(sourceKey)
+            .build());
     }
 
     public boolean isTempKey(String key) {
@@ -42,11 +54,14 @@ public class S3Service {
     }
 
     public String generatePresignedPutUrl(String key) {
-        Date expiration = new Date(System.currentTimeMillis() + s3Properties.getPresignedUrlExpiration() * 1000);
-        GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(s3Properties.getBucket(), key)
-            .withMethod(HttpMethod.PUT)
-            .withExpiration(expiration);
-        return amazonS3.generatePresignedUrl(request).toString();
+        PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
+            .signatureDuration(Duration.ofSeconds(s3Properties.getPresignedUrlExpiration()))
+            .putObjectRequest(PutObjectRequest.builder()
+                .bucket(s3Properties.getBucket())
+                .key(key)
+                .build())
+            .build();
+        return s3Presigner.presignPutObject(presignRequest).url().toExternalForm();
     }
 
     private String extractExtension(String fileName) {

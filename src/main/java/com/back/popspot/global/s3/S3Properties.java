@@ -10,9 +10,7 @@ import lombok.Setter;
 @ConfigurationProperties(prefix = "aws.s3")
 public class S3Properties {
 
-    private String accessKey;
-    private String secretKey;
-    private String region;
-    private String bucket;
-    private long presignedUrlExpiration = 600;
+	private String region;
+	private String bucket;
+	private long presignedUrlExpiration = 600;
 }
