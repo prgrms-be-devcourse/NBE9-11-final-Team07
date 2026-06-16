@@ -259,11 +259,10 @@ public class GoodsService {
             : goodsImageRepository
                 .findByGoods_IdInAndImageTypeOrderByIdAsc(goodsIds, GoodsImageType.PRODUCT)
                 .stream()
+                .filter(img -> img.getImageKey() != null)
                 .collect(Collectors.toMap(
                     img -> img.getGoods().getId(),
-                    img -> img.getImageKey() != null
-                        ? s3Service.generatePresignedGetUrl(img.getImageKey())
-                        : null,
+                    img -> s3Service.generatePresignedGetUrl(img.getImageKey()),
                     (first, second) -> first
                 ));
 
