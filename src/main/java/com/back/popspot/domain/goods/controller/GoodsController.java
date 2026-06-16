@@ -44,12 +44,11 @@ public class GoodsController {
 			.body(CommonApiResponse.created("굿즈가 등록되었습니다.", response));
 	}
 
-	@PostMapping("/goods/{goodsId}/images")
+	@PostMapping("/goods/images")
 	public ResponseEntity<CommonApiResponse<List<GoodsImagePresignResponse>>> generatePresignedUrls(
-		@PathVariable Long goodsId,
 		@RequestBody @Valid GoodsImagePresignRequest request
 	) {
-		List<GoodsImagePresignResponse> response = goodsService.generatePresignedUrls(goodsId, request);
+		List<GoodsImagePresignResponse> response = goodsService.generatePresignedUrls(request);
 		return ResponseEntity.ok(CommonApiResponse.success(response));
 	}
 
