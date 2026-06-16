@@ -9,6 +9,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.back.popspot.domain.payment.client.TossPaymentsClient;
+
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
@@ -26,4 +30,14 @@ public abstract class IntegrationTestSupport {
     // OAuth2 Client 자동 구성이 실제 등록 정보를 요구하므로 모킹 처리
     @MockitoBean
     private ClientRegistrationRepository clientRegistrationRepository;
+
+    // 테스트에서 실제 AWS 연결을 막기 위해 모킹
+    @MockitoBean
+    private S3Client s3Client;
+
+    @MockitoBean
+    private S3Presigner s3Presigner;
+
+    @MockitoBean
+    private TossPaymentsClient tossPaymentsClient;
 }

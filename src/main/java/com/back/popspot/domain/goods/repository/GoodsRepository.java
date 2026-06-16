@@ -12,6 +12,7 @@ import com.back.popspot.domain.goods.entity.GoodsStatus;
 
 public interface GoodsRepository extends JpaRepository<Goods, Long> {
 
+    List<Goods> findByPopupStoreIdAndDeletedAtIsNull(Long popupStoreId);
 	Page<Goods> findByDeletedAtIsNull(Pageable pageable);
 
 	Page<Goods> findByStatusAndDeletedAtIsNull(GoodsStatus status, Pageable pageable);

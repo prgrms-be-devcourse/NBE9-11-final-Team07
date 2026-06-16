@@ -13,10 +13,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.back.popspot.domain.goods.dto.GoodsDetailResponse;
-import com.back.popspot.domain.goods.dto.GoodsListResponse;
+import com.back.popspot.domain.goods.dto.GoodsImagePresignRequest;
+import com.back.popspot.domain.goods.dto.GoodsImagePresignResponse;
+import com.back.popspot.domain.goods.dto.HostGoodsListResponse;
 import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
 import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
 import com.back.popspot.domain.goods.dto.GoodsSummaryResponse;
@@ -32,13 +35,14 @@ import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequiredArgsConstructor
+@RequestMapping("/api/v1")
 public class GoodsController {
 
-    private final GoodsService goodsService;
+	private final GoodsService goodsService;
 
     // ── 공개 조회 API (/api/v1) ──────────────────────────────────────────────
 
-    @GetMapping("/api/v1/goods")
+    @GetMapping("/goods")
     public ResponseEntity<CommonApiResponse<PageResponse<GoodsSummaryResponse>>> getGoodsList(
         @RequestParam(required = false) GoodsStatus status,
         @PageableDefault(size = 20) Pageable pageable
@@ -46,7 +50,7 @@ public class GoodsController {
         return ResponseEntity.ok(CommonApiResponse.success(goodsService.getGoodsList(status, pageable)));
     }
 
-    @GetMapping("/api/v1/popups/{popupStoreId}/goods")
+    @GetMapping("/popups/{popupStoreId}/goods")
     public ResponseEntity<CommonApiResponse<PageResponse<GoodsSummaryResponse>>> getGoodsByPopupStore(
         @PathVariable Long popupStoreId,
         @RequestParam(required = false) GoodsStatus status,
@@ -57,7 +61,7 @@ public class GoodsController {
         );
     }
 
-    @GetMapping("/api/v1/goods/{goodsId}")
+    @GetMapping("/goods/{goodsId}")
     public ResponseEntity<CommonApiResponse<GoodsDetailResponse>> getGoodsDetail(
         @PathVariable Long goodsId
     ) {
@@ -66,36 +70,44 @@ public class GoodsController {
 
     // ── 호스트 관리 API (/host) ──────────────────────────────────────────────
 
-    @PostMapping("/host/popups/{popupStoreId}/goods")
-    public ResponseEntity<CommonApiResponse<GoodsRegisterResponse>> registerGoods(
-        @PathVariable Long popupStoreId,
-        @RequestBody @Valid GoodsRegisterRequest request
-    ) {
-        GoodsRegisterResponse response = goodsService.registerGoods(popupStoreId, request);
-        return ResponseEntity.status(HttpStatus.CREATED)
-            .body(CommonApiResponse.created("굿즈가 등록되었습니다.", response));
-    }
+	@PostMapping("/host/popups/{popupStoreId}/goods")
+	public ResponseEntity<CommonApiResponse<GoodsRegisterResponse>> registerHostGoods(
+		@PathVariable Long popupStoreId,
+		@RequestBody @Valid GoodsRegisterRequest request
+	) {
+		GoodsRegisterResponse response = goodsService.registerHostGoods(popupStoreId, request);
+		return ResponseEntity.status(HttpStatus.CREATED)
+			.body(CommonApiResponse.created("굿즈가 등록되었습니다.", response));
+	}
 
-    @PatchMapping("/host/goods/{goodsId}")
-    public ResponseEntity<CommonApiResponse<GoodsUpdateResponse>> updateGoods(
-        @PathVariable Long goodsId,
-        @RequestBody @Valid GoodsUpdateRequest request
-    ) {
-        GoodsUpdateResponse response = goodsService.updateGoods(goodsId, request);
-        return ResponseEntity.ok(CommonApiResponse.success(response));
-    }
+	@PostMapping("/host/goods/images")
+	public ResponseEntity<CommonApiResponse<List<GoodsImagePresignResponse>>> generatePresignedUrls(
+		@RequestBody @Valid GoodsImagePresignRequest request
+	) {
+		List<GoodsImagePresignResponse> response = goodsService.generatePresignedUrls(request);
+		return ResponseEntity.ok(CommonApiResponse.success(response));
+	}
 
-    @DeleteMapping("/host/goods/{goodsId}")
-    public ResponseEntity<CommonApiResponse<Void>> deleteGoods(@PathVariable Long goodsId) {
-        goodsService.deleteGoods(goodsId);
-        return ResponseEntity.ok(CommonApiResponse.successMessage("굿즈가 삭제되었습니다."));
-    }
+	@PatchMapping("/host/goods/{goodsId}")
+	public ResponseEntity<CommonApiResponse<GoodsUpdateResponse>> updateHostGoods(
+		@PathVariable Long goodsId,
+		@RequestBody @Valid GoodsUpdateRequest request
+	) {
+		GoodsUpdateResponse response = goodsService.updateHostGoods(goodsId, request);
+		return ResponseEntity.ok(CommonApiResponse.success(response));
+	}
 
-    @GetMapping("/host/goods")
-    public ResponseEntity<CommonApiResponse<List<GoodsListResponse>>> getHostGoodsList(
-        @RequestParam Long userId
-    ) {
-        List<GoodsListResponse> response = goodsService.getGoodsList(userId);
-        return ResponseEntity.ok(CommonApiResponse.success(response));
-    }
+	@DeleteMapping("/host/goods/{goodsId}")
+	public ResponseEntity<CommonApiResponse<Void>> deleteHostGoods(@PathVariable Long goodsId) {
+		goodsService.deleteHostGoods(goodsId);
+		return ResponseEntity.ok(CommonApiResponse.successMessage("굿즈가 삭제되었습니다."));
+	}
+
+	@GetMapping("/host/popups/{popupStoreId}/goods")
+	public ResponseEntity<CommonApiResponse<List<HostGoodsListResponse>>> getHostGoodsList(
+		@PathVariable Long popupStoreId
+	) {
+		List<HostGoodsListResponse> response = goodsService.getHostGoodsList(popupStoreId);
+		return ResponseEntity.ok(CommonApiResponse.success(response));
+	}
 }
