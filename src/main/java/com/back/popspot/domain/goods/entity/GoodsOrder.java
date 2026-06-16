@@ -56,4 +56,23 @@ public class GoodsOrder extends BaseEntity {
 
 	@Column(name = "address_detail", length = 255)
 	private String addressDetail;
+
+	public GoodsOrder(User user, int totalAmount, Integer discountAmount, int finalAmount,
+			GoodsOrderStatus status, String receiverName, String receiverPhone,
+			String postalCode, String address, String addressDetail) {
+		this.user = user;
+		this.totalAmount = totalAmount;
+		this.discountAmount = discountAmount;
+		this.finalAmount = finalAmount;
+		this.status = status;
+		this.receiverName = receiverName;
+		this.receiverPhone = receiverPhone;
+		this.postalCode = postalCode;
+		this.address = address;
+		this.addressDetail = addressDetail;
+	}
+
+	public void updateStatus(GoodsOrderStatus newStatus) {
+		this.status = newStatus;
+	}
 }

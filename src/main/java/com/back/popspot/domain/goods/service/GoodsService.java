@@ -6,25 +6,32 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import com.back.popspot.domain.goods.dto.GoodsDetailResponse;
 import com.back.popspot.domain.goods.dto.GoodsImagePresignRequest;
 import com.back.popspot.domain.goods.dto.GoodsImagePresignResponse;
 import com.back.popspot.domain.goods.dto.GoodsListResponse;
 import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
 import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
+import com.back.popspot.domain.goods.dto.GoodsSummaryResponse;
 import com.back.popspot.domain.goods.dto.GoodsUpdateRequest;
 import com.back.popspot.domain.goods.dto.GoodsUpdateResponse;
+import com.back.popspot.domain.goods.dto.HostGoodsListResponse;
 import com.back.popspot.domain.goods.entity.Goods;
 import com.back.popspot.domain.goods.entity.GoodsImage;
 import com.back.popspot.domain.goods.entity.GoodsImageType;
+import com.back.popspot.domain.goods.entity.GoodsStatus;
 import com.back.popspot.domain.goods.repository.GoodsImageRepository;
 import com.back.popspot.domain.goods.repository.GoodsRepository;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
+import com.back.popspot.global.dto.PageResponse;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 import com.back.popspot.global.s3.ImageDomain;
@@ -41,10 +48,47 @@ public class GoodsService {
 	private final PopupStoreRepository popupStoreRepository;
 	private final S3Service s3Service;
 
-	@Transactional
-	public GoodsRegisterResponse registerGoods(Long popupStoreId, GoodsRegisterRequest request) {
-		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
-			.orElseThrow(() -> new BusinessException(ErrorCode.POPUP_STORE_NOT_FOUND));
+	@Transactional(readOnly = true)
+    public PageResponse<GoodsSummaryResponse> getGoodsList(GoodsStatus status, Pageable pageable) {
+        Page<Goods> goodsPage = (status != null)
+            ? goodsRepository.findByStatusAndDeletedAtIsNull(status, pageable)
+            : goodsRepository.findByDeletedAtIsNull(pageable);
+        return toPageResponse(goodsPage);
+    }
+
+	@Transactional(readOnly = true)
+    public PageResponse<GoodsSummaryResponse> getGoodsByPopupStore(
+        Long popupStoreId, GoodsStatus status, Pageable pageable
+    ) {
+        if (!popupStoreRepository.existsById(popupStoreId)) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        Page<Goods> goodsPage = (status != null)
+            ? goodsRepository.findByPopupStore_IdAndStatusAndDeletedAtIsNull(popupStoreId, status, pageable)
+            : goodsRepository.findByPopupStore_IdAndDeletedAtIsNull(popupStoreId, pageable);
+        return toPageResponse(goodsPage);
+    }
+
+	@Transactional(readOnly = true)
+    public GoodsDetailResponse getGoodsDetail(Long goodsId) {
+        Goods goods = goodsRepository.findByIdAndDeletedAtIsNull(goodsId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        List<GoodsImage> images = goodsImageRepository.findByGoods_IdOrderByIdAsc(goodsId);
+        return GoodsDetailResponse.from(goods, images);
+    }
+
+	@Transactional(readOnly = true)
+    public List<GoodsListResponse> getGoodsList(Long userId) {
+        return goodsRepository.findByPopupStoreUserIdAndDeletedAtIsNull(userId)
+            .stream()
+            .map(GoodsListResponse::from)
+            .toList();
+    }
+
+    @Transactional
+    public GoodsRegisterResponse registerHostGoods(Long popupStoreId, GoodsRegisterRequest request) {
+        PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.POPUP_STORE_NOT_FOUND));
 
 		List<GoodsRegisterRequest.ImageKeyEntry> imageKeys =
 			request.imageKeys() != null ? request.imageKeys() : List.of();
@@ -98,7 +142,7 @@ public class GoodsService {
 	}
 
 	@Transactional
-	public GoodsUpdateResponse updateGoods(Long goodsId, GoodsUpdateRequest request) {
+	public GoodsUpdateResponse updateHostGoods(Long goodsId, GoodsUpdateRequest request) {
 		Goods goods = goodsRepository.findById(goodsId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
 
@@ -153,7 +197,7 @@ public class GoodsService {
 	}
 
 	@Transactional
-	public void deleteGoods(Long goodsId) {
+	public void deleteHostGoods(Long goodsId) {
 		Goods goods = goodsRepository.findById(goodsId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
 
@@ -161,7 +205,7 @@ public class GoodsService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<GoodsListResponse> getGoodsList(Long popupStoreId) {
+	public List<HostGoodsListResponse> getHostGoodsList(Long popupStoreId) {
 		List<Goods> goodsList = goodsRepository.findByPopupStoreIdAndDeletedAtIsNull(popupStoreId);
 		if (goodsList.isEmpty()) {
 			return List.of();
@@ -181,7 +225,7 @@ public class GoodsService {
 				String detailUrl = images.containsKey(GoodsImageType.DETAIL)
 					? s3Service.generatePresignedGetUrl(images.get(GoodsImageType.DETAIL))
 					: null;
-				return GoodsListResponse.from(goods, productUrl, detailUrl);
+				return HostGoodsListResponse.from(goods, productUrl, detailUrl);
 			})
 			.toList();
 	}
@@ -196,4 +240,24 @@ public class GoodsService {
 			}
 		});
 	}
+    private PageResponse<GoodsSummaryResponse> toPageResponse(Page<Goods> goodsPage) {
+        List<Long> goodsIds = goodsPage.getContent().stream()
+            .map(Goods::getId)
+            .toList();
+
+        Map<Long, String> thumbnailMap = goodsIds.isEmpty()
+            ? Map.of()
+            : goodsImageRepository
+                .findByGoods_IdInAndImageTypeOrderByIdAsc(goodsIds, GoodsImageType.PRODUCT)
+                .stream()
+                .collect(Collectors.toMap(
+                    img -> img.getGoods().getId(),
+                    GoodsImage::getImageKey,
+                    (first, second) -> first
+                ));
+
+        return PageResponse.from(goodsPage.map(
+            goods -> GoodsSummaryResponse.from(goods, thumbnailMap.get(goods.getId()))
+        ));
+    }
 }

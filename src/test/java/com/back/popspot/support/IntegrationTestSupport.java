@@ -4,18 +4,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.back.popspot.domain.payment.client.TossPaymentsClient;
+
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@ActiveProfiles("test")
 public abstract class IntegrationTestSupport {
 
     @Autowired
@@ -34,4 +37,7 @@ public abstract class IntegrationTestSupport {
 
     @MockitoBean
     private S3Presigner s3Presigner;
+
+    @MockitoBean
+    private TossPaymentsClient tossPaymentsClient;
 }

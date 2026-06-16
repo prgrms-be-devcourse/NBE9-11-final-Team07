@@ -2,6 +2,7 @@ package com.back.popspot.domain.coupon.entity;
 
 import java.time.LocalDateTime;
 
+import com.back.popspot.domain.coupon.dto.CouponCreateRequest;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.global.entity.BaseEntity;
 
@@ -56,4 +57,34 @@ public class Coupon extends BaseEntity {
 
 	@Column(name = "started_at", nullable = false)
 	private LocalDateTime startedAt;
+
+	public static Coupon create(PopupStore popupStore, CouponCreateRequest request) {
+		Coupon coupon = new Coupon();
+		coupon.popupStore = popupStore;
+		coupon.name = request.name();
+		coupon.discountType = request.discountType();
+		coupon.discountValue = request.discountValue();
+		coupon.maxDiscountAmount = request.maxDiscountAmount();
+		coupon.minOrderAmount = request.minOrderAmount();
+		coupon.totalQuantity = request.totalQuantity();
+		coupon.issuedQuantity = 0;
+		coupon.status = CouponStatus.ACTIVE;
+		coupon.expiredAt = request.expiredAt();
+		coupon.startedAt = request.startedAt();
+		return coupon;
+	}
+
+	public boolean isIssuable(LocalDateTime now) {
+		return status == CouponStatus.ACTIVE
+			&& !startedAt.isAfter(now)
+			&& expiredAt.isAfter(now)
+			&& issuedQuantity < totalQuantity;
+	}
+
+	public void issue() {
+		issuedQuantity++;
+		if (issuedQuantity >= totalQuantity) {
+			status = CouponStatus.SOLDOUT;
+		}
+	}
 }

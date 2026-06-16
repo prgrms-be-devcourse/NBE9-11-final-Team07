@@ -1,6 +1,7 @@
 spring:
   application:
     name: popspot
+
   security:
     oauth2:
       client:
@@ -13,6 +14,12 @@ spring:
             scope:
               - email
               - profile
+  profiles:
+    active: dev
+
+  output:
+    ansi:
+      enabled: always
 
 aws:
   s3:
@@ -26,4 +33,6 @@ jwt:
   access-token-validity-seconds: 3600
 
 
-
+toss-payments:
+  client-key: ${TOSS_PAYMENTS_CLIENT_KEY}
+  secret-key: ${TOSS_PAYMENTS_SECRET_KEY}

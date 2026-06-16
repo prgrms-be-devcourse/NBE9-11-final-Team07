@@ -86,7 +86,7 @@ class GoodsImageControllerTest extends IntegrationTestSupport {
 			GoodsImageType.PRODUCT, List.of("test.jpg")
 		);
 
-		mockMvc.perform(post("/host/goods/images")
+		mockMvc.perform(post("/api/v1/host/goods/images")
 				.with(csrf())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(request)))
@@ -119,7 +119,7 @@ class GoodsImageControllerTest extends IntegrationTestSupport {
 			)
 		);
 
-		mockMvc.perform(post("/host/popups/{popupStoreId}/goods", popupStoreId)
+		mockMvc.perform(post("/api/v1/host/popups/{popupStoreId}/goods", popupStoreId)
 				.with(csrf())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(request)))

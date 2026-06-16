@@ -16,3 +16,7 @@ aws:
     region: ap-northeast-2
     bucket: test-bucket
     presigned-url-expiration: 600
+
+toss-payments:
+    client-key: test_dummy_client_key
+    secret-key: test_dummy_secret_key

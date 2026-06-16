@@ -24,6 +24,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
+import com.back.popspot.domain.popupStore.dto.ReservationSlotUpdateRequest;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
@@ -275,6 +276,103 @@ class PopupStoreHostServiceTest {
 		verify(reservationSlotRepository, never()).save(any());
 	}
 
+	@Test
+	@DisplayName("슬롯 수정: 소유자 + 예약 시작 전 + 운영 기간 내 날짜면 수정한다")
+	void updateSlot_validOwnerBeforeReservationStart_updates() {
+		PopupStore popupStore = popupForSlotManagement(USER_ID, 10L, FUTURE);
+		ReservationSlot slot = slot(popupStore, LocalDate.of(2026, 7, 5), LocalTime.of(13, 0), 10);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+		when(reservationSlotRepository.findById(500L)).thenReturn(Optional.of(slot));
+
+		ReservationSlotUpdateRequest request = new ReservationSlotUpdateRequest(
+				LocalDate.of(2026, 7, 6), LocalTime.of(14, 0), 20);
+
+		popupStoreHostService.updateSlot(USER_ID, 10L, 500L, request);
+
+		assertThat(slot.getSlotDate()).isEqualTo(LocalDate.of(2026, 7, 6));
+		assertThat(slot.getStartTime()).isEqualTo(LocalTime.of(14, 0));
+		assertThat(slot.getCapacity()).isEqualTo(20);
+	}
+
+	@Test
+	@DisplayName("슬롯 수정: 소유자가 아니면 FORBIDDEN 이고 수정하지 않는다")
+	void updateSlot_notOwner_throwsForbidden() {
+		PopupStore popupStore = popupForSlotManagement(USER_ID, 10L, FUTURE);
+		ReservationSlot slot = slot(popupStore, LocalDate.of(2026, 7, 5), LocalTime.of(13, 0), 10);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+		when(reservationSlotRepository.findById(500L)).thenReturn(Optional.of(slot));
+
+		ReservationSlotUpdateRequest request = new ReservationSlotUpdateRequest(
+				LocalDate.of(2026, 7, 6), null, null);
+
+		assertThatThrownBy(() -> popupStoreHostService.updateSlot(2L, 10L, 500L, request))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.FORBIDDEN);
+		assertThat(slot.getSlotDate()).isEqualTo(LocalDate.of(2026, 7, 5));
+	}
+
+	@Test
+	@DisplayName("슬롯 수정: 수정 후 slotDate 가 운영 기간 밖이면 INVALID_INPUT_VALUE")
+	void updateSlot_dateOutOfRange_throws() {
+		PopupStore popupStore = popupForSlotManagement(USER_ID, 10L, FUTURE);
+		ReservationSlot slot = slot(popupStore, LocalDate.of(2026, 7, 5), LocalTime.of(13, 0), 10);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+		when(reservationSlotRepository.findById(500L)).thenReturn(Optional.of(slot));
+
+		ReservationSlotUpdateRequest request = new ReservationSlotUpdateRequest(
+				LocalDate.of(2026, 7, 11), null, null);
+
+		assertThatThrownBy(() -> popupStoreHostService.updateSlot(USER_ID, 10L, 500L, request))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+		assertThat(slot.getSlotDate()).isEqualTo(LocalDate.of(2026, 7, 5));
+	}
+
+	@Test
+	@DisplayName("슬롯 삭제: 소유자 + 예약 시작 전이면 삭제한다")
+	void deleteSlot_validOwnerBeforeReservationStart_deletes() {
+		PopupStore popupStore = popupForSlotManagement(USER_ID, 10L, FUTURE);
+		ReservationSlot slot = slot(popupStore, LocalDate.of(2026, 7, 5), LocalTime.of(13, 0), 10);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+		when(reservationSlotRepository.findById(500L)).thenReturn(Optional.of(slot));
+
+		popupStoreHostService.deleteSlot(USER_ID, 10L, 500L);
+
+		verify(reservationSlotRepository).delete(slot);
+	}
+
+	@Test
+	@DisplayName("슬롯 삭제: 소유자가 아니면 FORBIDDEN 이고 삭제하지 않는다")
+	void deleteSlot_notOwner_throwsForbidden() {
+		PopupStore popupStore = popupForSlotManagement(USER_ID, 10L, FUTURE);
+		ReservationSlot slot = slot(popupStore, LocalDate.of(2026, 7, 5), LocalTime.of(13, 0), 10);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+		when(reservationSlotRepository.findById(500L)).thenReturn(Optional.of(slot));
+
+		assertThatThrownBy(() -> popupStoreHostService.deleteSlot(2L, 10L, 500L))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.FORBIDDEN);
+		verify(reservationSlotRepository, never()).delete(any());
+	}
+
+	@Test
+	@DisplayName("슬롯 삭제: 예약 시작 이후면 INVALID_INPUT_VALUE 이고 삭제하지 않는다")
+	void deleteSlot_afterReservationStart_throws() {
+		PopupStore popupStore = popupForSlotManagement(USER_ID, 10L, PAST);
+		ReservationSlot slot = slot(popupStore, LocalDate.of(2026, 7, 5), LocalTime.of(13, 0), 10);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+		when(reservationSlotRepository.findById(500L)).thenReturn(Optional.of(slot));
+
+		assertThatThrownBy(() -> popupStoreHostService.deleteSlot(USER_ID, 10L, 500L))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode())
+				.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+		verify(reservationSlotRepository, never()).delete(any());
+	}
+
 	private PopupStore popupForSlot(Long ownerId) {
 		User owner = User.create("owner@test.com", "owner");
 		ReflectionTestUtils.setField(owner, "id", ownerId);
@@ -283,6 +381,22 @@ class PopupStoreHostServiceTest {
 		ReflectionTestUtils.setField(popupStore, "openDate", LocalDateTime.of(2026, 7, 1, 10, 0));
 		ReflectionTestUtils.setField(popupStore, "closeDate", LocalDateTime.of(2026, 7, 10, 18, 0));
 		return popupStore;
+	}
+
+	private PopupStore popupForSlotManagement(Long ownerId, Long popupStoreId, LocalDateTime reservationStartAt) {
+		PopupStore popupStore = popupForSlot(ownerId);
+		ReflectionTestUtils.setField(popupStore, "id", popupStoreId);
+		ReflectionTestUtils.setField(popupStore, "reservationStartAt", reservationStartAt);
+		return popupStore;
+	}
+
+	private ReservationSlot slot(PopupStore popupStore, LocalDate slotDate, LocalTime startTime, int capacity) {
+		ReservationSlot slot = new ReservationSlot();
+		ReflectionTestUtils.setField(slot, "popupStore", popupStore);
+		ReflectionTestUtils.setField(slot, "slotDate", slotDate);
+		ReflectionTestUtils.setField(slot, "startTime", startTime);
+		ReflectionTestUtils.setField(slot, "capacity", capacity);
+		return slot;
 	}
 
 	private ReservationSlotCreateRequest slotRequest(LocalDate slotDate) {

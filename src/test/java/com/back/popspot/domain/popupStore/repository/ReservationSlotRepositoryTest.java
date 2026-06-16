@@ -1,6 +1,6 @@
 package com.back.popspot.domain.popupStore.repository;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -58,25 +58,24 @@ class ReservationSlotRepositoryTest {
 	@DisplayName("해당 팝업 + 해당 날짜의 슬롯만 조회한다 (다른 팝업/다른 날짜 제외)")
 	void findByPopupStoreIdAndSlotDate() {
 		List<ReservationSlot> result =
-				reservationSlotRepository.findByPopupStoreIdAndSlotDate(popupA.getId(), DATE);
+			reservationSlotRepository.findByPopupStoreIdAndSlotDate(popupA.getId(), DATE);
 
 		assertThat(result)
-				.extracting(ReservationSlot::getId)
-				.containsExactly(slotA_onDate.getId());
+			.extracting(ReservationSlot::getId)
+			.containsExactly(slotA_onDate.getId());
 	}
 
 	@Test
 	@DisplayName("해당 날짜에 슬롯이 없으면 빈 리스트")
 	void findByPopupStoreIdAndSlotDate_noMatch_returnsEmpty() {
 		List<ReservationSlot> result =
-				reservationSlotRepository.findByPopupStoreIdAndSlotDate(popupA.getId(), DATE.plusDays(10));
+			reservationSlotRepository.findByPopupStoreIdAndSlotDate(popupA.getId(), DATE.plusDays(10));
 
 		assertThat(result).isEmpty();
 	}
 
 	private User persistUser() {
-		User user = User.create("owner@test.com", "owner");
-		return entityManager.persist(user);
+		return entityManager.persist(User.create("owner@test.com", "owner"));
 	}
 
 	private PopupStore persistPopup(User user) {

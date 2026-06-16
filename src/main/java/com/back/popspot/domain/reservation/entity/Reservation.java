@@ -23,12 +23,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Table(
 	name = "reservation",
-	uniqueConstraints = @UniqueConstraint(columnNames = {"member_id", "slot_id"})
+	uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "slot_id"})
 )
 public class Reservation extends BaseEntity {
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "member_id", nullable = false)
-	private User member;
+	@JoinColumn(name = "user_id", nullable = false)
+	private User user;
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "slot_id", nullable = false)
@@ -46,4 +46,46 @@ public class Reservation extends BaseEntity {
 
 	@Column(name = "canceled_at")
 	private LocalDateTime canceledAt;
+
+	@Column(name = "reservation_name", length = 50)
+	private String reservationName;
+
+	@Column(name = "reservation_phone", length = 20)
+	private String reservationPhone;
+
+	private Reservation(
+		User user,
+		ReservationSlot slot,
+		ReservationStatus status,
+		LocalDateTime heldUntil,
+		LocalDateTime reservedAt
+	) {
+		this.user = user;
+		this.slot = slot;
+		this.status = status;
+		this.heldUntil = heldUntil;
+		this.reservedAt = reservedAt;
+	}
+
+	public static Reservation createHeld(User user, ReservationSlot slot, LocalDateTime now, LocalDateTime heldUntil) {
+		return new Reservation(user, slot, ReservationStatus.HELD, heldUntil, now);
+	}
+
+	public void cancel(LocalDateTime canceledAt) {
+		this.status = ReservationStatus.CANCELED;
+		this.canceledAt = canceledAt;
+	}
+
+	public void updateReservationInfo(String reservationName, String reservationPhone) {
+		this.reservationName = reservationName;
+		this.reservationPhone = reservationPhone;
+	}
+
+	public void confirm() {
+		this.status = ReservationStatus.CONFIRMED;
+	}
+
+	public void expire() {
+		this.status = ReservationStatus.EXPIRED;
+	}
 }
