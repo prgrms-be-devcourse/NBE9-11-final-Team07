@@ -64,6 +64,9 @@ class ReservationServiceTest {
 	@Mock
 	private UserRepository userRepository;
 
+	@Mock
+	private ReservationExpirationService reservationExpirationService;
+
 	@Test
 	@DisplayName("내 예약 내역 조회 성공")
 	void getMyReservations_success() {
@@ -72,7 +75,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		PopupStore freePopupStore = createPopupStore();
 		PopupStore paidPopupStore = createPopupStore();
@@ -155,7 +159,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		Pageable pageable = PageRequest.of(0, 10);
 		Page<Reservation> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
@@ -187,7 +192,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
 		PopupStore popupStore = createPopupStore();
@@ -225,7 +231,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
 		PopupStore popupStore = createPopupStore();
@@ -254,7 +261,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
 
@@ -278,7 +286,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
 		PopupStore popupStore = createPopupStore();
@@ -307,7 +316,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
 		PopupStore popupStore = createPopupStore();
@@ -337,7 +347,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -376,7 +387,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -423,7 +435,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -463,7 +476,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -504,7 +518,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -512,10 +527,9 @@ class ReservationServiceTest {
 		Reservation reservation = createHeldReservation(100L, user, slot, LocalDateTime.now().minusMinutes(1));
 		ReservationPaymentRequest request = new ReservationPaymentRequest("홍길동", "010-1234-5678", "idem-expired-1");
 
-		ReflectionTestUtils.setField(slot, "reservedCount", 1);
-
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
+		when(reservationExpirationService.expireIfHeldAndExpired(eq(reservation), any(LocalDateTime.class)))
+			.thenReturn(true);
 
 		// when
 		BusinessException exception = assertThrows(
@@ -525,8 +539,7 @@ class ReservationServiceTest {
 
 		// then
 		assertEquals(ErrorCode.RESERVATION_PAYMENT_EXPIRED, exception.getErrorCode());
-		assertEquals(ReservationStatus.EXPIRED, reservation.getStatus());
-		verify(reservationSlotRepository).decreaseReservedCount(1L);
+		verify(reservationExpirationService).expireIfHeldAndExpired(eq(reservation), any(LocalDateTime.class));
 		verify(paymentRepository, never()).save(any(Payment.class));
 	}
 
@@ -538,7 +551,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -565,7 +579,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -592,7 +607,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -620,7 +636,8 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
-			userRepository
+			userRepository,
+			reservationExpirationService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
