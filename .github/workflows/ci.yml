@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -25,3 +29,11 @@ jobs:
 
       - name: Run tests
         run: ./gradlew test --info -Dspring.profiles.active=test
+
+      - name: Publish test results
+        if: ${{ !cancelled() }}
+        uses: dorny/test-reporter@v3
+        with:
+          name: Gradle Test Results
+          path: build/test-results/test/*.xml
+          reporter: java-junit
