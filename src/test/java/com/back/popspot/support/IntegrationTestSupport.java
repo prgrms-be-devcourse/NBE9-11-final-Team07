@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.back.popspot.domain.payment.client.TossPaymentsClient;
+import com.back.popspot.global.s3.S3Service;
 
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -37,6 +38,9 @@ public abstract class IntegrationTestSupport {
 
     @MockitoBean
     private S3Presigner s3Presigner;
+
+    @MockitoBean
+    private S3Service s3Service;
 
     @MockitoBean
     private TossPaymentsClient tossPaymentsClient;
