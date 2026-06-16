@@ -35,6 +35,7 @@ import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.global.exception.BusinessException;
+import com.back.popspot.global.s3.S3Service;
 import com.back.popspot.global.exception.ErrorCode;
 
 /**
@@ -49,6 +50,9 @@ class PopupStoreServiceTest {
 
 	@Mock
 	private ReservationSlotRepository reservationSlotRepository;
+
+	@Mock
+	private S3Service s3Service;
 
 	@InjectMocks
 	private PopupStoreService popupStoreService;
@@ -93,6 +97,7 @@ class PopupStoreServiceTest {
 	void getPopupStores_mapsResponseFields() {
 		PopupStore upcomingPopup = popupStore(3L, NOW.plusDays(1), NOW.plusDays(2)); // UPCOMING
 		when(popupStoreRepository.findAll(PAGE)).thenReturn(new PageImpl<>(List.of(upcomingPopup)));
+		when(s3Service.generatePresignedGetUrl("image3")).thenReturn("https://s3/presigned/image3");
 
 		PopupStoreListResponse response = popupStoreService.getPopupStores(null, PAGE)
 				.getContent().get(0);
@@ -100,7 +105,7 @@ class PopupStoreServiceTest {
 		assertThat(response.id()).isEqualTo(3L);
 		assertThat(response.title()).isEqualTo("title3");
 		assertThat(response.location()).isEqualTo("location3");
-		assertThat(response.imageKey()).isEqualTo("image3");
+		assertThat(response.imageUrl()).isEqualTo("https://s3/presigned/image3");
 		assertThat(response.status()).isEqualTo(PopupStatus.UPCOMING);
 	}
 
