@@ -51,7 +51,7 @@ class PaymentControllerTest {
 			"payment-key",
 			"예약 결제",
 			1000L,
-			PaymentStatus.DONE,
+			PaymentStatus.PAID,
 			LocalDateTime.of(2026, 6, 16, 10, 0)
 		);
 		given(paymentService.confirm(request)).willReturn(response);
@@ -70,7 +70,7 @@ class PaymentControllerTest {
 			.andExpect(jsonPath("$.paymentType").value("POPUP"))
 			.andExpect(jsonPath("$.orderId").value("order-id"))
 			.andExpect(jsonPath("$.paymentKey").value("payment-key"))
-			.andExpect(jsonPath("$.status").value("DONE"));
+			.andExpect(jsonPath("$.status").value("PAID"));
 
 		verify(paymentService).confirm(request);
 	}

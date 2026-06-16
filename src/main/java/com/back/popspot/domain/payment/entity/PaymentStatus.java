@@ -2,9 +2,7 @@ package com.back.popspot.domain.payment.entity;
 
 public enum PaymentStatus {
 	READY,
-	DONE,
+	PAID,
 	FAILED,
-	CANCELED,
-	EXPIRED,
-	REFUNDED
+	CANCELED
 }
