@@ -50,6 +50,7 @@ public class ReservationService {
 	private final ReservationSlotRepository reservationSlotRepository;
 	private final PaymentRepository paymentRepository;
 	private final UserRepository userRepository;
+	private final ReservationExpirationService reservationExpirationService;
 
 	@Transactional(readOnly = true)
 	public Page<MyReservationResponse> getMyReservations(Long userId, Pageable pageable) {
@@ -173,7 +174,7 @@ public class ReservationService {
 		}
 
 		if (!reservation.getHeldUntil().isAfter(now)) {
-			expireReservation(reservation);
+			reservationExpirationService.expireIfHeldAndExpired(reservation, now);
 			throw new ReservationPaymentExpiredException(ErrorCode.RESERVATION_PAYMENT_EXPIRED);
 		}
 
@@ -217,14 +218,5 @@ public class ReservationService {
 		paymentRepository.save(payment);
 
 		return ReservationPaymentResponse.paid(payment);
-	}
-
-	private void expireReservation(Reservation reservation) {
-		reservation.expire();
-
-		int updatedCount = reservationSlotRepository.decreaseReservedCount(reservation.getSlot().getId());
-		if (updatedCount == 0) {
-			throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
-		}
 	}
 }
