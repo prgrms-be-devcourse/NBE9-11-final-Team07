@@ -3,6 +3,7 @@ package com.back.popspot.global.initData;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationRunner;
@@ -17,6 +18,13 @@ import com.back.popspot.domain.coupon.dto.CouponCreateRequest;
 import com.back.popspot.domain.coupon.entity.Coupon;
 import com.back.popspot.domain.coupon.entity.CouponDiscountType;
 import com.back.popspot.domain.coupon.repository.CouponRepository;
+import com.back.popspot.domain.goods.entity.Goods;
+import com.back.popspot.domain.goods.entity.GoodsOrder;
+import com.back.popspot.domain.goods.entity.GoodsOrderItem;
+import com.back.popspot.domain.goods.entity.GoodsOrderStatus;
+import com.back.popspot.domain.goods.repository.GoodsOrderItemRepository;
+import com.back.popspot.domain.goods.repository.GoodsOrderRepository;
+import com.back.popspot.domain.goods.repository.GoodsRepository;
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
@@ -48,6 +56,9 @@ public class BaseInitData {
 	private final PopupStoreRepository popupStoreRepository;
 	private final ReservationSlotRepository reservationSlotRepository;
 	private final CouponRepository couponRepository;
+	private final GoodsRepository goodsRepository;
+	private final GoodsOrderRepository goodsOrderRepository;
+	private final GoodsOrderItemRepository goodsOrderItemRepository;
 
 	@Bean
 	public ApplicationRunner initData() {
@@ -56,6 +67,8 @@ public class BaseInitData {
 			self.initPopupStores();
 			self.initReservationSlots();
 			self.initCoupons();
+			self.initGoods();
+			self.initGoodsOrders();
 		};
 	}
 
@@ -181,5 +194,82 @@ public class BaseInitData {
 				now.plusDays(10))));
 
 		log.info("[initData] 굿즈 쿠폰 3개 생성 완료");
+	}
+
+	// ===== 굿즈 =====
+	@Transactional
+	public void initGoods() {
+		if (goodsRepository.count() > 0) {
+			return;
+		}
+
+		LocalDateTime now = LocalDateTime.now();
+
+		// 굿즈는 기존 initPopupStores 에서 생성한 3개 팝업(UPCOMING / OPEN / CLOSED)에 연결
+		PopupStore upcomingPopup = popupStoreRepository.findUpcoming(now, PageRequest.of(0, 1))
+				.getContent().stream().findFirst()
+				.orElseThrow(() -> new IllegalStateException("UPCOMING 상태 팝업이 없습니다. initPopupStores 가 먼저 실행되어야 합니다."));
+		PopupStore openPopup = popupStoreRepository.findOpen(now, PageRequest.of(0, 1))
+				.getContent().stream().findFirst()
+				.orElseThrow(() -> new IllegalStateException("OPEN 상태 팝업이 없습니다. initPopupStores 가 먼저 실행되어야 합니다."));
+		PopupStore closedPopup = popupStoreRepository.findClosed(now, PageRequest.of(0, 1))
+				.getContent().stream().findFirst()
+				.orElseThrow(() -> new IllegalStateException("CLOSED 상태 팝업이 없습니다. initPopupStores 가 먼저 실행되어야 합니다."));
+
+		// OPEN 팝업 굿즈 : 정상 판매중 (굿즈 주문 테스트용)
+		goodsRepository.save(Goods.register(openPopup, "티셔츠", 15000, 50, "팝업 한정판 티셔츠입니다."));
+		// 재고 0 (품절 테스트용)
+		goodsRepository.save(Goods.register(openPopup, "키링", 8000, 0, "팝업 한정판 키링입니다."));
+
+		// UPCOMING 팝업 굿즈 : 오픈 전 사전 등록 굿즈
+		goodsRepository.save(Goods.register(upcomingPopup, "에코백", 12000, 30, "오픈예정 팝업의 사전 등록 굿즈입니다."));
+
+		// CLOSED 팝업 굿즈 : 마감된 팝업에 남아있는 굿즈
+		goodsRepository.save(Goods.register(closedPopup, "포스터", 5000, 20, "마감된 팝업의 굿즈입니다."));
+
+		log.info("[initData] 굿즈 4개 생성 완료 (OPEN 2개 / UPCOMING 1개 / CLOSED 1개)");
+	}
+
+	// ===== 굿즈 주문 =====
+	@Transactional
+	public void initGoodsOrders() {
+		if (goodsOrderRepository.count() > 0) {
+			return;
+		}
+
+		// 주문은 user 계정으로 생성 (host 팝업 수정 시도 시 403 확인용 계정과 동일하게 굿즈 주문도 user로 테스트)
+		User user = userRepository.findByEmail("user@gmail.com")
+				.orElseThrow(() -> new IllegalStateException("user 유저가 없습니다. initUsers 가 먼저 실행되어야 합니다."));
+
+		PopupStore openPopup = popupStoreRepository.findOpen(LocalDateTime.now(), PageRequest.of(0, 1))
+				.getContent().stream().findFirst()
+				.orElseThrow(() -> new IllegalStateException("OPEN 상태 팝업이 없습니다. initPopupStores 가 먼저 실행되어야 합니다."));
+
+		List<Goods> openGoods = goodsRepository
+				.findByPopupStore_IdAndDeletedAtIsNull(openPopup.getId(), PageRequest.of(0, 10))
+				.getContent();
+		Goods tshirt = openGoods.stream().filter(g -> g.getName().equals("티셔츠")).findFirst()
+				.orElseThrow(() -> new IllegalStateException("티셔츠 굿즈가 없습니다. initGoods 가 먼저 실행되어야 합니다."));
+
+		// 주문 1 : 결제 완료 (환불 테스트용)
+		tshirt.decreaseStock(2);
+		int paidItemAmount = tshirt.getPrice() * 2;
+		GoodsOrder paidOrder = goodsOrderRepository.save(new GoodsOrder(
+				user, paidItemAmount, 0, paidItemAmount,
+				GoodsOrderStatus.PAID,
+				"방문자", "010-1234-5678", "12345", "서울특별시 강남구 테헤란로 123", "101동 202호"));
+		goodsOrderItemRepository.save(
+				new GoodsOrderItem(paidOrder, tshirt, 2, tshirt.getPrice(), paidItemAmount));
+
+		// 주문 2 : 결제 대기 (결제 테스트용)
+		int pendingItemAmount = tshirt.getPrice() * 1;
+		GoodsOrder pendingOrder = goodsOrderRepository.save(new GoodsOrder(
+				user, pendingItemAmount, 0, pendingItemAmount,
+				GoodsOrderStatus.PENDING,
+				"방문자", "010-1234-5678", "54321", "서울특별시 마포구 양화로 45", null));
+		goodsOrderItemRepository.save(
+				new GoodsOrderItem(pendingOrder, tshirt, 1, tshirt.getPrice(), pendingItemAmount));
+
+		log.info("[initData] 굿즈 주문 2건 생성 완료 (PAID 1건 / PENDING 1건)");
 	}
 }
