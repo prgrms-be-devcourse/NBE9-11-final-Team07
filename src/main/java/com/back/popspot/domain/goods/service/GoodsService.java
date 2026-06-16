@@ -87,7 +87,9 @@ public class GoodsService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<GoodsImagePresignResponse> generatePresignedUrls(GoodsImagePresignRequest request) {
+	public List<GoodsImagePresignResponse> generatePresignedUrls(Long goodsId, GoodsImagePresignRequest request) {
+		goodsRepository.findById(goodsId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
 		return request.fileNames().stream()
 			.map(fileName -> {
 				String key = s3Service.buildTempKey(fileName);
@@ -162,9 +164,27 @@ public class GoodsService {
 
 	@Transactional(readOnly = true)
 	public List<GoodsListResponse> getGoodsList(Long popupStoreId) {
-		return goodsRepository.findByPopupStoreIdAndDeletedAtIsNull(popupStoreId)
+		List<Goods> goodsList = goodsRepository.findByPopupStoreIdAndDeletedAtIsNull(popupStoreId);
+		if (goodsList.isEmpty()) {
+			return List.of();
+		}
+		Map<Long, Map<GoodsImageType, String>> imageMap = goodsImageRepository.findByGoodsIn(goodsList)
 			.stream()
-			.map(GoodsListResponse::from)
+			.collect(Collectors.groupingBy(
+				img -> img.getGoods().getId(),
+				Collectors.toMap(GoodsImage::getImageType, GoodsImage::getImageKey)
+			));
+		return goodsList.stream()
+			.map(goods -> {
+				Map<GoodsImageType, String> images = imageMap.getOrDefault(goods.getId(), Map.of());
+				String productUrl = images.containsKey(GoodsImageType.PRODUCT)
+					? s3Service.generatePresignedGetUrl(images.get(GoodsImageType.PRODUCT))
+					: null;
+				String detailUrl = images.containsKey(GoodsImageType.DETAIL)
+					? s3Service.generatePresignedGetUrl(images.get(GoodsImageType.DETAIL))
+					: null;
+				return GoodsListResponse.from(goods, productUrl, detailUrl);
+			})
 			.toList();
 	}
 

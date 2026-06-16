@@ -10,8 +10,10 @@ import lombok.RequiredArgsConstructor;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 @Service
@@ -69,6 +71,17 @@ public class S3Service {
                 .build())
             .build();
         return s3Presigner.presignPutObject(presignRequest).url().toExternalForm();
+    }
+
+    public String generatePresignedGetUrl(String key) {
+        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+            .signatureDuration(Duration.ofMinutes(10))
+            .getObjectRequest(GetObjectRequest.builder()
+                .bucket(s3Properties.getBucket())
+                .key(key)
+                .build())
+            .build();
+        return s3Presigner.presignGetObject(presignRequest).url().toExternalForm();
     }
 
     private String extractExtension(String fileName) {

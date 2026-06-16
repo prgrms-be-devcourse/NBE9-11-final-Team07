@@ -167,8 +167,10 @@ class GoodsControllerTest extends IntegrationTestSupport {
     void getGoodsList() throws Exception {
         Long popupStoreId = 1L;
         List<GoodsListResponse> response = List.of(
-            new GoodsListResponse(1L, "한정판 포스터", 15000, 30),
-            new GoodsListResponse(2L, "에코백", 25000, 50)
+            new GoodsListResponse(1L, "한정판 포스터", 15000, 30,
+                "https://s3.example.com/product1.jpg", "https://s3.example.com/detail1.jpg"),
+            new GoodsListResponse(2L, "에코백", 25000, 50,
+                "https://s3.example.com/product2.jpg", null)
         );
 
         given(goodsService.getGoodsList(eq(popupStoreId))).willReturn(response);
@@ -180,7 +182,9 @@ class GoodsControllerTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.data[0].id").value(1))
             .andExpect(jsonPath("$.data[0].name").value("한정판 포스터"))
             .andExpect(jsonPath("$.data[0].price").value(15000))
-            .andExpect(jsonPath("$.data[0].stock").value(30));
+            .andExpect(jsonPath("$.data[0].stock").value(30))
+            .andExpect(jsonPath("$.data[0].productImageUrl").value("https://s3.example.com/product1.jpg"))
+            .andExpect(jsonPath("$.data[0].detailImageUrl").value("https://s3.example.com/detail1.jpg"));
     }
 
     @Test

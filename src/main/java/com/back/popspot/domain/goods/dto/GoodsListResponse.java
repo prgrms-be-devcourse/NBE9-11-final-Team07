@@ -6,14 +6,18 @@ public record GoodsListResponse(
     Long id,
     String name,
     int price,
-    int stock
+    int stock,
+    String productImageUrl,
+    String detailImageUrl
 ) {
-    public static GoodsListResponse from(Goods goods) {
+    public static GoodsListResponse from(Goods goods, String productImageUrl, String detailImageUrl) {
         return new GoodsListResponse(
             goods.getId(),
             goods.getName(),
             goods.getPrice(),
-            goods.getStock()
+            goods.getStock(),
+            productImageUrl,
+            detailImageUrl
         );
     }
 }

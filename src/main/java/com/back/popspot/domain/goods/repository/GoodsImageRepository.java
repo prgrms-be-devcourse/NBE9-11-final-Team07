@@ -10,4 +10,6 @@ import com.back.popspot.domain.goods.entity.GoodsImage;
 public interface GoodsImageRepository extends JpaRepository<GoodsImage, Long> {
 
     List<GoodsImage> findByGoods(Goods goods);
+
+    List<GoodsImage> findByGoodsIn(List<Goods> goods);
 }
