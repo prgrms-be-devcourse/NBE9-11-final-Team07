@@ -26,7 +26,7 @@ public class GoodsDetailResponse {
     private Long popupStoreId;
     private String popupStoreTitle;
 
-    public static GoodsDetailResponse from(Goods goods, List<GoodsImage> images) {
+    public static GoodsDetailResponse from(Goods goods, List<GoodsImageResponse> images) {
         return new GoodsDetailResponse(
             goods.getId(),
             goods.getName(),
@@ -34,7 +34,7 @@ public class GoodsDetailResponse {
             goods.getPrice(),
             goods.getStock(),
             goods.getStatus(),
-            images.stream().map(GoodsImageResponse::from).toList(),
+            images,
             goods.getPopupStore().getId(),
             goods.getPopupStore().getTitle()
         );
@@ -45,11 +45,11 @@ public class GoodsDetailResponse {
     @AllArgsConstructor
     public static class GoodsImageResponse {
 
-        private String imageKey;
+        private String imageUrl;
         private GoodsImageType imageType;
 
-        public static GoodsImageResponse from(GoodsImage image) {
-            return new GoodsImageResponse(image.getImageKey(), image.getImageType());
+        public static GoodsImageResponse from(GoodsImage image, String imageUrl) {
+            return new GoodsImageResponse(imageUrl, image.getImageType());
         }
     }
 }
