@@ -49,7 +49,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.code").value("SUCCESS"))
             .andExpect(jsonPath("$.data.content[0].goodsId").value(1))
             .andExpect(jsonPath("$.data.content[0].name").value("팝업 티셔츠"))
-            .andExpect(jsonPath("$.data.content[0].thumbnailImageKey").value("thumb.jpg"))
+            .andExpect(jsonPath("$.data.content[0].thumbnailImageUrl").value("thumb.jpg"))
             .andExpect(jsonPath("$.data.totalElements").value(1));
     }
 
@@ -99,7 +99,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.goodsId").value(1))
             .andExpect(jsonPath("$.data.name").value("팝업 티셔츠"))
-            .andExpect(jsonPath("$.data.images[0].imageKey").value("img.jpg"))
+            .andExpect(jsonPath("$.data.images[0].imageUrl").value("img.jpg"))
             .andExpect(jsonPath("$.data.images[0].imageType").value("PRODUCT"))
             .andExpect(jsonPath("$.data.popupStoreTitle").value("서울 팝업 2026"));
     }
