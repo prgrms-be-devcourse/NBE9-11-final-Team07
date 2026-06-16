@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.back.popspot.domain.popupStore.dto.PopupImagePresignResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreDetailResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreListResponse;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotResponse;
@@ -56,5 +57,14 @@ public class PopupStoreController {
 	) {
 		List<ReservationSlotResponse> slots = popupStoreService.getSlots(popupStoreId, date);
 		return ResponseEntity.ok(CommonApiResponse.success(slots));
+	}
+
+	// 이미지 업로드용 presigned PUT URL 발급
+	@GetMapping("/images/presigned-url")
+	public ResponseEntity<CommonApiResponse<PopupImagePresignResponse>> getPresignedUrl(
+			@RequestParam String fileName
+	) {
+		PopupImagePresignResponse response = popupStoreService.generatePresignedUrl(fileName);
+		return ResponseEntity.ok(CommonApiResponse.success(response));
 	}
 }

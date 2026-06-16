@@ -9,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.back.popspot.domain.popupStore.dto.PopupImagePresignResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreDetailResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreListResponse;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotResponse;
@@ -18,6 +19,7 @@ import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
+import com.back.popspot.global.s3.S3Service;
 
 import lombok.RequiredArgsConstructor;
 
@@ -29,6 +31,7 @@ PopupStoreService {
 
 	private final PopupStoreRepository popupStoreRepository;
 	private final ReservationSlotRepository reservationSlotRepository;
+	private final S3Service s3Service;
 
 	/**
 	 * 팝업스토어 목록을 조회한다.
@@ -39,7 +42,10 @@ PopupStoreService {
 		LocalDateTime now = LocalDateTime.now();
 		Page<PopupStore> popupStores = findByStatus(status, now, pageable);
 		return popupStores.map(popupStore ->
-			PopupStoreListResponse.from(popupStore, popupStore.calculateStatus(now)));
+			PopupStoreListResponse.from(
+				popupStore,
+				popupStore.calculateStatus(now),
+				presignedImageUrl(popupStore.getImageKey())));
 	}
 
 	/**
@@ -51,7 +57,22 @@ PopupStoreService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		PopupStatus status = popupStore.calculateStatus(LocalDateTime.now());
-		return PopupStoreDetailResponse.from(popupStore, status);
+		return PopupStoreDetailResponse.from(popupStore, status, presignedImageUrl(popupStore.getImageKey()));
+	}
+
+	// imageKey 로 presigned GET URL 발급 (없으면 null)
+	private String presignedImageUrl(String imageKey) {
+		return imageKey != null ? s3Service.generatePresignedGetUrl(imageKey) : null;
+	}
+
+	/**
+	 * 이미지 업로드용 presigned PUT URL 을 발급한다.
+	 * 반환된 tempKey 를 업로드 후 등록/수정 요청의 imageKey 로 전달한다.
+	 */
+	public PopupImagePresignResponse generatePresignedUrl(String fileName) {
+		String tempKey = s3Service.buildTempKey(fileName);
+		String presignedUrl = s3Service.generatePresignedPutUrl(tempKey);
+		return new PopupImagePresignResponse(tempKey, presignedUrl);
 	}
 
 	/**
