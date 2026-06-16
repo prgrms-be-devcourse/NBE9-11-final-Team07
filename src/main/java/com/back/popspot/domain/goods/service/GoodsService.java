@@ -73,7 +73,16 @@ public class GoodsService {
     public GoodsDetailResponse getGoodsDetail(Long goodsId) {
         Goods goods = goodsRepository.findByIdAndDeletedAtIsNull(goodsId)
             .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
-        List<GoodsImage> images = goodsImageRepository.findByGoods_IdOrderByIdAsc(goodsId);
+        List<GoodsDetailResponse.GoodsImageResponse> images = goodsImageRepository
+            .findByGoods_IdOrderByIdAsc(goodsId)
+            .stream()
+            .map(image -> {
+                String imageUrl = image.getImageKey() != null
+                    ? s3Service.generatePresignedGetUrl(image.getImageKey())
+                    : null;
+                return GoodsDetailResponse.GoodsImageResponse.from(image, imageUrl);
+            })
+            .toList();
         return GoodsDetailResponse.from(goods, images);
     }
 
@@ -252,7 +261,9 @@ public class GoodsService {
                 .stream()
                 .collect(Collectors.toMap(
                     img -> img.getGoods().getId(),
-                    GoodsImage::getImageKey,
+                    img -> img.getImageKey() != null
+                        ? s3Service.generatePresignedGetUrl(img.getImageKey())
+                        : null,
                     (first, second) -> first
                 ));
 
