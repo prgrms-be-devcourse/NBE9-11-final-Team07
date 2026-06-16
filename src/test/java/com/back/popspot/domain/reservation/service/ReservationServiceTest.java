@@ -108,7 +108,7 @@ class ReservationServiceTest {
 		ReflectionTestUtils.setField(paidSlot, "slotDate", LocalDate.of(2026, 6, 21));
 		ReflectionTestUtils.setField(paidSlot, "startTime", LocalTime.of(14, 0));
 
-		when(reservationRepository.findByMemberIdAndStatusIn(
+		when(reservationRepository.findByUserIdAndStatusIn(
 			eq(2L),
 			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
 			any(Pageable.class)
@@ -138,7 +138,7 @@ class ReservationServiceTest {
 		assertEquals(15000, canceled.price());
 		assertEquals(ReservationStatus.CANCELED, canceled.status());
 
-		verify(reservationRepository).findByMemberIdAndStatusIn(
+		verify(reservationRepository).findByUserIdAndStatusIn(
 			eq(2L),
 			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
 			argThat(requestedPageable ->
@@ -166,7 +166,7 @@ class ReservationServiceTest {
 		Pageable pageable = PageRequest.of(0, 10);
 		Page<Reservation> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
 
-		when(reservationRepository.findByMemberIdAndStatusIn(
+		when(reservationRepository.findByUserIdAndStatusIn(
 			eq(2L),
 			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
 			any(Pageable.class)
@@ -178,7 +178,7 @@ class ReservationServiceTest {
 		// then
 		assertTrue(response.getContent().isEmpty());
 		assertEquals(0, response.getTotalElements());
-		verify(reservationRepository).findByMemberIdAndStatusIn(
+		verify(reservationRepository).findByUserIdAndStatusIn(
 			eq(2L),
 			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
 			any(Pageable.class)
@@ -196,14 +196,14 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService
 		);
-		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
 
 		when(reservationSlotRepository.findById(1L)).thenReturn(Optional.of(slot));
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByMemberIdAndSlotId(2L, 1L)).thenReturn(false);
+		when(reservationRepository.existsByUserIdAndSlotId(2L, 1L)).thenReturn(false);
 		when(reservationSlotRepository.increaseReservedCountIfAvailable(1L)).thenReturn(1);
 		when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> {
 			Reservation reservation = invocation.getArgument(0);
@@ -212,7 +212,7 @@ class ReservationServiceTest {
 		});
 
 		// when
-		ReservationCreateResponse response = reservationService.createReservation(request);
+		ReservationCreateResponse response = reservationService.createReservation(request, 2L);
 
 		// then
 		assertEquals(100L, response.reservationId());
@@ -235,19 +235,19 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService
 		);
-		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
 
 		when(reservationSlotRepository.findById(1L)).thenReturn(Optional.of(slot));
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByMemberIdAndSlotId(2L, 1L)).thenReturn(true);
+		when(reservationRepository.existsByUserIdAndSlotId(2L, 1L)).thenReturn(true);
 
 		// when
 		BusinessException exception = assertThrows(
 			BusinessException.class,
-			() -> reservationService.createReservation(request)
+			() -> reservationService.createReservation(request, 2L)
 		);
 
 		// then
@@ -265,14 +265,14 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService
 		);
-		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 
 		when(reservationSlotRepository.findById(1L)).thenReturn(Optional.empty());
 
 		// when
 		BusinessException exception = assertThrows(
 			BusinessException.class,
-			() -> reservationService.createReservation(request)
+			() -> reservationService.createReservation(request, 2L)
 		);
 
 		// then
@@ -290,7 +290,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService
 		);
-		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 
@@ -302,7 +302,7 @@ class ReservationServiceTest {
 		// when
 		BusinessException exception = assertThrows(
 			BusinessException.class,
-			() -> reservationService.createReservation(request)
+			() -> reservationService.createReservation(request, 2L)
 		);
 
 		// then
@@ -320,20 +320,20 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService
 		);
-		ReservationCreateRequest request = new ReservationCreateRequest(1L, 2L);
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
 
 		when(reservationSlotRepository.findById(1L)).thenReturn(Optional.of(slot));
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByMemberIdAndSlotId(2L, 1L)).thenReturn(false);
+		when(reservationRepository.existsByUserIdAndSlotId(2L, 1L)).thenReturn(false);
 		when(reservationSlotRepository.increaseReservedCountIfAvailable(1L)).thenReturn(0);
 
 		// when
 		BusinessException exception = assertThrows(
 			BusinessException.class,
-			() -> reservationService.createReservation(request)
+			() -> reservationService.createReservation(request, 2L)
 		);
 
 		// then
@@ -419,7 +419,7 @@ class ReservationServiceTest {
 
 		verify(paymentRepository).save(argThat(payment ->
 			payment.getReservation().equals(reservation)
-				&& payment.getMember().equals(user)
+				&& payment.getUser().equals(user)
 				&& payment.getPaymentType() == PaymentType.POPUP
 				&& payment.getStatus() == PaymentStatus.READY
 				&& "idem-paid-1".equals(payment.getIdempotencyKey())
@@ -711,7 +711,7 @@ class ReservationServiceTest {
 		Reservation reservation = new Reservation();
 
 		ReflectionTestUtils.setField(reservation, "id", reservationId);
-		ReflectionTestUtils.setField(reservation, "member", user);
+		ReflectionTestUtils.setField(reservation, "user", user);
 		ReflectionTestUtils.setField(reservation, "slot", slot);
 		ReflectionTestUtils.setField(reservation, "status", status);
 

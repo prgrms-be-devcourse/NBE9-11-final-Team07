@@ -26,8 +26,8 @@ public class PaymentRefund extends BaseEntity {
 	private Payment payment;
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "member_id", nullable = false)
-	private User member;
+	@JoinColumn(name = "user_id", nullable = false)
+	private User user;
 
 	@Column(name = "refund_amount", nullable = false)
 	private int refundAmount;

@@ -17,10 +17,10 @@ import com.back.popspot.domain.reservation.entity.ReservationStatus;
 public interface ReservationRepository extends JpaRepository<Reservation, Long> {
 
 	// 같은 유저의 같은 슬롯 예약 존재 여부 확인
-	boolean existsByMemberIdAndSlotId(Long memberId, Long slotId);
+	boolean existsByUserIdAndSlotId(Long userId, Long slotId);
 
 	// 사용자의 확정/취소 예약 목록 조회
-	Page<Reservation> findByMemberIdAndStatusIn(Long memberId, Collection<ReservationStatus> statuses, Pageable pageable);
+	Page<Reservation> findByUserIdAndStatusIn(Long userId, Collection<ReservationStatus> statuses, Pageable pageable);
 
 	// 만료 시간이 지난 선점 예약 조회
 	List<Reservation> findByStatusAndHeldUntilBefore(ReservationStatus status, LocalDateTime now);

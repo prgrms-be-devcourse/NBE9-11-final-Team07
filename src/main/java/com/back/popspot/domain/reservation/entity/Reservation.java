@@ -23,12 +23,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Table(
 	name = "reservation",
-	uniqueConstraints = @UniqueConstraint(columnNames = {"member_id", "slot_id"})
+	uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "slot_id"})
 )
 public class Reservation extends BaseEntity {
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "member_id", nullable = false)
-	private User member;
+	@JoinColumn(name = "user_id", nullable = false)
+	private User user;
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "slot_id", nullable = false)
@@ -54,21 +54,21 @@ public class Reservation extends BaseEntity {
 	private String reservationPhone;
 
 	private Reservation(
-		User member,
+		User user,
 		ReservationSlot slot,
 		ReservationStatus status,
 		LocalDateTime heldUntil,
 		LocalDateTime reservedAt
 	) {
-		this.member = member;
+		this.user = user;
 		this.slot = slot;
 		this.status = status;
 		this.heldUntil = heldUntil;
 		this.reservedAt = reservedAt;
 	}
 
-	public static Reservation createHeld(User member, ReservationSlot slot, LocalDateTime now, LocalDateTime heldUntil) {
-		return new Reservation(member, slot, ReservationStatus.HELD, heldUntil, now);
+	public static Reservation createHeld(User user, ReservationSlot slot, LocalDateTime now, LocalDateTime heldUntil) {
+		return new Reservation(user, slot, ReservationStatus.HELD, heldUntil, now);
 	}
 
 	public void cancel(LocalDateTime canceledAt) {

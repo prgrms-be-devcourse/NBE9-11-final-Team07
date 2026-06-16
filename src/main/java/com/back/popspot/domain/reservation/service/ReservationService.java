@@ -60,7 +60,7 @@ public class ReservationService {
 			DEFAULT_RESERVATION_SORT
 		);
 
-		return reservationRepository.findByMemberIdAndStatusIn(
+		return reservationRepository.findByUserIdAndStatusIn(
 			userId,
 			List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED),
 			effectivePageable
@@ -68,7 +68,7 @@ public class ReservationService {
 	}
 
 	@Transactional
-	public ReservationCreateResponse createReservation(ReservationCreateRequest request) {
+	public ReservationCreateResponse createReservation(ReservationCreateRequest request, Long userId) {
 		ReservationSlot slot = reservationSlotRepository.findById(request.slotId())
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_SLOT_NOT_FOUND));
 
@@ -85,11 +85,11 @@ public class ReservationService {
 			throw new BusinessException(ErrorCode.POPUP_RESERVATION_NOT_AVAILABLE);
 		}
 
-		User user = userRepository.findById(request.userId())
+		User user = userRepository.findById(userId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		// 중복 예약 방지
-		if (reservationRepository.existsByMemberIdAndSlotId(user.getId(), slot.getId())) {
+		if (reservationRepository.existsByUserIdAndSlotId(user.getId(), slot.getId())) {
 			throw new BusinessException(ErrorCode.RESERVATION_ALREADY_EXISTS);
 		}
 
@@ -110,7 +110,7 @@ public class ReservationService {
 		Reservation reservation = reservationRepository.findById(reservationId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
-		if (!reservation.getMember().getId().equals(userId)) {
+		if (!reservation.getUser().getId().equals(userId)) {
 			throw new BusinessException(ErrorCode.FORBIDDEN);
 		}
 
@@ -156,7 +156,7 @@ public class ReservationService {
 		Reservation reservation = reservationRepository.findById(reservationId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
-		if (!reservation.getMember().getId().equals(userId)) {
+		if (!reservation.getUser().getId().equals(userId)) {
 			throw new BusinessException(ErrorCode.FORBIDDEN);
 		}
 
@@ -198,7 +198,7 @@ public class ReservationService {
 			.orElse(null);
 		if (existingIdempotentPayment != null) {
 			if (!existingIdempotentPayment.getReservation().getId().equals(reservationId)
-				|| !existingIdempotentPayment.getMember().getId().equals(userId)
+				|| !existingIdempotentPayment.getUser().getId().equals(userId)
 				|| existingIdempotentPayment.getPaymentType() != PaymentType.POPUP) {
 				throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 			}
@@ -207,7 +207,7 @@ public class ReservationService {
 
 		// 첫 결제 진입이면 READY 상태의 결제를 새로 만든다.
 		Payment payment = Payment.createReadyReservationPayment(
-			reservation.getMember(),
+			reservation.getUser(),
 			reservation,
 			UUID.randomUUID().toString(),
 			popupStore.getTitle() + " 예약",

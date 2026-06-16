@@ -31,9 +31,10 @@ public class ReservationController {
 
 	@PostMapping
 	public ResponseEntity<CommonApiResponse<ReservationCreateResponse>> createReservation(
+		@AuthenticationPrincipal Long userId,
 		@Valid @RequestBody ReservationCreateRequest request
 	) {
-		ReservationCreateResponse response = reservationService.createReservation(request);
+		ReservationCreateResponse response = reservationService.createReservation(request, userId);
 
 		return ResponseEntity.status(HttpStatus.CREATED)
 			.body(CommonApiResponse.created("예약 생성이 완료되었습니다.", response));

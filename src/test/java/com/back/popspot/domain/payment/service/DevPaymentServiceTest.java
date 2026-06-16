@@ -57,7 +57,7 @@ class DevPaymentServiceTest {
 		assertThat(response.amount()).isEqualTo(1000L);
 		assertThat(response.status()).isEqualTo(PaymentStatus.READY);
 		verify(paymentRepository).save(org.mockito.ArgumentMatchers.argThat(payment ->
-			payment.getMember() == user
+			payment.getUser() == user
 				&& payment.getPaymentType() == PaymentType.GOODS
 				&& payment.getIdempotencyKey() != null
 		));

@@ -25,7 +25,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "payment")
 public class Payment extends BaseEntity {
 	public static Payment createReady(
-		User member,
+		User user,
 		PaymentType paymentType,
 		String orderId,
 		String orderName,
@@ -33,7 +33,7 @@ public class Payment extends BaseEntity {
 		String idempotencyKey
 	) {
 		Payment payment = new Payment();
-		payment.member = member;
+		payment.user = user;
 		payment.paymentType = paymentType;
 		payment.orderId = orderId;
 		payment.orderName = orderName;
@@ -44,8 +44,8 @@ public class Payment extends BaseEntity {
 	}
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "member_id", nullable = false)
-	private User member;
+	@JoinColumn(name = "user_id", nullable = false)
+	private User user;
 
 	// payment_type = POPUP 일 때 사용
 	@ManyToOne(fetch = FetchType.LAZY)
@@ -84,7 +84,7 @@ public class Payment extends BaseEntity {
 	private String idempotencyKey;
 
 	private Payment(
-		User member,
+		User user,
 		Reservation reservation,
 		GoodsOrder goodsOrder,
 		PaymentType paymentType,
@@ -94,7 +94,7 @@ public class Payment extends BaseEntity {
 		PaymentStatus status,
 		String idempotencyKey
 	) {
-		this.member = member;
+		this.user = user;
 		this.reservation = reservation;
 		this.goodsOrder = goodsOrder;
 		this.paymentType = paymentType;
@@ -106,7 +106,7 @@ public class Payment extends BaseEntity {
 	}
 
 	public static Payment createReadyReservationPayment(
-		User member,
+		User user,
 		Reservation reservation,
 		String orderId,
 		String orderName,
@@ -114,7 +114,7 @@ public class Payment extends BaseEntity {
 		String idempotencyKey
 	) {
 		return new Payment(
-			member,
+			user,
 			reservation,
 			null,
 			PaymentType.POPUP,
