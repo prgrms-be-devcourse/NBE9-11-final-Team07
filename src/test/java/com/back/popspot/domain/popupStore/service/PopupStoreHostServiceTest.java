@@ -20,6 +20,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
@@ -30,6 +32,7 @@ import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
+import com.back.popspot.global.s3.S3Service;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
@@ -50,6 +53,9 @@ class PopupStoreHostServiceTest {
 
 	@Mock
 	private EntityManager entityManager;
+
+	@Mock
+	private S3Service s3Service;
 
 	@InjectMocks
 	private PopupStoreHostService popupStoreHostService;
@@ -371,6 +377,87 @@ class PopupStoreHostServiceTest {
 				.extracting(e -> ((BusinessException) e).getErrorCode())
 				.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
 		verify(reservationSlotRepository, never()).delete(any());
+	}
+
+	@Test
+	@DisplayName("S3-등록: 임시 이미지면 popup/{id}/{file} 로 move 하고 키를 갱신한다")
+	void createPopupStore_tempImage_movesAndUpdatesKey() {
+		PopupStoreCreateRequest request = new PopupStoreCreateRequest(
+				"제목", "위치", PopupFeeType.FREE, null,
+				NOW, NOW.plusDays(1), NOW.plusDays(2), NOW.plusDays(3),
+				"temp/abc.jpg", "설명");
+		when(entityManager.getReference(User.class, USER_ID)).thenReturn(User.create("h@test.com", "h"));
+		PopupStore[] holder = new PopupStore[1];
+		when(popupStoreRepository.save(any(PopupStore.class))).thenAnswer(invocation -> {
+			PopupStore saved = invocation.getArgument(0);
+			ReflectionTestUtils.setField(saved, "id", 100L);
+			holder[0] = saved;
+			return saved;
+		});
+		when(s3Service.isTempKey("temp/abc.jpg")).thenReturn(true);
+		when(s3Service.extractFileName("temp/abc.jpg")).thenReturn("abc.jpg");
+
+		popupStoreHostService.createPopupStore(USER_ID, request);
+
+		verify(s3Service).move("temp/abc.jpg", "popup/100/abc.jpg");
+		assertThat(holder[0].getImageKey()).isEqualTo("popup/100/abc.jpg");
+	}
+
+	@Test
+	@DisplayName("S3-삭제: 팝업 이미지 삭제는 트랜잭션 커밋 후(afterCommit)에 실행된다")
+	void deletePopupStore_deletesImageAfterCommit() {
+		PopupStore popupStore = popupWithOpenDate(USER_ID, FUTURE);
+		ReflectionTestUtils.setField(popupStore, "imageKey", "popup/10/img.jpg");
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+
+		TransactionSynchronizationManager.initSynchronization();
+		try {
+			popupStoreHostService.deletePopupStore(USER_ID, 10L);
+
+			// 커밋 전: 아직 S3 삭제 안 함
+			verify(s3Service, never()).delete(any());
+
+			// 등록된 동기화의 afterCommit 수동 실행
+			TransactionSynchronizationManager.getSynchronizations()
+					.forEach(TransactionSynchronization::afterCommit);
+
+			// 커밋 후: S3 삭제됨
+			verify(s3Service).delete("popup/10/img.jpg");
+		} finally {
+			TransactionSynchronizationManager.clearSynchronization();
+		}
+	}
+
+	@Test
+	@DisplayName("S3-수정: 임시 이미지면 새 이미지 move + 기존 이미지는 커밋 후 삭제")
+	void updatePopupStore_tempImage_movesNewAndDeletesOldAfterCommit() {
+		PopupStore popupStore = existingPopup(USER_ID);
+		ReflectionTestUtils.setField(popupStore, "imageKey", "popup/10/old.jpg");
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+		when(s3Service.isTempKey("temp/new.jpg")).thenReturn(true);
+		when(s3Service.extractFileName("temp/new.jpg")).thenReturn("new.jpg");
+
+		PopupStoreUpdateRequest request = new PopupStoreUpdateRequest(
+				null, null, null, null, null, null, null, null, "temp/new.jpg", null);
+
+		TransactionSynchronizationManager.initSynchronization();
+		try {
+			popupStoreHostService.updatePopupStore(USER_ID, 10L, request);
+
+			// 새 이미지는 즉시 move + 키 갱신
+			verify(s3Service).move("temp/new.jpg", "popup/10/new.jpg");
+			assertThat(popupStore.getImageKey()).isEqualTo("popup/10/new.jpg");
+			// 기존 이미지는 커밋 전엔 삭제 안 함
+			verify(s3Service, never()).delete(any());
+
+			TransactionSynchronizationManager.getSynchronizations()
+					.forEach(TransactionSynchronization::afterCommit);
+
+			// 커밋 후: 기존 이미지 삭제
+			verify(s3Service).delete("popup/10/old.jpg");
+		} finally {
+			TransactionSynchronizationManager.clearSynchronization();
+		}
 	}
 
 	private PopupStore popupForSlot(Long ownerId) {
