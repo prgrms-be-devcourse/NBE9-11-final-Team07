@@ -357,7 +357,7 @@ class ReservationServiceTest {
 		Reservation reservation = createConfirmedReservation(100L, user, slot);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.DONE))
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 			.thenReturn(false);
 		when(reservationRepository.cancelConfirmedReservation(
 			eq(100L),
@@ -402,7 +402,7 @@ class ReservationServiceTest {
 		ReflectionTestUtils.setField(popupStore, "price", 5000);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.DONE))
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 			.thenReturn(false);
 		when(paymentRepository.findByIdempotencyKey("idem-paid-1")).thenReturn(Optional.empty());
 		when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -497,7 +497,7 @@ class ReservationServiceTest {
 		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.PAID);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.DONE))
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 			.thenReturn(false);
 		when(paymentRepository.findByIdempotencyKey("idem-paid-2")).thenReturn(Optional.of(existingPayment));
 
@@ -646,7 +646,7 @@ class ReservationServiceTest {
 		Reservation reservation = createConfirmedReservation(100L, user, slot);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.DONE))
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 			.thenReturn(false);
 		when(reservationRepository.cancelConfirmedReservation(
 			eq(100L),

@@ -64,9 +64,9 @@ class PaymentServiceTest {
 		assertThat(response.orderId()).isEqualTo("order-id");
 		assertThat(response.paymentKey()).isEqualTo("payment-key");
 		assertThat(response.amount()).isEqualTo(1000L);
-		assertThat(response.status()).isEqualTo(PaymentStatus.DONE);
+		assertThat(response.status()).isEqualTo(PaymentStatus.PAID);
 		assertThat(response.approvedAt()).isEqualTo(LocalDateTime.of(2026, 6, 16, 10, 0));
-		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
 		assertThat(payment.getPaymentKey()).isEqualTo("payment-key");
 		assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
 	}
@@ -98,7 +98,7 @@ class PaymentServiceTest {
 
 		PaymentConfirmResponse response = paymentService.confirm(request);
 
-		assertThat(response.status()).isEqualTo(PaymentStatus.DONE);
+		assertThat(response.status()).isEqualTo(PaymentStatus.PAID);
 		assertThat(response.paymentKey()).isEqualTo("payment-key");
 		verify(tossPaymentsClient, never()).confirm(request);
 	}

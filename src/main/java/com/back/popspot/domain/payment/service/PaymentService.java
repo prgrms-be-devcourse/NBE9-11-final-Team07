@@ -31,7 +31,7 @@ public class PaymentService {
 
 		validateAmount(payment, request.amount());
 
-		if (payment.isDone()) {
+		if (payment.isPaid()) {
 			validatePaymentKey(payment, request.paymentKey());
 			return PaymentConfirmResponse.from(payment);
 		}

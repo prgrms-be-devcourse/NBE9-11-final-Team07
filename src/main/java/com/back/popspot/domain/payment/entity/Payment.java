@@ -126,8 +126,8 @@ public class Payment extends BaseEntity {
 		);
 	}
 
-	public boolean isDone() {
-		return status == PaymentStatus.DONE;
+	public boolean isPaid() {
+		return status == PaymentStatus.PAID;
 	}
 
 	public boolean isReady() {
@@ -136,7 +136,7 @@ public class Payment extends BaseEntity {
 
 	public void complete(String paymentKey, LocalDateTime approvedAt) {
 		this.paymentKey = paymentKey;
-		this.status = PaymentStatus.DONE;
+		this.status = PaymentStatus.PAID;
 		this.approvedAt = approvedAt;
 
 		if (reservation != null) {

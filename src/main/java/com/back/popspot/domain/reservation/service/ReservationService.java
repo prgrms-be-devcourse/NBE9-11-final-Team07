@@ -126,7 +126,7 @@ public class ReservationService {
 		if (paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(
 			reservationId,
 			PaymentType.POPUP,
-			PaymentStatus.DONE
+			PaymentStatus.PAID
 		)) {
 			// TODO: 결제 도메인 환불 요청 연동
 		}
@@ -188,7 +188,7 @@ public class ReservationService {
 		if (paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(
 			reservationId,
 			PaymentType.POPUP,
-			PaymentStatus.DONE
+			PaymentStatus.PAID
 		)) {
 			throw new BusinessException(ErrorCode.RESERVATION_PAYMENT_ALREADY_COMPLETED);
 		}
