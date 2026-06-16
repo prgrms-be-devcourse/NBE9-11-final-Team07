@@ -4,7 +4,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -34,14 +33,17 @@ public class SecurityConfig {
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		http
 				// JWT 기반이므로 form login / http basic / csrf / 세션 모두 사용하지 않는다.
-				.csrf(AbstractHttpConfigurer::disable)
-				.formLogin(AbstractHttpConfigurer::disable)
-				.httpBasic(AbstractHttpConfigurer::disable)
+				.csrf(csrf -> csrf.disable())
+				.headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()))
+				.formLogin(formLogin -> formLogin.disable())
+				.httpBasic(httpBasic -> httpBasic.disable())
 				.sessionManagement(session ->
 						session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
 				// 인가 규칙: 비회원은 GET /popups/**, GET /api/v1/goods/** 허용, 나머지는 인증 필요
 				.authorizeHttpRequests(auth -> auth
+						.requestMatchers("/h2-console/**").permitAll()
+						.requestMatchers("/api/payments/confirm").permitAll()
 						.requestMatchers(HttpMethod.GET, "/popups/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/goods/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/popups/*/goods").permitAll()

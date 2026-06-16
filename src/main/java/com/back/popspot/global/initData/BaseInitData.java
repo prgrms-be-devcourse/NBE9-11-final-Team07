@@ -13,6 +13,10 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.back.popspot.domain.coupon.dto.CouponCreateRequest;
+import com.back.popspot.domain.coupon.entity.Coupon;
+import com.back.popspot.domain.coupon.entity.CouponDiscountType;
+import com.back.popspot.domain.coupon.repository.CouponRepository;
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
@@ -43,6 +47,7 @@ public class BaseInitData {
 	private final UserRepository userRepository;
 	private final PopupStoreRepository popupStoreRepository;
 	private final ReservationSlotRepository reservationSlotRepository;
+	private final CouponRepository couponRepository;
 
 	@Bean
 	public ApplicationRunner initData() {
@@ -50,6 +55,7 @@ public class BaseInitData {
 			self.initUsers();
 			self.initPopupStores();
 			self.initReservationSlots();
+			self.initCoupons();
 		};
 	}
 
@@ -129,5 +135,51 @@ public class BaseInitData {
 				new ReservationSlotCreateRequest(slotDate, LocalTime.of(19, 0), 20)));  // 저녁
 
 		log.info("[initData] OPEN 팝업에 예약 슬롯 3개 생성 완료 (오전 / 오후 / 저녁)");
+	}
+
+	// ===== 쿠폰 =====
+	@Transactional
+	public void initCoupons() {
+		if (couponRepository.count() > 0) {
+			return;
+		}
+
+		LocalDateTime now = LocalDateTime.now();
+
+		PopupStore openPopup = popupStoreRepository.findOpen(now, PageRequest.of(0, 1))
+				.getContent().stream().findFirst()
+				.orElseThrow(() -> new IllegalStateException("OPEN 상태 팝업이 없습니다. initPopupStores 가 먼저 실행되어야 합니다."));
+
+		couponRepository.save(Coupon.create(openPopup, new CouponCreateRequest(
+				"굿즈 1,000원 할인 쿠폰",
+				CouponDiscountType.AMOUNT,
+				1000,
+				null,
+				5000,
+				100,
+				now,
+				now.plusDays(7))));
+
+		couponRepository.save(Coupon.create(openPopup, new CouponCreateRequest(
+				"굿즈 10% 할인 쿠폰",
+				CouponDiscountType.PERCENT,
+				10,
+				3000,
+				10000,
+				50,
+				now,
+				now.plusDays(3))));
+
+		couponRepository.save(Coupon.create(openPopup, new CouponCreateRequest(
+				"굿즈 2,000원 할인 쿠폰",
+				CouponDiscountType.AMOUNT,
+				2000,
+				null,
+				10000,
+				30,
+				now,
+				now.plusDays(10))));
+
+		log.info("[initData] 굿즈 쿠폰 3개 생성 완료");
 	}
 }
