@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.goods.entity.GoodsOrder;
+import com.back.popspot.domain.goods.entity.GoodsOrderStatus;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.entity.BaseEntity;
 
@@ -24,6 +25,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "payment")
 public class Payment extends BaseEntity {
 	public static final String READY_STATUS = "READY";
+	public static final String DONE_STATUS = "DONE";
 
 	public static Payment createReady(
 		User member,
@@ -124,5 +126,27 @@ public class Payment extends BaseEntity {
 			"READY",
 			idempotencyKey
 		);
+	}
+
+	public boolean isDone() {
+		return DONE_STATUS.equals(status);
+	}
+
+	public boolean isReady() {
+		return READY_STATUS.equals(status);
+	}
+
+	public void complete(String paymentKey, LocalDateTime approvedAt) {
+		this.paymentKey = paymentKey;
+		this.status = DONE_STATUS;
+		this.approvedAt = approvedAt;
+
+		if (reservation != null) {
+			reservation.confirm();
+		}
+
+		if (goodsOrder != null) {
+			goodsOrder.updateStatus(GoodsOrderStatus.PAID);
+		}
 	}
 }

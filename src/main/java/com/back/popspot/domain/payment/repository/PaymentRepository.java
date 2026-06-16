@@ -14,4 +14,6 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
 	// 같은 멱등성 키로 생성된 기존 결제 조회
 	Optional<Payment> findByIdempotencyKey(String idempotencyKey);
+
+	Optional<Payment> findByOrderId(String orderId);
 }
