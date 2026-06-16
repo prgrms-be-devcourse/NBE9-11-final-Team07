@@ -84,7 +84,7 @@ resource "aws_route_table_association" "public" {
 # ─── EC2 Security Group ───────────────────────────────────────────────────────
 
 resource "aws_security_group" "ec2" {
-  name        = "${var.project_name}-ec2-sg"
+  name        = "7sungsa-ec2-sg"
   description = "Security group for EC2 instance"
   vpc_id      = aws_vpc.main.id
 
@@ -118,7 +118,7 @@ resource "aws_security_group" "ec2" {
 # ─── RDS Security Group ───────────────────────────────────────────────────────
 
 resource "aws_security_group" "rds" {
-  name        = "${var.project_name}-rds-sg"
+  name        = "7sungsa-rds-sg"
   description = "Security group for RDS instance"
   vpc_id      = aws_vpc.main.id
 
@@ -169,7 +169,7 @@ resource "aws_eip" "main" {
 
 resource "aws_db_subnet_group" "main" {
   # RDS subnet group name must start with a letter — prefix with "rds-"
-  name       = "rds-${var.project_name}-subnet-group"
+  name       = "rds-7sungsa-subnet-group"
   subnet_ids = aws_subnet.public[*].id
 
   tags = merge(var.common_tags, { Name = "${var.project_name}-rds-subnet-group" })

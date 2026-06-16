@@ -11,7 +11,7 @@ variable "aws_region" {
 variable "project_name" {
   description = "리소스 네이밍에 사용할 prefix (예: 7sungsa-vpc, 7sungsa-ec2 ...)"
   type        = string
-  default     = "7sungsa"
+  default     = "team07"
 }
 
 variable "common_tags" {
