@@ -86,7 +86,7 @@ class GoodsImageControllerTest extends IntegrationTestSupport {
 			GoodsImageType.PRODUCT, List.of("test.jpg")
 		);
 
-		mockMvc.perform(post("/host/goods/{goodsId}/images", goodsId)
+		mockMvc.perform(post("/host/goods/images")
 				.with(csrf())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(request)))
@@ -95,23 +95,6 @@ class GoodsImageControllerTest extends IntegrationTestSupport {
 			.andExpect(jsonPath("$.data.length()").value(1))
 			.andExpect(jsonPath("$.data[0].imageKey").value(tempKey))
 			.andExpect(jsonPath("$.data[0].presignedUrl").value(presignedUrl));
-	}
-
-	@Test
-	@WithMockUser
-	@DisplayName("존재하지 않는 goodsId로 presigned URL 발급 시 404를 반환한다")
-	void generatePresignedUrls_goodsNotFound() throws Exception {
-		GoodsImagePresignRequest request = new GoodsImagePresignRequest(
-			GoodsImageType.PRODUCT, List.of("test.jpg")
-		);
-
-		mockMvc.perform(post("/host/goods/{goodsId}/images", 999L)
-				.with(csrf())
-				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(request)))
-			.andExpect(status().isNotFound())
-			.andExpect(jsonPath("$.code").value("GOODS_NOT_FOUND"))
-			.andExpect(jsonPath("$.message").value("굿즈를 찾을 수 없습니다."));
 	}
 
 	@Test

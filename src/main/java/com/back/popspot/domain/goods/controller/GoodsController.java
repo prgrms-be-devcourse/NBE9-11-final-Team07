@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-
 import org.springframework.web.bind.annotation.RestController;
 
 import com.back.popspot.domain.goods.dto.GoodsImagePresignRequest;
@@ -44,12 +43,11 @@ public class GoodsController {
 			.body(CommonApiResponse.created("굿즈가 등록되었습니다.", response));
 	}
 
-	@PostMapping("/goods/{goodsId}/images")
+	@PostMapping("/goods/images")
 	public ResponseEntity<CommonApiResponse<List<GoodsImagePresignResponse>>> generatePresignedUrls(
-		@PathVariable Long goodsId,
 		@RequestBody @Valid GoodsImagePresignRequest request
 	) {
-		List<GoodsImagePresignResponse> response = goodsService.generatePresignedUrls(goodsId, request);
+		List<GoodsImagePresignResponse> response = goodsService.generatePresignedUrls(request);
 		return ResponseEntity.ok(CommonApiResponse.success(response));
 	}
 

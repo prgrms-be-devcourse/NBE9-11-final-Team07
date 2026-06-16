@@ -87,9 +87,7 @@ public class GoodsService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<GoodsImagePresignResponse> generatePresignedUrls(Long goodsId, GoodsImagePresignRequest request) {
-		goodsRepository.findById(goodsId)
-			.orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
+	public List<GoodsImagePresignResponse> generatePresignedUrls(GoodsImagePresignRequest request) {
 		return request.fileNames().stream()
 			.map(fileName -> {
 				String key = s3Service.buildTempKey(fileName);
