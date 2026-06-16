@@ -64,6 +64,44 @@ class GoodsControllerTest extends IntegrationTestSupport {
 
     @Test
     @WithMockUser
+    @DisplayName("대표이미지가 없으면 400을 반환한다")
+    void registerGoods_productImageRequired() throws Exception {
+        Long popupStoreId = 1L;
+        GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, 30, null, null);
+
+        given(goodsService.registerGoods(eq(popupStoreId), any()))
+            .willThrow(new BusinessException(ErrorCode.GOODS_PRODUCT_IMAGE_REQUIRED));
+
+        mockMvc.perform(post("/host/popups/{popupStoreId}/goods", popupStoreId)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("GOODS_PRODUCT_IMAGE_REQUIRED"))
+            .andExpect(jsonPath("$.message").value("대표이미지는 필수입니다."));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("상세이미지가 없으면 400을 반환한다")
+    void registerGoods_detailImageRequired() throws Exception {
+        Long popupStoreId = 1L;
+        GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, 30, null, null);
+
+        given(goodsService.registerGoods(eq(popupStoreId), any()))
+            .willThrow(new BusinessException(ErrorCode.GOODS_DETAIL_IMAGE_REQUIRED));
+
+        mockMvc.perform(post("/host/popups/{popupStoreId}/goods", popupStoreId)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("GOODS_DETAIL_IMAGE_REQUIRED"))
+            .andExpect(jsonPath("$.message").value("상세이미지는 필수입니다."));
+    }
+
+    @Test
+    @WithMockUser
     @DisplayName("존재하지 않는 팝업스토어에 굿즈를 등록하면 404를 반환한다")
     void registerGoods_popupStoreNotFound() throws Exception {
         Long nonExistentId = 999L;
@@ -207,7 +245,10 @@ class GoodsControllerTest extends IntegrationTestSupport {
     void updateGoods_withImages() throws Exception {
         Long goodsId = 1L;
         GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, null, null,
-            List.of(new GoodsUpdateRequest.ImageKeyEntry("temp/new-product.jpg", GoodsImageType.PRODUCT)));
+            List.of(
+                new GoodsUpdateRequest.ImageKeyEntry("temp/new-product.jpg", GoodsImageType.PRODUCT),
+                new GoodsUpdateRequest.ImageKeyEntry("temp/new-detail.jpg", GoodsImageType.DETAIL)
+            ));
         GoodsUpdateResponse response = new GoodsUpdateResponse(goodsId, "원본 굿즈", 10000, 50, "원본 설명");
 
         given(goodsService.updateGoods(eq(goodsId), any())).willReturn(response);
@@ -238,6 +279,46 @@ class GoodsControllerTest extends IntegrationTestSupport {
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value("GOODS_NOT_FOUND"))
             .andExpect(jsonPath("$.message").value("굿즈를 찾을 수 없습니다."));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("이미지 수정 시 대표이미지가 없으면 400을 반환한다")
+    void updateGoods_productImageRequired() throws Exception {
+        Long goodsId = 1L;
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, null, null,
+            List.of(new GoodsUpdateRequest.ImageKeyEntry("temp/new-detail.jpg", GoodsImageType.DETAIL)));
+
+        given(goodsService.updateGoods(eq(goodsId), any()))
+            .willThrow(new BusinessException(ErrorCode.GOODS_PRODUCT_IMAGE_REQUIRED));
+
+        mockMvc.perform(patch("/host/goods/{goodsId}", goodsId)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("GOODS_PRODUCT_IMAGE_REQUIRED"))
+            .andExpect(jsonPath("$.message").value("대표이미지는 필수입니다."));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("이미지 수정 시 상세이미지가 없으면 400을 반환한다")
+    void updateGoods_detailImageRequired() throws Exception {
+        Long goodsId = 1L;
+        GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, null, null,
+            List.of(new GoodsUpdateRequest.ImageKeyEntry("temp/new-product.jpg", GoodsImageType.PRODUCT)));
+
+        given(goodsService.updateGoods(eq(goodsId), any()))
+            .willThrow(new BusinessException(ErrorCode.GOODS_DETAIL_IMAGE_REQUIRED));
+
+        mockMvc.perform(patch("/host/goods/{goodsId}", goodsId)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("GOODS_DETAIL_IMAGE_REQUIRED"))
+            .andExpect(jsonPath("$.message").value("상세이미지는 필수입니다."));
     }
 
     @Test

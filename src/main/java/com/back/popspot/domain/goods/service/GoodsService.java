@@ -54,6 +54,11 @@ public class GoodsService {
 		if (!hasProductImage) {
 			throw new BusinessException(ErrorCode.GOODS_PRODUCT_IMAGE_REQUIRED);
 		}
+		boolean hasDetailImage = imageKeys.stream()
+			.anyMatch(entry -> entry.imageType() == GoodsImageType.DETAIL);
+		if (!hasDetailImage) {
+			throw new BusinessException(ErrorCode.GOODS_DETAIL_IMAGE_REQUIRED);
+		}
 
 		Goods goods = Goods.register(
 			popupStore,
@@ -109,6 +114,17 @@ public class GoodsService {
 				.count();
 			if (distinctCount != changes.size()) {
 				throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+			}
+
+			boolean hasProductChange = changes.stream()
+				.anyMatch(e -> e.imageType() == GoodsImageType.PRODUCT);
+			if (!hasProductChange) {
+				throw new BusinessException(ErrorCode.GOODS_PRODUCT_IMAGE_REQUIRED);
+			}
+			boolean hasDetailChange = changes.stream()
+				.anyMatch(e -> e.imageType() == GoodsImageType.DETAIL);
+			if (!hasDetailChange) {
+				throw new BusinessException(ErrorCode.GOODS_DETAIL_IMAGE_REQUIRED);
 			}
 
 			Map<GoodsImageType, GoodsImage> existing = goodsImageRepository.findByGoods(goods).stream()
