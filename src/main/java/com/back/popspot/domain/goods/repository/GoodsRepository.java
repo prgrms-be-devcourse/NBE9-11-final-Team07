@@ -8,5 +8,5 @@ import com.back.popspot.domain.goods.entity.Goods;
 
 public interface GoodsRepository extends JpaRepository<Goods, Long> {
 
-    List<Goods> findByPopupStoreUserIdAndDeletedAtIsNull(Long userId);
+    List<Goods> findByPopupStoreIdAndDeletedAtIsNull(Long popupStoreId);
 }

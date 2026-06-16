@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+
 import org.springframework.web.bind.annotation.RestController;
 
 import com.back.popspot.domain.goods.dto.GoodsImagePresignRequest;
@@ -67,11 +67,11 @@ public class GoodsController {
 		return ResponseEntity.ok(CommonApiResponse.successMessage("굿즈가 삭제되었습니다."));
 	}
 
-	@GetMapping("/goods")
+	@GetMapping("/popups/{popupStoreId}/goods")
 	public ResponseEntity<CommonApiResponse<List<GoodsListResponse>>> getGoodsList(
-		@RequestParam Long userId
+		@PathVariable Long popupStoreId
 	) {
-		List<GoodsListResponse> response = goodsService.getGoodsList(userId);
+		List<GoodsListResponse> response = goodsService.getGoodsList(popupStoreId);
 		return ResponseEntity.ok(CommonApiResponse.success(response));
 	}
 }

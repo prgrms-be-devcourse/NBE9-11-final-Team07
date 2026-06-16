@@ -127,16 +127,15 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @WithMockUser
     @DisplayName("굿즈 목록을 조회하면 200과 굿즈 목록을 반환한다")
     void getGoodsList() throws Exception {
-        Long userId = 1L;
+        Long popupStoreId = 1L;
         List<GoodsListResponse> response = List.of(
             new GoodsListResponse(1L, "한정판 포스터", 15000, 30),
             new GoodsListResponse(2L, "에코백", 25000, 50)
         );
 
-        given(goodsService.getGoodsList(eq(userId))).willReturn(response);
+        given(goodsService.getGoodsList(eq(popupStoreId))).willReturn(response);
 
-        mockMvc.perform(get("/host/goods")
-                .param("userId", String.valueOf(userId)))
+        mockMvc.perform(get("/host/popups/{popupStoreId}/goods", popupStoreId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("SUCCESS"))
             .andExpect(jsonPath("$.data.length()").value(2))
@@ -150,24 +149,14 @@ class GoodsControllerTest extends IntegrationTestSupport {
     @WithMockUser
     @DisplayName("굿즈가 없으면 빈 배열을 반환한다")
     void getGoodsList_empty() throws Exception {
-        Long userId = 1L;
+        Long popupStoreId = 1L;
 
-        given(goodsService.getGoodsList(eq(userId))).willReturn(List.of());
+        given(goodsService.getGoodsList(eq(popupStoreId))).willReturn(List.of());
 
-        mockMvc.perform(get("/host/goods")
-                .param("userId", String.valueOf(userId)))
+        mockMvc.perform(get("/host/popups/{popupStoreId}/goods", popupStoreId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("SUCCESS"))
             .andExpect(jsonPath("$.data").isEmpty());
-    }
-
-    @Test
-    @WithMockUser
-    @DisplayName("userId 파라미터가 없으면 500을 반환한다")
-    void getGoodsList_missingUserId() throws Exception {
-        mockMvc.perform(get("/host/goods"))
-            .andExpect(status().isInternalServerError())
-            .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
     }
 
     @Test

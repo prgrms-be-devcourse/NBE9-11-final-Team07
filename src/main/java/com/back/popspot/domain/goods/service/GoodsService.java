@@ -145,8 +145,8 @@ public class GoodsService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<GoodsListResponse> getGoodsList(Long userId) {
-		return goodsRepository.findByPopupStoreUserIdAndDeletedAtIsNull(userId)
+	public List<GoodsListResponse> getGoodsList(Long popupStoreId) {
+		return goodsRepository.findByPopupStoreIdAndDeletedAtIsNull(popupStoreId)
 			.stream()
 			.map(GoodsListResponse::from)
 			.toList();
