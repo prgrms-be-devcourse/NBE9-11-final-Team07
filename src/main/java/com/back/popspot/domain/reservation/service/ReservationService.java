@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.back.popspot.domain.payment.entity.Payment;
+import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
@@ -39,8 +40,6 @@ import lombok.RequiredArgsConstructor;
 public class ReservationService {
 
 	private static final long HOLD_MINUTES = 5L;
-	private static final String PAYMENT_STATUS_READY = "READY";
-	private static final String PAYMENT_STATUS_DONE = "DONE";
 	private static final Sort DEFAULT_RESERVATION_SORT = Sort.by(
 		Sort.Order.desc("reservedAt"),
 		Sort.Order.desc("id")
@@ -127,7 +126,7 @@ public class ReservationService {
 		if (paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(
 			reservationId,
 			PaymentType.POPUP,
-			PAYMENT_STATUS_DONE
+			PaymentStatus.DONE
 		)) {
 			// TODO: 결제 도메인 환불 요청 연동
 		}
@@ -189,7 +188,7 @@ public class ReservationService {
 		if (paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(
 			reservationId,
 			PaymentType.POPUP,
-			PAYMENT_STATUS_DONE
+			PaymentStatus.DONE
 		)) {
 			throw new BusinessException(ErrorCode.RESERVATION_PAYMENT_ALREADY_COMPLETED);
 		}

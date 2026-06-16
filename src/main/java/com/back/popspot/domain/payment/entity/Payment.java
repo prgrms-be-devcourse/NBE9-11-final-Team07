@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.goods.entity.GoodsOrder;
+import com.back.popspot.domain.goods.entity.GoodsOrderStatus;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.entity.BaseEntity;
 
@@ -23,8 +24,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Table(name = "payment")
 public class Payment extends BaseEntity {
-	public static final String READY_STATUS = "READY";
-
 	public static Payment createReady(
 		User member,
 		PaymentType paymentType,
@@ -39,7 +38,7 @@ public class Payment extends BaseEntity {
 		payment.orderId = orderId;
 		payment.orderName = orderName;
 		payment.amount = amount;
-		payment.status = READY_STATUS;
+		payment.status = PaymentStatus.READY;
 		payment.idempotencyKey = idempotencyKey;
 		return payment;
 	}
@@ -74,8 +73,9 @@ public class Payment extends BaseEntity {
 	@Column(nullable = false)
 	private long amount;
 
+	@Enumerated(EnumType.STRING)
 	@Column(length = 30, nullable = false)
-	private String status;
+	private PaymentStatus status;
 
 	@Column(name = "approved_at")
 	private LocalDateTime approvedAt;
@@ -91,7 +91,7 @@ public class Payment extends BaseEntity {
 		String orderId,
 		String orderName,
 		long amount,
-		String status,
+		PaymentStatus status,
 		String idempotencyKey
 	) {
 		this.member = member;
@@ -121,8 +121,30 @@ public class Payment extends BaseEntity {
 			orderId,
 			orderName,
 			amount,
-			"READY",
+			PaymentStatus.READY,
 			idempotencyKey
 		);
+	}
+
+	public boolean isDone() {
+		return status == PaymentStatus.DONE;
+	}
+
+	public boolean isReady() {
+		return status == PaymentStatus.READY;
+	}
+
+	public void complete(String paymentKey, LocalDateTime approvedAt) {
+		this.paymentKey = paymentKey;
+		this.status = PaymentStatus.DONE;
+		this.approvedAt = approvedAt;
+
+		if (reservation != null) {
+			reservation.confirm();
+		}
+
+		if (goodsOrder != null) {
+			goodsOrder.updateStatus(GoodsOrderStatus.PAID);
+		}
 	}
 }
