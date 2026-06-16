@@ -7,6 +7,8 @@ import com.back.popspot.global.entity.BaseEntity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -30,8 +32,9 @@ public class PaymentRefund extends BaseEntity {
 	@Column(name = "refund_amount", nullable = false)
 	private int refundAmount;
 
+	@Enumerated(EnumType.STRING)
 	@Column(length = 30, nullable = false)
-	private String status;
+	private PaymentRefundStatus status;
 
 	@Column(length = 255)
 	private String reason;

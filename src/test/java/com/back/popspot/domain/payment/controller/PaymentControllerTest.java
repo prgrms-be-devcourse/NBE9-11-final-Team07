@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
 import com.back.popspot.domain.payment.dto.PaymentConfirmResponse;
+import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.service.PaymentService;
 import com.back.popspot.global.exception.GlobalExceptionHandler;
@@ -50,7 +51,7 @@ class PaymentControllerTest {
 			"payment-key",
 			"예약 결제",
 			1000L,
-			"DONE",
+			PaymentStatus.DONE,
 			LocalDateTime.of(2026, 6, 16, 10, 0)
 		);
 		given(paymentService.confirm(request)).willReturn(response);

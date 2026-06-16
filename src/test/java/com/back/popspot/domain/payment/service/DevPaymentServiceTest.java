@@ -17,6 +17,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.back.popspot.domain.payment.dto.DevPaymentCreateRequest;
 import com.back.popspot.domain.payment.dto.DevPaymentCreateResponse;
 import com.back.popspot.domain.payment.entity.Payment;
+import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
 import com.back.popspot.domain.user.entity.User;
@@ -54,7 +55,7 @@ class DevPaymentServiceTest {
 		assertThat(response.orderId()).isNotBlank();
 		assertThat(response.orderName()).isEqualTo("테스트 상품");
 		assertThat(response.amount()).isEqualTo(1000L);
-		assertThat(response.status()).isEqualTo(Payment.READY_STATUS);
+		assertThat(response.status()).isEqualTo(PaymentStatus.READY);
 		verify(paymentRepository).save(org.mockito.ArgumentMatchers.argThat(payment ->
 			payment.getMember() == user
 				&& payment.getPaymentType() == PaymentType.GOODS

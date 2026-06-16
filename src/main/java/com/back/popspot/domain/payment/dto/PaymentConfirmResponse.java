@@ -3,6 +3,7 @@ package com.back.popspot.domain.payment.dto;
 import java.time.LocalDateTime;
 
 import com.back.popspot.domain.payment.entity.Payment;
+import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
 
 public record PaymentConfirmResponse(
@@ -12,7 +13,7 @@ public record PaymentConfirmResponse(
 	String paymentKey,
 	String orderName,
 	long amount,
-	String status,
+	PaymentStatus status,
 	LocalDateTime approvedAt
 ) {
 

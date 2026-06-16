@@ -27,6 +27,7 @@ import org.springframework.web.method.support.ModelAndViewContainer;
 
 import com.back.popspot.domain.payment.dto.DevPaymentCreateRequest;
 import com.back.popspot.domain.payment.dto.DevPaymentCreateResponse;
+import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.service.DevPaymentService;
 import com.back.popspot.global.exception.GlobalExceptionHandler;
 
@@ -54,7 +55,7 @@ class DevPaymentControllerTest {
 			"dev-order-id",
 			request.orderName(),
 			request.amount(),
-			"READY"
+			PaymentStatus.READY
 		);
 		given(devPaymentService.create(1L, request)).willReturn(response);
 

@@ -31,6 +31,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.entity.Payment;
+import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
@@ -345,7 +346,7 @@ class ReservationServiceTest {
 		Reservation reservation = createConfirmedReservation(100L, user, slot);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, "DONE"))
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.DONE))
 			.thenReturn(false);
 		when(reservationRepository.cancelConfirmedReservation(
 			eq(100L),
@@ -389,7 +390,7 @@ class ReservationServiceTest {
 		ReflectionTestUtils.setField(popupStore, "price", 5000);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, "DONE"))
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.DONE))
 			.thenReturn(false);
 		when(paymentRepository.findByIdempotencyKey("idem-paid-1")).thenReturn(Optional.empty());
 		when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -408,7 +409,7 @@ class ReservationServiceTest {
 			payment.getReservation().equals(reservation)
 				&& payment.getMember().equals(user)
 				&& payment.getPaymentType() == PaymentType.POPUP
-				&& "READY".equals(payment.getStatus())
+				&& payment.getStatus() == PaymentStatus.READY
 				&& "idem-paid-1".equals(payment.getIdempotencyKey())
 				&& "성수 빈티지 토이 팝업 예약".equals(payment.getOrderName())
 				&& payment.getAmount() == 5000L
@@ -482,7 +483,7 @@ class ReservationServiceTest {
 		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.PAID);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, "DONE"))
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.DONE))
 			.thenReturn(false);
 		when(paymentRepository.findByIdempotencyKey("idem-paid-2")).thenReturn(Optional.of(existingPayment));
 
@@ -628,7 +629,7 @@ class ReservationServiceTest {
 		Reservation reservation = createConfirmedReservation(100L, user, slot);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, "DONE"))
+		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.DONE))
 			.thenReturn(false);
 		when(reservationRepository.cancelConfirmedReservation(
 			eq(100L),

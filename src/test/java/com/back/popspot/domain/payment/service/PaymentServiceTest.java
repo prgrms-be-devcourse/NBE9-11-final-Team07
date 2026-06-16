@@ -21,6 +21,7 @@ import com.back.popspot.domain.payment.client.TossPaymentsClient;
 import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
 import com.back.popspot.domain.payment.dto.PaymentConfirmResponse;
 import com.back.popspot.domain.payment.entity.Payment;
+import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
 import com.back.popspot.domain.reservation.entity.Reservation;
@@ -63,9 +64,9 @@ class PaymentServiceTest {
 		assertThat(response.orderId()).isEqualTo("order-id");
 		assertThat(response.paymentKey()).isEqualTo("payment-key");
 		assertThat(response.amount()).isEqualTo(1000L);
-		assertThat(response.status()).isEqualTo(Payment.DONE_STATUS);
+		assertThat(response.status()).isEqualTo(PaymentStatus.DONE);
 		assertThat(response.approvedAt()).isEqualTo(LocalDateTime.of(2026, 6, 16, 10, 0));
-		assertThat(payment.getStatus()).isEqualTo(Payment.DONE_STATUS);
+		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
 		assertThat(payment.getPaymentKey()).isEqualTo("payment-key");
 		assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
 	}
@@ -97,7 +98,7 @@ class PaymentServiceTest {
 
 		PaymentConfirmResponse response = paymentService.confirm(request);
 
-		assertThat(response.status()).isEqualTo(Payment.DONE_STATUS);
+		assertThat(response.status()).isEqualTo(PaymentStatus.DONE);
 		assertThat(response.paymentKey()).isEqualTo("payment-key");
 		verify(tossPaymentsClient, never()).confirm(request);
 	}
