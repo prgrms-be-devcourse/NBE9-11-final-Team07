@@ -256,6 +256,10 @@ public class PopupStoreHostService {
 		if (key == null) {
 			return;
 		}
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			s3Service.delete(key);
+			return;
+		}
 		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 			@Override
 			public void afterCommit() {
