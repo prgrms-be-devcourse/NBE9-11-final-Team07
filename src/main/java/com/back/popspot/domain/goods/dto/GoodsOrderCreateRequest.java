@@ -23,6 +23,9 @@ public class GoodsOrderCreateRequest {
 	private Long couponId;
 
 	@NotBlank
+	private String idempotencyKey;
+
+	@NotBlank
 	private String receiverName;
 
 	@NotBlank

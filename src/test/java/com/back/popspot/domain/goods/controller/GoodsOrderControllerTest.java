@@ -36,6 +36,7 @@ import com.back.popspot.domain.goods.entity.GoodsOrderItem;
 import com.back.popspot.domain.goods.entity.GoodsOrderStatus;
 import com.back.popspot.domain.goods.entity.GoodsStatus;
 import com.back.popspot.domain.goods.service.GoodsOrderService;
+import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.dto.PageResponse;
 
@@ -91,12 +92,21 @@ class GoodsOrderControllerTest {
 	@Test
 	void createOrder_성공_201() throws Exception {
 		GoodsOrderItem item = new GoodsOrderItem(pendingOrder, goods, 2, 5000, 10000);
-		GoodsOrderCreateResponse response = GoodsOrderCreateResponse.from(pendingOrder, List.of(item));
+		Payment payment = Payment.createReadyGoodsOrderPayment(
+				user,
+				pendingOrder,
+				"order-id",
+				"테스트굿즈",
+				10000L,
+				"idempotency-key"
+		);
+		GoodsOrderCreateResponse response = GoodsOrderCreateResponse.from(pendingOrder, List.of(item), payment);
 		given(goodsOrderService.createOrder(eq(1L), any())).willReturn(response);
 
 		String requestBody = """
 				{
 				  "items": [{"goodsId": 10, "quantity": 2}],
+				  "idempotencyKey": "idempotency-key",
 				  "receiverName": "홍길동",
 				  "receiverPhone": "010-1234-5678",
 				  "postalCode": "12345",
@@ -110,7 +120,10 @@ class GoodsOrderControllerTest {
 						.content(requestBody))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.code").value("SUCCESS"))
-				.andExpect(jsonPath("$.data.goodsOrderId").value(100));
+				.andExpect(jsonPath("$.data.goodsOrderId").value(100))
+				.andExpect(jsonPath("$.data.orderId").value("order-id"))
+				.andExpect(jsonPath("$.data.orderName").value("테스트굿즈"))
+				.andExpect(jsonPath("$.data.amount").value(10000));
 	}
 
 	@Test
