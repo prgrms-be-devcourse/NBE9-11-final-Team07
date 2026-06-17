@@ -48,11 +48,10 @@ class PaymentServiceTest {
 	@Test
 	@DisplayName("READY 결제를 승인하고 결제와 예약 상태를 완료 처리한다")
 	void confirmReadyReservationPayment() throws Exception {
-		Reservation reservation = reservation(1L, ReservationStatus.HELD);
+		Reservation reservation = reservation(1L, ReservationStatus.HELD, LocalDateTime.now().plusMinutes(5));
 		Payment payment = readyReservationPayment(reservation);
 		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
-		JsonNode tossResponse = JsonMapper.builder().build()
-			.readTree("{\"status\":\"DONE\",\"approvedAt\":\"2026-06-16T10:00:00+09:00\"}");
+		JsonNode tossResponse = tossResponse("payment-key", "order-id", 1000L);
 
 		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
 		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse);
@@ -103,6 +102,58 @@ class PaymentServiceTest {
 		verify(tossPaymentsClient, never()).confirm(request);
 	}
 
+	@Test
+	@DisplayName("예약 선점 시간이 만료된 결제는 승인하지 않는다")
+	void rejectExpiredReservationPayment() {
+		Reservation reservation = reservation(1L, ReservationStatus.HELD, LocalDateTime.now().minusSeconds(1));
+		Payment payment = readyReservationPayment(reservation);
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+
+		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
+
+		assertThatThrownBy(() -> paymentService.confirm(request))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(ErrorCode.RESERVATION_PAYMENT_EXPIRED);
+
+		verify(tossPaymentsClient, never()).confirm(request);
+	}
+
+	@Test
+	@DisplayName("예약 상태가 HELD가 아니면 결제를 승인하지 않는다")
+	void rejectNotHeldReservationPayment() {
+		Reservation reservation = reservation(1L, ReservationStatus.CANCELED, LocalDateTime.now().plusMinutes(5));
+		Payment payment = readyReservationPayment(reservation);
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+
+		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
+
+		assertThatThrownBy(() -> paymentService.confirm(request))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(ErrorCode.RESERVATION_PAYMENT_NOT_ALLOWED_STATUS);
+
+		verify(tossPaymentsClient, never()).confirm(request);
+	}
+
+	@Test
+	@DisplayName("토스 승인 응답이 요청 정보와 다르면 결제를 완료하지 않는다")
+	void rejectTossResponseMismatch() throws Exception {
+		Payment payment = readyPayment();
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		JsonNode tossResponse = tossResponse("other-payment-key", "order-id", 1000L);
+
+		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
+		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse);
+
+		assertThatThrownBy(() -> paymentService.confirm(request))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(ErrorCode.PAYMENT_CONFIRM_RESPONSE_MISMATCH);
+
+		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.READY);
+	}
+
 	private Payment readyPayment() {
 		User user = User.create("user@example.com", "사용자");
 		Payment payment = Payment.createReady(
@@ -131,10 +182,24 @@ class PaymentServiceTest {
 		return payment;
 	}
 
-	private Reservation reservation(Long id, ReservationStatus status) {
+	private Reservation reservation(Long id, ReservationStatus status, LocalDateTime heldUntil) {
 		Reservation reservation = new Reservation();
 		ReflectionTestUtils.setField(reservation, "id", id);
 		ReflectionTestUtils.setField(reservation, "status", status);
+		ReflectionTestUtils.setField(reservation, "heldUntil", heldUntil);
 		return reservation;
+	}
+
+	private JsonNode tossResponse(String paymentKey, String orderId, long amount) throws Exception {
+		return JsonMapper.builder().build()
+			.readTree("""
+				{
+				  "status": "DONE",
+				  "paymentKey": "%s",
+				  "orderId": "%s",
+				  "amount": %d,
+				  "approvedAt": "2026-06-16T10:00:00+09:00"
+				}
+				""".formatted(paymentKey, orderId, amount));
 	}
 }

@@ -2,6 +2,7 @@ package com.back.popspot.domain.payment.service;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,6 +12,8 @@ import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
 import com.back.popspot.domain.payment.dto.PaymentConfirmResponse;
 import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
+import com.back.popspot.domain.reservation.entity.Reservation;
+import com.back.popspot.domain.reservation.entity.ReservationStatus;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 
@@ -40,7 +43,10 @@ public class PaymentService {
 			throw new BusinessException(ErrorCode.PAYMENT_CONFIRM_NOT_ALLOWED_STATUS);
 		}
 
+		validateReservationPayment(payment);
+
 		JsonNode tossResponse = tossPaymentsClient.confirm(request);
+		validateTossConfirmResponse(tossResponse, request);
 		payment.complete(
 			request.paymentKey(),
 			extractApprovedAt(tossResponse)
@@ -61,12 +67,39 @@ public class PaymentService {
 		}
 	}
 
-	private LocalDateTime extractApprovedAt(JsonNode tossResponse) {
-		String approvedAt = tossResponse.path("approvedAt").asString(null);
-		if (approvedAt == null || approvedAt.isBlank()) {
-			return LocalDateTime.now();
+	private void validateReservationPayment(Payment payment) {
+		Reservation reservation = payment.getReservation();
+		if (reservation == null) {
+			return;
 		}
 
-		return OffsetDateTime.parse(approvedAt).toLocalDateTime();
+		if (reservation.getStatus() != ReservationStatus.HELD) {
+			throw new BusinessException(ErrorCode.RESERVATION_PAYMENT_NOT_ALLOWED_STATUS);
+		}
+
+		LocalDateTime heldUntil = reservation.getHeldUntil();
+		if (heldUntil == null || !heldUntil.isAfter(LocalDateTime.now())) {
+			throw new BusinessException(ErrorCode.RESERVATION_PAYMENT_EXPIRED);
+		}
+	}
+
+	private void validateTossConfirmResponse(JsonNode tossResponse, PaymentConfirmRequest request) {
+		if (!"DONE".equals(tossResponse.path("status").asString(null))
+			|| !request.paymentKey().equals(tossResponse.path("paymentKey").asString(null))
+			|| !request.orderId().equals(tossResponse.path("orderId").asString(null))
+			|| !String.valueOf(request.amount()).equals(tossResponse.path("amount").asString(null))
+			|| tossResponse.path("approvedAt").asString(null) == null
+			|| tossResponse.path("approvedAt").asString(null).isBlank()) {
+			throw new BusinessException(ErrorCode.PAYMENT_CONFIRM_RESPONSE_MISMATCH);
+		}
+	}
+
+	private LocalDateTime extractApprovedAt(JsonNode tossResponse) {
+		String approvedAt = tossResponse.path("approvedAt").asString(null);
+		try {
+			return OffsetDateTime.parse(approvedAt).toLocalDateTime();
+		} catch (DateTimeParseException e) {
+			throw new BusinessException(ErrorCode.PAYMENT_CONFIRM_RESPONSE_MISMATCH);
+		}
 	}
 }
