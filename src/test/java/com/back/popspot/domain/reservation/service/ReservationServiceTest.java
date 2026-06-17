@@ -448,7 +448,8 @@ class ReservationServiceTest {
 		ReflectionTestUtils.setField(popupStore, "title", "성수 빈티지 토이 팝업");
 		ReflectionTestUtils.setField(popupStore, "location", "서울 성동구 성수동");
 		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.FREE);
-		ReflectionTestUtils.setField(slot, "slotDate", LocalDate.of(2026, 6, 17));
+		LocalDate slotDate = LocalDate.now().plusDays(1);
+		ReflectionTestUtils.setField(slot, "slotDate", slotDate);
 		ReflectionTestUtils.setField(slot, "startTime", LocalTime.of(15, 0));
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
@@ -461,7 +462,7 @@ class ReservationServiceTest {
 		assertEquals(ReservationStatus.CONFIRMED, response.status());
 		assertEquals("성수 빈티지 토이 팝업", response.popupName());
 		assertEquals("서울 성동구 성수동", response.location());
-		assertEquals(LocalDate.of(2026, 6, 17), response.reservationDate());
+		assertEquals(slotDate, response.reservationDate());
 		assertEquals(LocalTime.of(15, 0), response.reservationTime());
 		assertEquals(ReservationStatus.CONFIRMED, reservation.getStatus());
 		assertEquals("홍길동", ReflectionTestUtils.getField(reservation, "reservationName"));
