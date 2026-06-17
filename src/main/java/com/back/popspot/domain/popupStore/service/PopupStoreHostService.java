@@ -26,10 +26,12 @@ import com.back.popspot.global.s3.S3Service;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 주최자(host) 전용 팝업스토어 쓰기 작업 서비스.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PopupStoreHostService {
@@ -64,9 +66,10 @@ public class PopupStoreHostService {
 
 		// 임시 업로드 이미지면 정식 위치(popup/{id}/{fileName})로 이동 후 키 갱신
 		if (s3Service.isTempKey(popupStore.getImageKey())) {
+			String srcKey = popupStore.getImageKey();
 			String destKey = buildPopupImageKey(popupStore.getId(), popupStore.getImageKey());
-			s3Service.move(popupStore.getImageKey(), destKey);
 			popupStore.updateImageKey(destKey);
+			registerAfterCommitMove(srcKey, destKey);
 		}
 
 		return popupStore.getId();
@@ -114,8 +117,8 @@ public class PopupStoreHostService {
 			// 기존 이미지는 커밋 성공 후 삭제, 새 임시 이미지는 정식 위치로 이동
 			registerAfterCommitDeletion(popupStore.getImageKey());
 			String destKey = buildPopupImageKey(popupStoreId, request.imageKey());
-			s3Service.move(request.imageKey(), destKey);
 			popupStore.updateImageKey(destKey);
+			registerAfterCommitMove(request.imageKey(), destKey);
 		} else if (request.imageKey() != null) {
 			popupStore.updateImageKey(request.imageKey());
 		}
@@ -267,4 +270,27 @@ public class PopupStoreHostService {
 			}
 		});
 	}
+
+	// 트랜잭션 커밋 성공 후에 S3 이미지를 이동한다. (롤백 시 파일 이동 방지)
+	private void registerAfterCommitMove(String srcKey, String destKey) {
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			try {
+				s3Service.move(srcKey, destKey);
+			} catch (Exception e) {
+				log.error("S3 move 실패 (트랜잭션 외부): srcKey={}, destKey={}", srcKey, destKey, e);
+			}
+			return;
+		}
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCommit() {
+				try {
+					s3Service.move(srcKey, destKey);
+				} catch (Exception e) {
+					log.error("S3 move 실패 (afterCommit): srcKey={}, destKey={}", srcKey, destKey, e);
+				}
+			}
+		});
+	}
+
 }
