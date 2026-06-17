@@ -95,9 +95,12 @@ public class GoodsService {
     }
 
     @Transactional
-    public GoodsRegisterResponse registerHostGoods(Long popupStoreId, GoodsRegisterRequest request) {
+    public GoodsRegisterResponse registerHostGoods(Long userId, Long popupStoreId, GoodsRegisterRequest request) {
         PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
             .orElseThrow(() -> new BusinessException(ErrorCode.POPUP_STORE_NOT_FOUND));
+        if (!popupStore.getUser().getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
 
 		List<GoodsRegisterRequest.ImageKeyEntry> imageKeys =
 			request.imageKeys() != null ? request.imageKeys() : List.of();
@@ -151,9 +154,12 @@ public class GoodsService {
 	}
 
 	@Transactional
-	public GoodsUpdateResponse updateHostGoods(Long goodsId, GoodsUpdateRequest request) {
+	public GoodsUpdateResponse updateHostGoods(Long userId, Long goodsId, GoodsUpdateRequest request) {
 		Goods goods = goodsRepository.findById(goodsId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
+		if (!goods.getPopupStore().getUser().getId().equals(userId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN);
+		}
 
 		goods.update(request.name(), request.price(), request.stock(), request.description());
 
@@ -206,15 +212,23 @@ public class GoodsService {
 	}
 
 	@Transactional
-	public void deleteHostGoods(Long goodsId) {
+	public void deleteHostGoods(Long userId, Long goodsId) {
 		Goods goods = goodsRepository.findById(goodsId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
+		if (!goods.getPopupStore().getUser().getId().equals(userId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN);
+		}
 
 		goods.softDelete();
 	}
 
 	@Transactional(readOnly = true)
-	public List<HostGoodsListResponse> getHostGoodsList(Long popupStoreId) {
+	public List<HostGoodsListResponse> getHostGoodsList(Long userId, Long popupStoreId) {
+		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.POPUP_STORE_NOT_FOUND));
+		if (!popupStore.getUser().getId().equals(userId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN);
+		}
 		List<Goods> goodsList = goodsRepository.findByPopupStoreIdAndDeletedAtIsNull(popupStoreId);
 		if (goodsList.isEmpty()) {
 			return List.of();
