@@ -2,6 +2,7 @@ package com.back.popspot.domain.goods.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
@@ -21,6 +22,7 @@ import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.global.dto.PageResponse;
 import com.back.popspot.global.exception.BusinessException;
+import com.back.popspot.global.s3.S3Service;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -45,6 +47,9 @@ class GoodsServiceTest {
 
     @Mock
     private PopupStoreRepository popupStoreRepository;
+
+    @Mock
+    private S3Service s3Service;
 
     @InjectMocks
     private GoodsService goodsService;
@@ -80,13 +85,14 @@ class GoodsServiceTest {
             .willReturn(new PageImpl<>(List.of(goods)));
         given(goodsImageRepository.findByGoods_IdInAndImageTypeOrderByIdAsc(List.of(1L), GoodsImageType.PRODUCT))
             .willReturn(List.of(image));
+        given(s3Service.generatePresignedGetUrl("thumb.jpg")).willReturn("https://s3.example.com/thumb.jpg");
 
         PageResponse<GoodsSummaryResponse> result = goodsService.getGoodsList(null, pageable);
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).getGoodsId()).isEqualTo(1L);
         assertThat(result.getContent().get(0).getName()).isEqualTo("팝업 티셔츠");
-        assertThat(result.getContent().get(0).getThumbnailImageKey()).isEqualTo("thumb.jpg");
+        assertThat(result.getContent().get(0).getThumbnailImageUrl()).isEqualTo("https://s3.example.com/thumb.jpg");
         assertThat(result.getTotalElements()).isEqualTo(1L);
     }
 
@@ -128,13 +134,15 @@ class GoodsServiceTest {
         given(goodsRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(goods));
         given(goodsImageRepository.findByGoods_IdOrderByIdAsc(1L))
             .willReturn(List.of(productImg, detailImg));
+        given(s3Service.generatePresignedGetUrl(anyString()))
+            .willAnswer(invocation -> "https://s3.example.com/" + invocation.getArgument(0));
 
         GoodsDetailResponse result = goodsService.getGoodsDetail(1L);
 
         assertThat(result.getGoodsId()).isEqualTo(1L);
         assertThat(result.getName()).isEqualTo("팝업 티셔츠");
         assertThat(result.getImages()).hasSize(2);
-        assertThat(result.getImages().get(0).getImageKey()).isEqualTo("product.jpg");
+        assertThat(result.getImages().get(0).getImageUrl()).isEqualTo("https://s3.example.com/product.jpg");
         assertThat(result.getPopupStoreId()).isEqualTo(1L);
         assertThat(result.getPopupStoreTitle()).isEqualTo("서울 팝업 2026");
     }
