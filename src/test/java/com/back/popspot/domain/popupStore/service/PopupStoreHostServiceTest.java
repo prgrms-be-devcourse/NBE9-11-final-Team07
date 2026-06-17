@@ -180,6 +180,38 @@ class PopupStoreHostServiceTest {
 	}
 
 	@Test
+	@DisplayName("수정: 운영 시작 후(openDate 과거)면 INVALID_INPUT_VALUE 이고 값이 바뀌지 않는다")
+	void updatePopupStore_afterOpen_throws() {
+		// 이미 오픈됨 (openDate 과거)
+		PopupStore popupStore = popupWithOpenDate(USER_ID, LocalDateTime.now().minusDays(1));
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+
+		PopupStoreUpdateRequest request = new PopupStoreUpdateRequest(
+			"새 제목", null, null, null, null, null, null, null, null, null);
+
+		assertThatThrownBy(() -> popupStoreHostService.updatePopupStore(USER_ID, 10L, request))
+			.isInstanceOf(BusinessException.class)
+			.extracting(e -> ((BusinessException)e).getErrorCode())
+			.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+		assertThat(popupStore.getTitle()).isNull(); // 가드에 막혀 변경 안 됨
+	}
+
+	@Test
+	@DisplayName("수정: 운영 시작 전(openDate 미래)이면 정상 수정된다")
+	void updatePopupStore_beforeOpen_success() {
+		// 아직 오픈 안 됨 (openDate 미래)
+		PopupStore popupStore = popupWithOpenDate(USER_ID, LocalDateTime.now().plusDays(1));
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+
+		PopupStoreUpdateRequest request = new PopupStoreUpdateRequest(
+			"새 제목", null, null, null, null, null, null, null, null, null);
+
+		popupStoreHostService.updatePopupStore(USER_ID, 10L, request);
+
+		assertThat(popupStore.getTitle()).isEqualTo("새 제목"); // 정상 반영
+	}
+
+	@Test
 	@DisplayName("삭제: 소유자가 운영 시작 전이면 삭제한다")
 	void deletePopupStore_ownerBeforeOpen_deletes() {
 		PopupStore popupStore = popupWithOpenDate(USER_ID, FUTURE);
@@ -505,6 +537,8 @@ class PopupStoreHostServiceTest {
 		ReflectionTestUtils.setField(popupStore, "title", "기존 제목");
 		ReflectionTestUtils.setField(popupStore, "location", "기존 위치");
 		ReflectionTestUtils.setField(popupStore, "price", 1000);
+		// 수정은 운영 시작 전(openDate 미래)에만 가능하므로 미래로 설정
+		ReflectionTestUtils.setField(popupStore, "openDate", LocalDateTime.now().plusDays(1));
 		return popupStore;
 	}
 

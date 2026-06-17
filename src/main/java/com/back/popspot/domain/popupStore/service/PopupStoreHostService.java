@@ -89,6 +89,10 @@ public class PopupStoreHostService {
 			throw new BusinessException(ErrorCode.FORBIDDEN);
 		}
 
+		if (!LocalDateTime.now().isBefore(popupStore.getOpenDate())) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
 		if (request.title() != null) {
 			popupStore.updateTitle(request.title());
 		}
