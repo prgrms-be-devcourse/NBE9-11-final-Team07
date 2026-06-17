@@ -33,6 +33,8 @@ import com.back.popspot.domain.goods.repository.GoodsImageRepository;
 import com.back.popspot.domain.goods.repository.GoodsOrderItemRepository;
 import com.back.popspot.domain.goods.repository.GoodsOrderRepository;
 import com.back.popspot.domain.goods.repository.GoodsRepository;
+import com.back.popspot.domain.payment.entity.Payment;
+import com.back.popspot.domain.payment.repository.PaymentRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
 import com.back.popspot.global.dto.PageResponse;
@@ -56,6 +58,9 @@ class GoodsOrderServiceTest {
 
 	@Mock
 	private GoodsOrderItemRepository goodsOrderItemRepository;
+
+	@Mock
+	private PaymentRepository paymentRepository;
 
 	@InjectMocks
 	private GoodsOrderService goodsOrderService;
@@ -94,6 +99,7 @@ class GoodsOrderServiceTest {
 		GoodsOrderCreateRequest request = new GoodsOrderCreateRequest();
 		ReflectionTestUtils.setField(request, "items", List.of(itemReq));
 		ReflectionTestUtils.setField(request, "couponId", null);
+		ReflectionTestUtils.setField(request, "idempotencyKey", "idempotency-key");
 		ReflectionTestUtils.setField(request, "receiverName", "홍길동");
 		ReflectionTestUtils.setField(request, "receiverPhone", "010-1234-5678");
 		ReflectionTestUtils.setField(request, "postalCode", "12345");
@@ -104,20 +110,28 @@ class GoodsOrderServiceTest {
 
 	@Test
 	void createOrder_성공() {
+		Payment payment = readyGoodsPayment(order);
+
 		given(userRepository.findById(1L)).willReturn(Optional.of(user));
+		given(paymentRepository.findByIdempotencyKey("idempotency-key")).willReturn(Optional.empty());
 		given(goodsRepository.findByIdAndDeletedAtIsNull(10L)).willReturn(Optional.of(goods));
 		given(goodsOrderRepository.save(any())).willReturn(order);
 		given(goodsOrderItemRepository.save(any())).willReturn(orderItem);
+		given(paymentRepository.save(any())).willReturn(payment);
 
 		GoodsOrderCreateResponse response = goodsOrderService.createOrder(1L, buildCreateRequest(10L, 2));
 
 		assertThat(response.getGoodsOrderId()).isEqualTo(100L);
 		assertThat(response.getStatus()).isEqualTo(GoodsOrderStatus.PENDING);
+		assertThat(response.getOrderId()).isEqualTo("order-id");
+		assertThat(response.getOrderName()).isEqualTo("테스트굿즈");
+		assertThat(response.getAmount()).isEqualTo(10000L);
 	}
 
 	@Test
 	void createOrder_존재하지_않는_굿즈_RESOURCE_NOT_FOUND() {
 		given(userRepository.findById(1L)).willReturn(Optional.of(user));
+		given(paymentRepository.findByIdempotencyKey("idempotency-key")).willReturn(Optional.empty());
 		given(goodsRepository.findByIdAndDeletedAtIsNull(999L)).willReturn(Optional.empty());
 
 		assertThatThrownBy(() -> goodsOrderService.createOrder(1L, buildCreateRequest(999L, 1)))
@@ -130,6 +144,7 @@ class GoodsOrderServiceTest {
 	void createOrder_판매중이_아닌_굿즈_GOODS_NOT_ON_SALE() {
 		ReflectionTestUtils.setField(goods, "status", GoodsStatus.ENDED);
 		given(userRepository.findById(1L)).willReturn(Optional.of(user));
+		given(paymentRepository.findByIdempotencyKey("idempotency-key")).willReturn(Optional.empty());
 		given(goodsRepository.findByIdAndDeletedAtIsNull(10L)).willReturn(Optional.of(goods));
 
 		assertThatThrownBy(() -> goodsOrderService.createOrder(1L, buildCreateRequest(10L, 1)))
@@ -141,12 +156,29 @@ class GoodsOrderServiceTest {
 	@Test
 	void createOrder_재고부족_GOODS_OUT_OF_STOCK() {
 		given(userRepository.findById(1L)).willReturn(Optional.of(user));
+		given(paymentRepository.findByIdempotencyKey("idempotency-key")).willReturn(Optional.empty());
 		given(goodsRepository.findByIdAndDeletedAtIsNull(10L)).willReturn(Optional.of(goods));
 
 		assertThatThrownBy(() -> goodsOrderService.createOrder(1L, buildCreateRequest(10L, 100)))
 				.isInstanceOf(BusinessException.class)
 				.extracting("errorCode")
 				.isEqualTo(ErrorCode.GOODS_OUT_OF_STOCK);
+	}
+
+	@Test
+	void createOrder_같은_멱등성키면_기존_결제정보_반환() {
+		Payment payment = readyGoodsPayment(order);
+
+		given(userRepository.findById(1L)).willReturn(Optional.of(user));
+		given(paymentRepository.findByIdempotencyKey("idempotency-key")).willReturn(Optional.of(payment));
+		given(goodsOrderItemRepository.findByGoodsOrder_Id(100L)).willReturn(List.of(orderItem));
+
+		GoodsOrderCreateResponse response = goodsOrderService.createOrder(1L, buildCreateRequest(10L, 2));
+
+		assertThat(response.getGoodsOrderId()).isEqualTo(100L);
+		assertThat(response.getOrderId()).isEqualTo("order-id");
+		assertThat(response.getAmount()).isEqualTo(10000L);
+		assertThat(goods.getStock()).isEqualTo(10);
 	}
 
 	@Test
@@ -239,5 +271,18 @@ class GoodsOrderServiceTest {
 				.isInstanceOf(BusinessException.class)
 				.extracting("errorCode")
 				.isEqualTo(ErrorCode.FORBIDDEN);
+	}
+
+	private Payment readyGoodsPayment(GoodsOrder order) {
+		Payment payment = Payment.createReadyGoodsOrderPayment(
+				user,
+				order,
+				"order-id",
+				"테스트굿즈",
+				10000L,
+				"idempotency-key"
+		);
+		ReflectionTestUtils.setField(payment, "id", 1000L);
+		return payment;
 	}
 }

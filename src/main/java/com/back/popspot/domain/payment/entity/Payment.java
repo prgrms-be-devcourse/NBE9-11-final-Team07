@@ -126,6 +126,27 @@ public class Payment extends BaseEntity {
 		);
 	}
 
+	public static Payment createReadyGoodsOrderPayment(
+		User user,
+		GoodsOrder goodsOrder,
+		String orderId,
+		String orderName,
+		long amount,
+		String idempotencyKey
+	) {
+		return new Payment(
+			user,
+			null,
+			goodsOrder,
+			PaymentType.GOODS,
+			orderId,
+			orderName,
+			amount,
+			PaymentStatus.READY,
+			idempotencyKey
+		);
+	}
+
 	public boolean isPaid() {
 		return status == PaymentStatus.PAID;
 	}

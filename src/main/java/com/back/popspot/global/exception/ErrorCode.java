@@ -43,6 +43,7 @@ public enum ErrorCode {
 	PAYMENT_AMOUNT_MISMATCH(HttpStatus.BAD_REQUEST, "결제 금액이 일치하지 않습니다."),
 	PAYMENT_CONFIRM_NOT_ALLOWED_STATUS(HttpStatus.BAD_REQUEST, "승인할 수 없는 결제 상태입니다."),
 	PAYMENT_KEY_MISMATCH(HttpStatus.BAD_REQUEST, "결제 키가 일치하지 않습니다."),
+	PAYMENT_CONFIRM_RESPONSE_MISMATCH(HttpStatus.BAD_REQUEST, "결제 승인 응답이 일치하지 않습니다."),
 
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
