@@ -11,8 +11,9 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import com.back.popspot.domain.goods.dto.GoodsDetailResponse;
 import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
@@ -34,6 +35,10 @@ class GoodsControllerTest extends IntegrationTestSupport {
 
     @MockitoBean
     private GoodsService goodsService;
+
+    private static RequestPostProcessor hostAuth(Long userId) {
+        return authentication(new UsernamePasswordAuthenticationToken(userId, null, List.of()));
+    }
 
     // ── 공개 조회 테스트 (/api/v1) ───────────────────────────────────────────
 
@@ -117,16 +122,16 @@ class GoodsControllerTest extends IntegrationTestSupport {
     // ── 호스트 관리 테스트 (/host) ───────────────────────────────────────────
 
     @Test
-    @WithMockUser
     @DisplayName("굿즈를 등록하면 201과 등록된 굿즈 정보를 반환한다")
     void registerHostGoods() throws Exception {
         Long popupStoreId = 1L;
         GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, 30, "고화질 포스터", null);
         GoodsRegisterResponse response = new GoodsRegisterResponse(1L, popupStoreId, "한정판 포스터", 15000, 30, "고화질 포스터");
 
-        given(goodsService.registerHostGoods(eq(popupStoreId), any())).willReturn(response);
+        given(goodsService.registerHostGoods(any(), eq(popupStoreId), any())).willReturn(response);
 
         mockMvc.perform(post("/api/v1/host/popups/{popupStoreId}/goods", popupStoreId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -141,16 +146,35 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
+    @DisplayName("다른 주최자가 굿즈를 등록하면 403을 반환한다")
+    void registerHostGoods_forbidden() throws Exception {
+        Long popupStoreId = 1L;
+        GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, 30, "고화질 포스터", null);
+
+        given(goodsService.registerHostGoods(any(), eq(popupStoreId), any()))
+            .willThrow(new BusinessException(ErrorCode.FORBIDDEN));
+
+        mockMvc.perform(post("/api/v1/host/popups/{popupStoreId}/goods", popupStoreId)
+                .with(hostAuth(99L))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+            .andExpect(jsonPath("$.message").value("접근 권한이 없습니다."));
+    }
+
+    @Test
     @DisplayName("대표이미지가 없으면 400을 반환한다")
     void registerHostGoods_productImageRequired() throws Exception {
         Long popupStoreId = 1L;
         GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, 30, null, null);
 
-        given(goodsService.registerHostGoods(eq(popupStoreId), any()))
+        given(goodsService.registerHostGoods(any(), eq(popupStoreId), any()))
             .willThrow(new BusinessException(ErrorCode.GOODS_PRODUCT_IMAGE_REQUIRED));
 
         mockMvc.perform(post("/api/v1/host/popups/{popupStoreId}/goods", popupStoreId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -160,16 +184,16 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("상세이미지가 없으면 400을 반환한다")
     void registerHostGoods_detailImageRequired() throws Exception {
         Long popupStoreId = 1L;
         GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, 30, null, null);
 
-        given(goodsService.registerHostGoods(eq(popupStoreId), any()))
+        given(goodsService.registerHostGoods(any(), eq(popupStoreId), any()))
             .willThrow(new BusinessException(ErrorCode.GOODS_DETAIL_IMAGE_REQUIRED));
 
         mockMvc.perform(post("/api/v1/host/popups/{popupStoreId}/goods", popupStoreId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -179,16 +203,16 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("존재하지 않는 팝업스토어에 굿즈를 등록하면 404를 반환한다")
     void registerHostGoods_popupStoreNotFound() throws Exception {
         Long nonExistentId = 999L;
         GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, 30, null, null);
 
-        given(goodsService.registerHostGoods(eq(nonExistentId), any()))
+        given(goodsService.registerHostGoods(any(), eq(nonExistentId), any()))
             .willThrow(new BusinessException(ErrorCode.POPUP_STORE_NOT_FOUND));
 
         mockMvc.perform(post("/api/v1/host/popups/{popupStoreId}/goods", nonExistentId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -198,12 +222,12 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("상품명이 공백이면 400을 반환한다")
     void registerHostGoods_blankName() throws Exception {
         GoodsRegisterRequest request = new GoodsRegisterRequest("   ", 15000, 30, null, null);
 
         mockMvc.perform(post("/api/v1/host/popups/{popupStoreId}/goods", 1L)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -212,12 +236,12 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("가격이 null이면 400을 반환한다")
     void registerHostGoods_nullPrice() throws Exception {
         GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", null, 30, null, null);
 
         mockMvc.perform(post("/api/v1/host/popups/{popupStoreId}/goods", 1L)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -226,12 +250,12 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("수량이 음수면 400을 반환한다")
     void registerHostGoods_negativeStock() throws Exception {
         GoodsRegisterRequest request = new GoodsRegisterRequest("한정판 포스터", 15000, -1, null, null);
 
         mockMvc.perform(post("/api/v1/host/popups/{popupStoreId}/goods", 1L)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -240,7 +264,6 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("굿즈 목록을 조회하면 200과 굿즈 목록을 반환한다")
     void getHostGoodsList() throws Exception {
         Long popupStoreId = 1L;
@@ -251,9 +274,10 @@ class GoodsControllerTest extends IntegrationTestSupport {
                 "https://s3.example.com/product2.jpg", null)
         );
 
-        given(goodsService.getHostGoodsList(eq(popupStoreId))).willReturn(response);
+        given(goodsService.getHostGoodsList(any(), eq(popupStoreId))).willReturn(response);
 
-        mockMvc.perform(get("/api/v1/host/popups/{popupStoreId}/goods", popupStoreId))
+        mockMvc.perform(get("/api/v1/host/popups/{popupStoreId}/goods", popupStoreId)
+                .with(hostAuth(1L)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("SUCCESS"))
             .andExpect(jsonPath("$.data.length()").value(2))
@@ -266,30 +290,45 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("굿즈가 없으면 빈 배열을 반환한다")
     void getHostGoodsList_empty() throws Exception {
         Long popupStoreId = 1L;
 
-        given(goodsService.getGoodsList(eq(popupStoreId))).willReturn(List.of());
+        given(goodsService.getHostGoodsList(any(), eq(popupStoreId))).willReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/host/popups/{popupStoreId}/goods", popupStoreId))
+        mockMvc.perform(get("/api/v1/host/popups/{popupStoreId}/goods", popupStoreId)
+                .with(hostAuth(1L)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("SUCCESS"))
             .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test
-    @WithMockUser
+    @DisplayName("다른 주최자가 굿즈 목록을 조회하면 403을 반환한다")
+    void getHostGoodsList_forbidden() throws Exception {
+        Long popupStoreId = 1L;
+
+        given(goodsService.getHostGoodsList(any(), eq(popupStoreId)))
+            .willThrow(new BusinessException(ErrorCode.FORBIDDEN));
+
+        mockMvc.perform(get("/api/v1/host/popups/{popupStoreId}/goods", popupStoreId)
+                .with(hostAuth(99L)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+            .andExpect(jsonPath("$.message").value("접근 권한이 없습니다."));
+    }
+
+    @Test
     @DisplayName("굿즈를 수정하면 200과 수정된 굿즈 정보를 반환한다")
     void updateHostGoods() throws Exception {
         Long goodsId = 1L;
         GoodsUpdateRequest request = new GoodsUpdateRequest("수정된 포스터", 20000, 50, "수정된 설명", null);
         GoodsUpdateResponse response = new GoodsUpdateResponse(goodsId, "수정된 포스터", 20000, 50, "수정된 설명");
 
-        given(goodsService.updateHostGoods(eq(goodsId), any())).willReturn(response);
+        given(goodsService.updateHostGoods(any(), eq(goodsId), any())).willReturn(response);
 
         mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -302,16 +341,16 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("일부 필드만 전달하면 200과 수정된 굿즈 정보를 반환한다")
     void updateHostGoods_partial() throws Exception {
         Long goodsId = 1L;
         GoodsUpdateRequest request = new GoodsUpdateRequest(null, 20000, null, null, null);
         GoodsUpdateResponse response = new GoodsUpdateResponse(goodsId, "기존 이름", 20000, 30, "기존 설명");
 
-        given(goodsService.updateHostGoods(eq(goodsId), any())).willReturn(response);
+        given(goodsService.updateHostGoods(any(), eq(goodsId), any())).willReturn(response);
 
         mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -322,7 +361,6 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("이미지 키를 포함해 수정하면 200과 수정된 굿즈 정보를 반환한다")
     void updateHostGoods_withImages() throws Exception {
         Long goodsId = 1L;
@@ -333,9 +371,10 @@ class GoodsControllerTest extends IntegrationTestSupport {
             ));
         GoodsUpdateResponse response = new GoodsUpdateResponse(goodsId, "원본 굿즈", 10000, 50, "원본 설명");
 
-        given(goodsService.updateHostGoods(eq(goodsId), any())).willReturn(response);
+        given(goodsService.updateHostGoods(any(), eq(goodsId), any())).willReturn(response);
 
         mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -345,16 +384,35 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
+    @DisplayName("다른 주최자가 굿즈를 수정하면 403을 반환한다")
+    void updateHostGoods_forbidden() throws Exception {
+        Long goodsId = 1L;
+        GoodsUpdateRequest request = new GoodsUpdateRequest("수정된 포스터", 20000, 50, "수정된 설명", null);
+
+        given(goodsService.updateHostGoods(any(), eq(goodsId), any()))
+            .willThrow(new BusinessException(ErrorCode.FORBIDDEN));
+
+        mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(99L))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+            .andExpect(jsonPath("$.message").value("접근 권한이 없습니다."));
+    }
+
+    @Test
     @DisplayName("존재하지 않는 goodsId 수정 시 404를 반환한다")
     void updateHostGoods_goodsNotFound() throws Exception {
         Long nonExistentId = 999L;
         GoodsUpdateRequest request = new GoodsUpdateRequest("수정된 포스터", 20000, 50, null, null);
 
-        given(goodsService.updateHostGoods(eq(nonExistentId), any()))
+        given(goodsService.updateHostGoods(any(), eq(nonExistentId), any()))
             .willThrow(new BusinessException(ErrorCode.GOODS_NOT_FOUND));
 
         mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", nonExistentId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -364,17 +422,17 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("이미지 수정 시 대표이미지가 없으면 400을 반환한다")
     void updateHostGoods_productImageRequired() throws Exception {
         Long goodsId = 1L;
         GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, null, null,
             List.of(new GoodsUpdateRequest.ImageKeyEntry("temp/new-detail.jpg", GoodsImageType.DETAIL)));
 
-        given(goodsService.updateHostGoods(eq(goodsId), any()))
+        given(goodsService.updateHostGoods(any(), eq(goodsId), any()))
             .willThrow(new BusinessException(ErrorCode.GOODS_PRODUCT_IMAGE_REQUIRED));
 
         mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -384,17 +442,17 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("이미지 수정 시 상세이미지가 없으면 400을 반환한다")
     void updateHostGoods_detailImageRequired() throws Exception {
         Long goodsId = 1L;
         GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, null, null,
             List.of(new GoodsUpdateRequest.ImageKeyEntry("temp/new-product.jpg", GoodsImageType.PRODUCT)));
 
-        given(goodsService.updateHostGoods(eq(goodsId), any()))
+        given(goodsService.updateHostGoods(any(), eq(goodsId), any()))
             .willThrow(new BusinessException(ErrorCode.GOODS_DETAIL_IMAGE_REQUIRED));
 
         mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -404,7 +462,6 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("동일한 imageType을 중복 전달하면 400을 반환한다")
     void updateHostGoods_duplicateImageType() throws Exception {
         Long goodsId = 1L;
@@ -414,10 +471,11 @@ class GoodsControllerTest extends IntegrationTestSupport {
                 new GoodsUpdateRequest.ImageKeyEntry("temp/img2.jpg", GoodsImageType.PRODUCT)
             ));
 
-        given(goodsService.updateHostGoods(eq(goodsId), any()))
+        given(goodsService.updateHostGoods(any(), eq(goodsId), any()))
             .willThrow(new BusinessException(ErrorCode.INVALID_INPUT_VALUE));
 
         mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -426,17 +484,17 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("temp 경로가 아닌 키 전달 시 400을 반환한다")
     void updateHostGoods_invalidTempKey() throws Exception {
         Long goodsId = 1L;
         GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, null, null,
             List.of(new GoodsUpdateRequest.ImageKeyEntry("goods/already-final.jpg", GoodsImageType.PRODUCT)));
 
-        given(goodsService.updateHostGoods(eq(goodsId), any()))
+        given(goodsService.updateHostGoods(any(), eq(goodsId), any()))
             .willThrow(new BusinessException(ErrorCode.INVALID_IMAGE_TEMP_KEY));
 
         mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -445,17 +503,17 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("해당 타입의 기존 이미지가 없으면 404를 반환한다")
     void updateHostGoods_imageNotFound() throws Exception {
         Long goodsId = 1L;
         GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, null, null,
             List.of(new GoodsUpdateRequest.ImageKeyEntry("temp/detail.jpg", GoodsImageType.DETAIL)));
 
-        given(goodsService.updateHostGoods(eq(goodsId), any()))
+        given(goodsService.updateHostGoods(any(), eq(goodsId), any()))
             .willThrow(new BusinessException(ErrorCode.GOODS_IMAGE_NOT_FOUND));
 
         mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -465,12 +523,12 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("가격이 음수면 400을 반환한다")
     void updateHostGoods_negativePrice() throws Exception {
         GoodsUpdateRequest request = new GoodsUpdateRequest(null, -1, null, null, null);
 
         mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", 1L)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -479,12 +537,12 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("수량이 음수면 400을 반환한다")
     void updateHostGoods_negativeStock() throws Exception {
         GoodsUpdateRequest request = new GoodsUpdateRequest(null, null, -1, null, null);
 
         mockMvc.perform(patch("/api/v1/host/goods/{goodsId}", 1L)
+                .with(hostAuth(1L))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -493,14 +551,14 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("굿즈를 삭제하면 200과 성공 메시지를 반환한다")
     void deleteHostGoods() throws Exception {
         Long goodsId = 1L;
 
-        willDoNothing().given(goodsService).deleteHostGoods(goodsId);
+        willDoNothing().given(goodsService).deleteHostGoods(any(), eq(goodsId));
 
         mockMvc.perform(delete("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(1L))
                 .with(csrf()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value("SUCCESS"))
@@ -509,15 +567,31 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @WithMockUser
+    @DisplayName("다른 주최자가 굿즈를 삭제하면 403을 반환한다")
+    void deleteHostGoods_forbidden() throws Exception {
+        Long goodsId = 1L;
+
+        willThrow(new BusinessException(ErrorCode.FORBIDDEN))
+            .given(goodsService).deleteHostGoods(any(), eq(goodsId));
+
+        mockMvc.perform(delete("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(99L))
+                .with(csrf()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+            .andExpect(jsonPath("$.message").value("접근 권한이 없습니다."));
+    }
+
+    @Test
     @DisplayName("존재하지 않는 굿즈를 삭제하면 404를 반환한다")
     void deleteHostGoods_goodsNotFound() throws Exception {
         Long nonExistentId = 999L;
 
         willThrow(new BusinessException(ErrorCode.GOODS_NOT_FOUND))
-            .given(goodsService).deleteHostGoods(nonExistentId);
+            .given(goodsService).deleteHostGoods(any(), eq(nonExistentId));
 
         mockMvc.perform(delete("/api/v1/host/goods/{goodsId}", nonExistentId)
+                .with(hostAuth(1L))
                 .with(csrf()))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value("GOODS_NOT_FOUND"))

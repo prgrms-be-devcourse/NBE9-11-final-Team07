@@ -15,9 +15,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import com.back.popspot.domain.goods.dto.GoodsImagePresignRequest;
 import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
@@ -52,12 +54,18 @@ class GoodsImageControllerTest extends IntegrationTestSupport {
 	@Autowired
 	private GoodsImageRepository goodsImageRepository;
 
+	private Long userId;
 	private Long popupStoreId;
 	private Long goodsId;
+
+	private static RequestPostProcessor hostAuth(Long userId) {
+		return authentication(new UsernamePasswordAuthenticationToken(userId, null, List.of()));
+	}
 
 	@BeforeEach
 	void setUp() {
 		User user = userRepository.save(User.create("host@test.com", "호스트"));
+		userId = user.getId();
 
 		PopupStore popupStore = new PopupStore();
 		ReflectionTestUtils.setField(popupStore, "user", user);
@@ -98,7 +106,6 @@ class GoodsImageControllerTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@WithMockUser
 	@DisplayName("굿즈 등록 시 temp 이미지가 final 경로로 이동되고 GoodsImage가 DB에 저장된다")
 	void registerGoods_withImages_movesToFinalPathAndSavesGoodsImage() throws Exception {
 		String tempProductKey = "temp/product-uuid.jpg";
@@ -120,6 +127,7 @@ class GoodsImageControllerTest extends IntegrationTestSupport {
 		);
 
 		mockMvc.perform(post("/api/v1/host/popups/{popupStoreId}/goods", popupStoreId)
+				.with(hostAuth(userId))
 				.with(csrf())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(request)))

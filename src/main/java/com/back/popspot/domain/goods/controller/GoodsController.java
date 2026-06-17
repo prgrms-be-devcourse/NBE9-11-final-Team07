@@ -6,25 +6,26 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.back.popspot.domain.goods.dto.GoodsDetailResponse;
 import com.back.popspot.domain.goods.dto.GoodsImagePresignRequest;
 import com.back.popspot.domain.goods.dto.GoodsImagePresignResponse;
-import com.back.popspot.domain.goods.dto.HostGoodsListResponse;
 import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
 import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
 import com.back.popspot.domain.goods.dto.GoodsSummaryResponse;
 import com.back.popspot.domain.goods.dto.GoodsUpdateRequest;
 import com.back.popspot.domain.goods.dto.GoodsUpdateResponse;
+import com.back.popspot.domain.goods.dto.HostGoodsListResponse;
 import com.back.popspot.domain.goods.entity.GoodsStatus;
 import com.back.popspot.domain.goods.service.GoodsService;
 import com.back.popspot.global.dto.PageResponse;
@@ -72,16 +73,18 @@ public class GoodsController {
 
 	@PostMapping("/host/popups/{popupStoreId}/goods")
 	public ResponseEntity<CommonApiResponse<GoodsRegisterResponse>> registerHostGoods(
+		@AuthenticationPrincipal Long userId,
 		@PathVariable Long popupStoreId,
 		@RequestBody @Valid GoodsRegisterRequest request
 	) {
-		GoodsRegisterResponse response = goodsService.registerHostGoods(popupStoreId, request);
+		GoodsRegisterResponse response = goodsService.registerHostGoods(userId, popupStoreId, request);
 		return ResponseEntity.status(HttpStatus.CREATED)
 			.body(CommonApiResponse.created("굿즈가 등록되었습니다.", response));
 	}
 
 	@PostMapping("/host/goods/images")
 	public ResponseEntity<CommonApiResponse<List<GoodsImagePresignResponse>>> generatePresignedUrls(
+		@AuthenticationPrincipal Long userId,
 		@RequestBody @Valid GoodsImagePresignRequest request
 	) {
 		List<GoodsImagePresignResponse> response = goodsService.generatePresignedUrls(request);
@@ -90,24 +93,29 @@ public class GoodsController {
 
 	@PatchMapping("/host/goods/{goodsId}")
 	public ResponseEntity<CommonApiResponse<GoodsUpdateResponse>> updateHostGoods(
+		@AuthenticationPrincipal Long userId,
 		@PathVariable Long goodsId,
 		@RequestBody @Valid GoodsUpdateRequest request
 	) {
-		GoodsUpdateResponse response = goodsService.updateHostGoods(goodsId, request);
+		GoodsUpdateResponse response = goodsService.updateHostGoods(userId, goodsId, request);
 		return ResponseEntity.ok(CommonApiResponse.success(response));
 	}
 
 	@DeleteMapping("/host/goods/{goodsId}")
-	public ResponseEntity<CommonApiResponse<Void>> deleteHostGoods(@PathVariable Long goodsId) {
-		goodsService.deleteHostGoods(goodsId);
+	public ResponseEntity<CommonApiResponse<Void>> deleteHostGoods(
+		@AuthenticationPrincipal Long userId,
+		@PathVariable Long goodsId
+	) {
+		goodsService.deleteHostGoods(userId, goodsId);
 		return ResponseEntity.ok(CommonApiResponse.successMessage("굿즈가 삭제되었습니다."));
 	}
 
 	@GetMapping("/host/popups/{popupStoreId}/goods")
 	public ResponseEntity<CommonApiResponse<List<HostGoodsListResponse>>> getHostGoodsList(
+		@AuthenticationPrincipal Long userId,
 		@PathVariable Long popupStoreId
 	) {
-		List<HostGoodsListResponse> response = goodsService.getHostGoodsList(popupStoreId);
+		List<HostGoodsListResponse> response = goodsService.getHostGoodsList(userId, popupStoreId);
 		return ResponseEntity.ok(CommonApiResponse.success(response));
 	}
 }
