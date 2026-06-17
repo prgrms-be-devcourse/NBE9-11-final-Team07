@@ -6,6 +6,8 @@ import java.time.LocalTime;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
@@ -19,20 +21,24 @@ import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
+import com.back.popspot.global.s3.S3Service;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 주최자(host) 전용 팝업스토어 쓰기 작업 서비스.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PopupStoreHostService {
 
 	private final PopupStoreRepository popupStoreRepository;
 	private final ReservationSlotRepository reservationSlotRepository;
+	private final S3Service s3Service;
 
 	@PersistenceContext
 	private EntityManager entityManager;
@@ -44,7 +50,7 @@ public class PopupStoreHostService {
 	@Transactional
 	public Long createPopupStore(Long userId, PopupStoreCreateRequest request) {
 		if (request.feeType() == PopupFeeType.PAID
-				&& (request.price() == null || request.price() <= 0)) {
+			&& (request.price() == null || request.price() <= 0)) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 		if (!request.reservationStartAt().isBefore(request.reservationEndAt())) {
@@ -57,6 +63,15 @@ public class PopupStoreHostService {
 		User user = entityManager.getReference(User.class, userId);
 		PopupStore popupStore = PopupStore.of(user, request);
 		popupStoreRepository.save(popupStore);
+
+		// 임시 업로드 이미지면 정식 위치(popup/{id}/{fileName})로 이동 후 키 갱신
+		if (s3Service.isTempKey(popupStore.getImageKey())) {
+			String srcKey = popupStore.getImageKey();
+			String destKey = buildPopupImageKey(popupStore.getId(), popupStore.getImageKey());
+			popupStore.updateImageKey(destKey);
+			registerAfterCommitMove(srcKey, destKey);
+		}
+
 		return popupStore.getId();
 	}
 
@@ -68,7 +83,7 @@ public class PopupStoreHostService {
 	@Transactional
 	public void updatePopupStore(Long userId, Long popupStoreId, PopupStoreUpdateRequest request) {
 		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		if (!popupStore.getUser().getId().equals(userId)) {
 			throw new BusinessException(ErrorCode.FORBIDDEN);
@@ -98,7 +113,13 @@ public class PopupStoreHostService {
 		if (request.closeDate() != null) {
 			popupStore.updateCloseDate(request.closeDate());
 		}
-		if (request.imageKey() != null) {
+		if (s3Service.isTempKey(request.imageKey())) {
+			// 기존 이미지는 커밋 성공 후 삭제, 새 임시 이미지는 정식 위치로 이동
+			registerAfterCommitDeletion(popupStore.getImageKey());
+			String destKey = buildPopupImageKey(popupStoreId, request.imageKey());
+			popupStore.updateImageKey(destKey);
+			registerAfterCommitMove(request.imageKey(), destKey);
+		} else if (request.imageKey() != null) {
 			popupStore.updateImageKey(request.imageKey());
 		}
 		if (request.description() != null) {
@@ -114,7 +135,7 @@ public class PopupStoreHostService {
 	@Transactional
 	public void deletePopupStore(Long userId, Long popupStoreId) {
 		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		if (!popupStore.getUser().getId().equals(userId)) {
 			throw new BusinessException(ErrorCode.FORBIDDEN);
@@ -124,6 +145,9 @@ public class PopupStoreHostService {
 		if (!LocalDateTime.now().isBefore(popupStore.getOpenDate())) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
+
+		// S3 이미지는 커밋 성공 후 삭제 (DB 롤백 시 파일 유실 방지)
+		registerAfterCommitDeletion(popupStore.getImageKey());
 
 		popupStoreRepository.delete(popupStore);
 	}
@@ -136,7 +160,7 @@ public class PopupStoreHostService {
 	@Transactional
 	public Long createSlot(Long userId, Long popupStoreId, ReservationSlotCreateRequest request) {
 		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		if (!popupStore.getUser().getId().equals(userId)) {
 			throw new BusinessException(ErrorCode.FORBIDDEN);
@@ -224,4 +248,49 @@ public class PopupStoreHostService {
 
 		reservationSlotRepository.delete(slot);
 	}
+
+	// 임시 키(temp/...)의 파일명을 팝업 정식 경로(popup/{id}/{fileName})로 변환
+	private String buildPopupImageKey(Long popupStoreId, String tempKey) {
+		return "popup/" + popupStoreId + "/" + s3Service.extractFileName(tempKey);
+	}
+
+	// 트랜잭션 커밋 성공 후에 S3 이미지를 삭제한다. (롤백 시 파일이 사라지는 것을 방지)
+	private void registerAfterCommitDeletion(String key) {
+		if (key == null) {
+			return;
+		}
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			s3Service.delete(key);
+			return;
+		}
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCommit() {
+				s3Service.delete(key);
+			}
+		});
+	}
+
+	// 트랜잭션 커밋 성공 후에 S3 이미지를 이동한다. (롤백 시 파일 이동 방지)
+	private void registerAfterCommitMove(String srcKey, String destKey) {
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			try {
+				s3Service.move(srcKey, destKey);
+			} catch (Exception e) {
+				log.error("S3 move 실패 (트랜잭션 외부): srcKey={}, destKey={}", srcKey, destKey, e);
+			}
+			return;
+		}
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCommit() {
+				try {
+					s3Service.move(srcKey, destKey);
+				} catch (Exception e) {
+					log.error("S3 move 실패 (afterCommit): srcKey={}, destKey={}", srcKey, destKey, e);
+				}
+			}
+		});
+	}
+
 }

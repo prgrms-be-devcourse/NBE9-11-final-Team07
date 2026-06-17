@@ -14,6 +14,9 @@ jwt:
 aws:
   s3:
     region: ap-northeast-2
+    credentials:
+      access-key: test-access-key
+      secret-key: test-secret-key
     bucket: test-bucket
     presigned-url-expiration: 600
 
