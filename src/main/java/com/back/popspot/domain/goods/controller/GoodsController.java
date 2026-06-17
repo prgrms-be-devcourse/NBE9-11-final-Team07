@@ -84,7 +84,6 @@ public class GoodsController {
 
 	@PostMapping("/host/goods/images")
 	public ResponseEntity<CommonApiResponse<List<GoodsImagePresignResponse>>> generatePresignedUrls(
-		@AuthenticationPrincipal Long userId,
 		@RequestBody @Valid GoodsImagePresignRequest request
 	) {
 		List<GoodsImagePresignResponse> response = goodsService.generatePresignedUrls(request);

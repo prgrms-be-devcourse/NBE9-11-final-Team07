@@ -16,7 +16,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import com.back.popspot.domain.goods.dto.GoodsDetailResponse;
 import com.back.popspot.domain.goods.dto.GoodsImagePresignRequest;
 import com.back.popspot.domain.goods.dto.GoodsImagePresignResponse;
-import com.back.popspot.domain.goods.dto.GoodsListResponse;
 import com.back.popspot.domain.goods.dto.GoodsRegisterRequest;
 import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
 import com.back.popspot.domain.goods.dto.GoodsSummaryResponse;
@@ -86,14 +85,6 @@ public class GoodsService {
         return GoodsDetailResponse.from(goods, images);
     }
 
-	@Transactional(readOnly = true)
-    public List<GoodsListResponse> getGoodsList(Long userId) {
-        return goodsRepository.findByPopupStoreUserIdAndDeletedAtIsNull(userId)
-            .stream()
-            .map(GoodsListResponse::from)
-            .toList();
-    }
-
     @Transactional
     public GoodsRegisterResponse registerHostGoods(Long userId, Long popupStoreId, GoodsRegisterRequest request) {
         PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
@@ -142,7 +133,6 @@ public class GoodsService {
 		return GoodsRegisterResponse.from(goods);
 	}
 
-	@Transactional(readOnly = true)
 	public List<GoodsImagePresignResponse> generatePresignedUrls(GoodsImagePresignRequest request) {
 		return request.fileNames().stream()
 			.map(fileName -> {
