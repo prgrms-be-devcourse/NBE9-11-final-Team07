@@ -20,7 +20,7 @@ PopupStoreCreateRequest(
 	@NotNull LocalDateTime reservationEndAt,
 	@NotNull LocalDateTime openDate,
 	@NotNull LocalDateTime closeDate,
-	String imageKey,
+	@NotBlank String imageKey,
 	String description
 ) {
 }
