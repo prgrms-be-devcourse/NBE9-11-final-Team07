@@ -54,7 +54,7 @@ PopupStoreService {
 	 */
 	public PopupStoreDetailResponse getPopupStore(Long popupStoreId) {
 		PopupStore popupStore = popupStoreRepository.findById(popupStoreId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		PopupStatus status = popupStore.calculateStatus(LocalDateTime.now());
 		return PopupStoreDetailResponse.from(popupStore, status, presignedImageUrl(popupStore.getImageKey()));
@@ -85,9 +85,9 @@ PopupStoreService {
 		}
 
 		return reservationSlotRepository.findByPopupStoreIdAndSlotDate(popupStoreId, date)
-				.stream()
-				.map(ReservationSlotResponse::from)
-				.toList();
+			.stream()
+			.map(ReservationSlotResponse::from)
+			.toList();
 	}
 
 	private Page<PopupStore> findByStatus(PopupStatus status, LocalDateTime now, Pageable pageable) {
