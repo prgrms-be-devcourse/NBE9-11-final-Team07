@@ -1,0 +1,17 @@
+spring:
+  config:
+    activate:
+      on-profile: loadtest
+
+  datasource:
+    url: jdbc:mysql://db:3306/popspot_db?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: create
+
+jwt:
+  secret: test-secret-key-for-integration-tests-must-be-long-enough-256bits
