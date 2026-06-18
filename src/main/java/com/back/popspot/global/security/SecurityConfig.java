@@ -32,43 +32,44 @@ public class SecurityConfig {
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		http
-				// JWT 기반이므로 form login / http basic / csrf / 세션 모두 사용하지 않는다.
-				.csrf(csrf -> csrf.disable())
-				.headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()))
-				.formLogin(formLogin -> formLogin.disable())
-				.httpBasic(httpBasic -> httpBasic.disable())
-				.sessionManagement(session ->
-						session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+			// JWT 기반이므로 form login / http basic / csrf / 세션 모두 사용하지 않는다.
+			.csrf(csrf -> csrf.disable())
+			.headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()))
+			.formLogin(formLogin -> formLogin.disable())
+			.httpBasic(httpBasic -> httpBasic.disable())
+			.sessionManagement(session ->
+				session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-				// 인가 규칙: 비회원은 GET /popups/**, GET /api/v1/goods/** 허용, 나머지는 인증 필요
-				.authorizeHttpRequests(auth -> auth
-						.requestMatchers("/h2-console/**").permitAll()
-						.requestMatchers("/api/payments/confirm").permitAll()
-						.requestMatchers(HttpMethod.GET, "/popups/**").permitAll()
-						.requestMatchers(HttpMethod.GET, "/api/v1/goods/**").permitAll()
-						.requestMatchers(HttpMethod.GET, "/api/v1/popups/*/goods").permitAll()
-						.requestMatchers("/oauth2/**", "/login/**", "/error").permitAll()
-						.anyRequest().authenticated())
+			// 인가 규칙: 비회원은 GET /popups/**, GET /api/v1/goods/** 허용, 나머지는 인증 필요
+			.authorizeHttpRequests(auth -> auth
+				.requestMatchers("/h2-console/**").permitAll()
+				.requestMatchers("/api/payments/confirm").permitAll()
+				.requestMatchers("/actuator/**").permitAll()
+				.requestMatchers(HttpMethod.GET, "/popups/**").permitAll()
+				.requestMatchers(HttpMethod.GET, "/api/v1/goods/**").permitAll()
+				.requestMatchers(HttpMethod.GET, "/api/v1/popups/*/goods").permitAll()
+				.requestMatchers("/oauth2/**", "/login/**", "/error").permitAll()
+				.anyRequest().authenticated())
 
-				// 구글 OAuth2 로그인
-				.oauth2Login(oauth2 -> oauth2
-						.authorizationEndpoint(endpoint -> endpoint
-								.authorizationRequestRepository(authorizationRequestRepository))
-						.redirectionEndpoint(endpoint -> endpoint
-								.baseUri("/oauth2/callback/*"))
-						.userInfoEndpoint(endpoint -> endpoint
-								.userService(customOAuth2UserService))
-						.successHandler(oAuth2SuccessHandler)
-						.failureHandler(oAuth2FailureHandler))
+			// 구글 OAuth2 로그인
+			.oauth2Login(oauth2 -> oauth2
+				.authorizationEndpoint(endpoint -> endpoint
+					.authorizationRequestRepository(authorizationRequestRepository))
+				.redirectionEndpoint(endpoint -> endpoint
+					.baseUri("/oauth2/callback/*"))
+				.userInfoEndpoint(endpoint -> endpoint
+					.userService(customOAuth2UserService))
+				.successHandler(oAuth2SuccessHandler)
+				.failureHandler(oAuth2FailureHandler))
 
-				// 인증 실패(비로그인) 시 401 JSON 응답
-				.exceptionHandling(handler -> handler
-						.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+			// 인증 실패(비로그인) 시 401 JSON 응답
+			.exceptionHandling(handler -> handler
+				.authenticationEntryPoint(jwtAuthenticationEntryPoint))
 
-				// 모든 요청 전 JWT 검증 필터 실행
-				.addFilterBefore(
-						new JwtAuthenticationFilter(jwtTokenProvider),
-						UsernamePasswordAuthenticationFilter.class);
+			// 모든 요청 전 JWT 검증 필터 실행
+			.addFilterBefore(
+				new JwtAuthenticationFilter(jwtTokenProvider),
+				UsernamePasswordAuthenticationFilter.class);
 
 		return http.build();
 	}
