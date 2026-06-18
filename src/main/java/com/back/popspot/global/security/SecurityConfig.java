@@ -44,7 +44,7 @@ public class SecurityConfig {
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers("/h2-console/**").permitAll()
 				.requestMatchers("/api/payments/confirm").permitAll()
-				.requestMatchers("/actuator/**").permitAll()
+				.requestMatchers("/actuator/prometheus", "/actuator/health").permitAll()
 				.requestMatchers(HttpMethod.GET, "/popups/**").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/v1/goods/**").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/v1/popups/*/goods").permitAll()
