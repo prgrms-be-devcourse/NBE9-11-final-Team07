@@ -6,6 +6,7 @@ import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 /**
  * 팝업스토어 등록 요청. price 는 PAID 일 때만 필수이며, 해당 검증은 Service 에서 수행한다.
