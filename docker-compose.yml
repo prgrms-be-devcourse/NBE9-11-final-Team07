@@ -16,7 +16,16 @@ services:
     networks:
       - popspot-network
 
-  # 2. 스프링 부트 앱
+  # 2. Redis
+  redis:
+    image: redis:latest
+    container_name: popspot-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - popspot-network
+
+  # 3. 스프링 부트 앱
   app:
     build: .
     container_name: popspot-app
@@ -25,15 +34,17 @@ services:
     env_file:
       - .env
     environment:
-      - SPRING_PROFILES_ACTIVE=loadtest
+      - SPRING_PROFILES_ACTIVE=test
       - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/popspot_db?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - popspot-network
 
-  # 3. 프로메테우스
+  # 4. 프로메테우스
   prometheus:
     image: prom/prometheus:latest
     container_name: popspot-prometheus
@@ -46,7 +57,7 @@ services:
     networks:
       - popspot-network
 
-  # 4. 그라파나
+  # 5. 그라파나
   grafana:
     image: grafana/grafana:latest
     container_name: popspot-grafana
