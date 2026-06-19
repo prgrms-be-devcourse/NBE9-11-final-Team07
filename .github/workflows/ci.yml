@@ -39,9 +39,11 @@ jobs:
           distribution: 'temurin'
 
       - name: Grant execute permission for gradlew
+        working-directory: backend
         run: chmod +x gradlew
 
       - name: Run tests
+        working-directory: backend
         run: ./gradlew test --info -Dspring.profiles.active=test
 
       - name: Publish test results
@@ -49,5 +51,5 @@ jobs:
         uses: dorny/test-reporter@v3
         with:
           name: Gradle Test Results
-          path: build/test-results/test/*.xml
+          path: backend/build/test-results/test/*.xml
           reporter: java-junit
