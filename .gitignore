@@ -39,7 +39,7 @@ out/
 .vscode/
 
 ### env ###
-.env
+backend/.env
 .env.*
 !.env.example
 

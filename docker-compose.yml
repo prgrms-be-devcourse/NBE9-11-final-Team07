@@ -32,7 +32,7 @@ services:
     ports:
       - "8080:8080"
     env_file:
-      - .env
+      - backend/.env
     environment:
       - SPRING_PROFILES_ACTIVE=test
       - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/popspot_db?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
