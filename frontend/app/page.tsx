@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { BottomNav } from '@/components/bottom-nav'
 import { HomeScreen } from '@/components/screens/home-screen'
 import { DetailScreen } from '@/components/screens/detail-screen'
@@ -42,6 +43,7 @@ type ViewKey =
   | 'org-goods-edit'
 
 export default function Page() {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<TabKey>('home')
   const [currentView, setCurrentView] = useState<ViewKey>('home')
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null)
@@ -396,7 +398,11 @@ export default function Page() {
         </div>
 
         {showBottomNav && (
-          <BottomNav active={activeTab} onChange={handleTabChange} />
+          <BottomNav
+            active={activeTab}
+            onChange={handleTabChange}
+            onLogin={() => router.push('/login')}
+          />
         )}
       </div>
     </div>
