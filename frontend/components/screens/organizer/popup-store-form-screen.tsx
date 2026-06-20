@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import { ArrowLeft, ImagePlus, Plus, Trash2, X, CalendarDays, Clock } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowLeft, ImagePlus, Plus, Trash2, X, CalendarDays, Clock, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { orgPopupStores, getOperatingDates, formatDateKorean } from '@/lib/data'
-import type { OrgPopupStore, OrgReservationSlot } from '@/lib/data'
+import { getOperatingDates, formatDateKorean } from '@/lib/data'
+import type { OrgReservationSlot } from '@/lib/data'
+import { getPopupDetail, getPopupSlots, uploadPopupImage, createPopup, updatePopup, deletePopup, createSlot } from '@/lib/api'
+import type { ReservationSlotResponse } from '@/lib/api'
 
 // ─── Add Slot Modal ──────────────────────────────────────────────────────────
 
@@ -290,22 +292,173 @@ export function PopupStoreFormScreen({
   onSaved,
   onDeleted,
 }: PopupStoreFormScreenProps) {
-  const existing = storeId ? orgPopupStores.find((s) => s.id === storeId) : undefined
+  const [name, setName] = useState('')
+  const [location, setLocation] = useState('')
+  const [opStart, setOpStart] = useState('')
+  const [opEnd, setOpEnd] = useState('')
+  const [regStart, setRegStart] = useState('')
+  const [regEnd, setRegEnd] = useState('')
+  const [description, setDescription] = useState('')
+  const [slots, setSlots] = useState<OrgReservationSlot[]>([])
+  const [image, setImage] = useState<string | undefined>(undefined) // 미리보기용 (기존 presigned URL 또는 선택 파일)
+  const [imageKey, setImageKey] = useState<string | null>(null)      // 업로드된 tempKey (없으면 변경 안 함)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [name, setName] = useState(existing?.name ?? '')
-  const [location, setLocation] = useState(existing?.location ?? '')
-  const [opStart, setOpStart] = useState(existing?.operationStart ?? '')
-  const [opEnd, setOpEnd] = useState(existing?.operationEnd ?? '')
-  const [regStart, setRegStart] = useState(existing?.registrationStart ?? '')
-  const [regEnd, setRegEnd] = useState(existing?.registrationEnd ?? '')
-  const [description, setDescription] = useState(existing?.description ?? '')
-  const [slots, setSlots] = useState<OrgReservationSlot[]>(existing?.slots ?? [])
+  // 수정 모드: 상세(getPopupDetail) + 날짜별 슬롯(getPopupSlots)을 조회해 폼을 채운다.
+  useEffect(() => {
+    if (mode !== 'edit' || !storeId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const detailRes = await getPopupDetail(storeId)
+        if (cancelled) return
+        const d = detailRes.data
+        const start = d.openDate ? d.openDate.slice(0, 10) : ''
+        const end = d.closeDate ? d.closeDate.slice(0, 10) : ''
+
+        setName(d.title)
+        setLocation(d.location)
+        setDescription(d.description ?? '')
+        setOpStart(start)
+        setOpEnd(end)
+        setRegStart(d.reservationStartAt ? d.reservationStartAt.slice(0, 10) : '')
+        setRegEnd(d.reservationEndAt ? d.reservationEndAt.slice(0, 10) : '')
+        setImage(d.imageUrl ?? undefined)
+
+        // 슬롯은 날짜별 조회이므로 운영 기간의 각 날짜에 대해 호출 후 합친다.
+        const dates = start && end ? getOperatingDates(start, end) : []
+        const slotLists = await Promise.all(
+          dates.map((date) =>
+            getPopupSlots(storeId, date)
+              .then((r) => r.data)
+              .catch(() => [] as ReservationSlotResponse[]),
+          ),
+        )
+        if (cancelled) return
+        const loadedSlots: OrgReservationSlot[] = slotLists.flat().map((s) => ({
+          id: String(s.slotId),
+          date: s.slotDate,
+          time: s.startTime ? s.startTime.slice(0, 5) : s.startTime,
+          capacity: s.capacity,
+        }))
+        setSlots(loadedSlots)
+      } catch {
+        // 조회 실패 시 빈 폼으로 진행
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [mode, storeId])
 
   const [showAddSlot, setShowAddSlot] = useState(false)
   const [showDeleteAll, setShowDeleteAll] = useState(false)
   const [showDeleteStore, setShowDeleteStore] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   let slotIdCounter = slots.length + 1
+
+  // 'YYYY-MM-DD' + 'HH:mm:ss' → 백엔드 LocalDateTime ISO 문자열
+  function toDateTime(date: string, time: string): string {
+    return `${date}T${time}`
+  }
+
+  // 'HH:mm' → 'HH:mm:ss' (백엔드 LocalTime)
+  function toLocalTime(time: string): string {
+    return time.length === 5 ? `${time}:00` : time
+  }
+
+  async function createSlotsFor(targetStoreId: string, targetSlots: OrgReservationSlot[]) {
+    for (const slot of targetSlots) {
+      await createSlot(targetStoreId, {
+        slotDate: slot.date,
+        startTime: toLocalTime(slot.time),
+        capacity: slot.capacity,
+      })
+    }
+  }
+
+  // 파일 선택 → S3 presigned PUT 업로드 → imageKey(tempKey) 저장 + 미리보기
+  async function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // 같은 파일 재선택 허용
+    if (!file) return
+    if (uploading) return
+
+    const previewUrl = URL.createObjectURL(file)
+    setImage(previewUrl)
+    setUploading(true)
+    try {
+      const tempKey = await uploadPopupImage(file)
+      setImageKey(tempKey)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '이미지 업로드에 실패했습니다.')
+      setImage(undefined)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function handleSave() {
+    if (!canSave || saving) return
+    if (mode === 'create' && !imageKey) {
+      alert('포스터 이미지를 등록해주세요.')
+      return
+    }
+    setSaving(true)
+    try {
+      if (mode === 'create') {
+        const res = await createPopup({
+          title: name,
+          location,
+          feeType: 'FREE',
+          reservationStartAt: toDateTime(regStart || opStart, '00:00:00'),
+          reservationEndAt: toDateTime(regEnd || opEnd, '23:59:59'),
+          openDate: toDateTime(opStart, '00:00:00'),
+          closeDate: toDateTime(opEnd, '23:59:59'),
+          imageKey, // 업로드된 tempKey
+          description,
+        })
+        await createSlotsFor(String(res.data), slots)
+      } else if (storeId) {
+        await updatePopup(storeId, {
+          title: name,
+          location,
+          reservationStartAt: toDateTime(regStart || opStart, '00:00:00'),
+          reservationEndAt: toDateTime(regEnd || opEnd, '23:59:59'),
+          openDate: toDateTime(opStart, '00:00:00'),
+          closeDate: toDateTime(opEnd, '23:59:59'),
+          description,
+          // 새 이미지를 골랐을 때만 imageKey 전송 (없으면 기존 이미지 유지)
+          ...(imageKey ? { imageKey } : {}),
+        })
+        // 신규 추가된 슬롯(id가 'new-'로 시작)만 생성
+        await createSlotsFor(storeId, slots.filter((s) => s.id.startsWith('new-')))
+      }
+      onSaved()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '저장에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDeleteStore() {
+    if (!storeId) {
+      setShowDeleteStore(false)
+      onDeleted?.()
+      return
+    }
+    try {
+      await deletePopup(storeId)
+      setShowDeleteStore(false)
+      onDeleted?.()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '삭제에 실패했습니다.')
+      setShowDeleteStore(false)
+    }
+  }
 
   function handleAddSlots(newSlots: Omit<OrgReservationSlot, 'id'>[]) {
     const created: OrgReservationSlot[] = newSlots.map((s) => ({
@@ -354,19 +507,42 @@ export function PopupStoreFormScreen({
 
           {/* Poster image upload */}
           <Field label="포스터 이미지">
-            <button className="w-full h-36 border-2 border-dashed border-border rounded-2xl flex flex-col items-center justify-center gap-2 bg-secondary/60 active:opacity-70 transition-opacity overflow-hidden relative">
-              {existing?.image ? (
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="w-full h-36 border-2 border-dashed border-border rounded-2xl flex flex-col items-center justify-center gap-2 bg-secondary/60 active:opacity-70 transition-opacity overflow-hidden relative disabled:opacity-60"
+            >
+              {image ? (
                 <>
                   <img
-                    src={existing.image}
+                    src={image}
                     alt="포스터"
                     crossOrigin="anonymous"
                     className="absolute inset-0 w-full h-full object-cover opacity-40"
                   />
                   <div className="relative z-10 flex flex-col items-center gap-1">
-                    <ImagePlus size={22} strokeWidth={1.6} className="text-foreground" />
-                    <span className="text-[11px] font-semibold text-foreground">이미지 변경</span>
+                    {uploading ? (
+                      <Loader2 size={22} strokeWidth={1.8} className="text-foreground animate-spin" />
+                    ) : (
+                      <ImagePlus size={22} strokeWidth={1.6} className="text-foreground" />
+                    )}
+                    <span className="text-[11px] font-semibold text-foreground">
+                      {uploading ? '업로드 중...' : '이미지 변경'}
+                    </span>
                   </div>
+                </>
+              ) : uploading ? (
+                <>
+                  <Loader2 size={22} strokeWidth={1.8} className="text-muted-foreground animate-spin" />
+                  <span className="text-[11px] text-muted-foreground">업로드 중...</span>
                 </>
               ) : (
                 <>
@@ -508,16 +684,16 @@ export function PopupStoreFormScreen({
           </button>
         )}
         <button
-          disabled={!canSave}
-          onClick={onSaved}
+          disabled={!canSave || saving || uploading}
+          onClick={handleSave}
           className={cn(
             'w-full py-3.5 rounded-xl text-sm font-bold transition-colors',
-            canSave
+            canSave && !saving && !uploading
               ? 'bg-foreground text-background active:scale-[0.98]'
               : 'bg-secondary text-muted-foreground cursor-not-allowed',
           )}
         >
-          {mode === 'create' ? '팝업스토어 등록' : '변경사항 저장'}
+          {saving ? '저장 중...' : mode === 'create' ? '팝업스토어 등록' : '변경사항 저장'}
         </button>
       </div>
 
@@ -540,7 +716,7 @@ export function PopupStoreFormScreen({
         <DeleteStoreModal
           storeName={name}
           onCancel={() => setShowDeleteStore(false)}
-          onConfirm={() => { setShowDeleteStore(false); onDeleted?.() }}
+          onConfirm={handleDeleteStore}
         />
       )}
     </div>
