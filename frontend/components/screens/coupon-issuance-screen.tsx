@@ -1,12 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, TicketIcon, CheckCircle, Loader2, Tag, Clock, ShoppingCart } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { popupStores, claimedCoupons } from '@/lib/data'
+import { popupStores } from '@/lib/data'
 import type { CouponIssuancePayload } from '@/lib/data'
+import { ApiError, getAccessToken } from '@/lib/api'
+import { couponApi, formatDiscount } from '@/lib/coupon-api'
+import type { CouponResponse } from '@/lib/coupon-api'
 
-type IssuanceState = 'available' | 'issuing' | 'issued' | 'already-issued' | 'sold-out'
+type IssuanceState = 'loading' | 'available' | 'issuing' | 'issued' | 'already-issued' | 'sold-out'
 
 interface CouponIssuanceScreenProps {
   payload: CouponIssuancePayload
@@ -16,26 +19,78 @@ interface CouponIssuanceScreenProps {
 
 export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponIssuanceScreenProps) {
   const store = popupStores.find((s) => s.id === payload.storeId)
-  const coupon = store?.coupons.find((c) => c.id === payload.couponId)
+  const [coupon, setCoupon] = useState<CouponResponse | null>(null)
+  const [state, setState] = useState<IssuanceState>('loading')
+  const [error, setError] = useState<string | null>(null)
 
-  // Determine initial state from data
-  function getInitialState(): IssuanceState {
-    if (!coupon) return 'sold-out'
-    if (coupon.status === '소진') return 'sold-out'
-    const alreadyOwned = claimedCoupons.some((cc) => cc.id === payload.couponId && !cc.isUsed)
-    if (alreadyOwned) return 'already-issued'
-    return 'available'
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadCoupon() {
+      try {
+        const coupons = await couponApi.getPublicCoupons(payload.storeId)
+        const current = coupons.find((item) => String(item.id) === payload.couponId)
+        if (!current) throw new Error('발급 가능한 쿠폰을 찾을 수 없습니다.')
+
+        let alreadyIssued = false
+        if (getAccessToken()) {
+          const myCoupons = await couponApi.getMyCoupons()
+          alreadyIssued = myCoupons.some((item) => item.couponId === current.id)
+        }
+
+        if (!cancelled) {
+          setCoupon(current)
+          setState(alreadyIssued ? 'already-issued' : 'available')
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : '쿠폰을 불러오지 못했습니다.')
+          setState('sold-out')
+        }
+      }
+    }
+
+    loadCoupon()
+    return () => {
+      cancelled = true
+    }
+  }, [payload.couponId, payload.storeId])
+
+  async function handleClaim() {
+    if (!getAccessToken()) {
+      setError('로그인 후 쿠폰을 발급받을 수 있습니다.')
+      return
+    }
+
+    setState('issuing')
+    setError(null)
+    try {
+      await couponApi.issueCoupon(payload.couponId)
+      setState('issued')
+    } catch (issueError) {
+      if (issueError instanceof ApiError && issueError.code === 'COUPON_ALREADY_ISSUED') {
+        setState('already-issued')
+      } else {
+        setState('available')
+        setError(issueError instanceof Error ? issueError.message : '쿠폰 발급에 실패했습니다.')
+      }
+    }
   }
 
-  const [state, setState] = useState<IssuanceState>(getInitialState)
+  if (!store) return null
 
-  if (!store || !coupon) return null
-
-  function handleClaim() {
-    setState('issuing')
-    setTimeout(() => {
-      setState('issued')
-    }, 1500)
+  if (!coupon) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card">
+          <button onClick={onBack} className="w-9 h-9" aria-label="뒤로 가기"><ArrowLeft size={20} /></button>
+          <h1 className="text-base font-bold">쿠폰 발급</h1>
+        </div>
+        <div className="flex-1 flex items-center justify-center px-6 text-center text-sm text-muted-foreground">
+          {state === 'loading' ? <Loader2 size={24} className="animate-spin" /> : error}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -68,7 +123,7 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
             {/* Top accent bar */}
             <div className={cn(
               'h-1.5 w-full',
-              coupon.status === '소진' ? 'bg-secondary' : 'bg-[oklch(0.62_0.24_25)]'
+              coupon.status !== 'ACTIVE' ? 'bg-secondary' : 'bg-[oklch(0.62_0.24_25)]'
             )} />
 
             {/* Tear perforation */}
@@ -83,16 +138,16 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
               <div className="flex items-start gap-4">
                 <div className={cn(
                   'flex items-center justify-center w-12 h-12 rounded-xl shrink-0',
-                  coupon.status === '소진' ? 'bg-secondary' : 'bg-[oklch(0.97_0.03_25)]'
+                  coupon.status !== 'ACTIVE' ? 'bg-secondary' : 'bg-[oklch(0.97_0.03_25)]'
                 )}>
                   <TicketIcon
                     size={22}
-                    className={coupon.status === '소진' ? 'text-muted-foreground' : 'text-[oklch(0.62_0.24_25)]'}
+                    className={coupon.status !== 'ACTIVE' ? 'text-muted-foreground' : 'text-[oklch(0.62_0.24_25)]'}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-[15px] font-bold text-foreground leading-snug text-balance">{coupon.title}</h2>
-                  <p className="text-[22px] font-black text-[oklch(0.62_0.24_25)] mt-1 leading-none">{coupon.discount}</p>
+                  <h2 className="text-[15px] font-bold text-foreground leading-snug text-balance">{coupon.name}</h2>
+                  <p className="text-[22px] font-black text-[oklch(0.62_0.24_25)] mt-1 leading-none">{formatDiscount(coupon)}</p>
                 </div>
               </div>
 
@@ -104,12 +159,14 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
                 <div className="flex items-center gap-2.5">
                   <ShoppingCart size={13} className="text-muted-foreground shrink-0" />
                   <span className="text-[12px] text-muted-foreground">최소 주문 금액</span>
-                  <span className="text-[12px] font-semibold text-foreground ml-auto">{coupon.minOrder}</span>
+                  <span className="text-[12px] font-semibold text-foreground ml-auto">
+                    {coupon.minOrderAmount ? `${coupon.minOrderAmount.toLocaleString()}원 이상` : '없음'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Clock size={13} className="text-muted-foreground shrink-0" />
                   <span className="text-[12px] text-muted-foreground">유효 기간</span>
-                  <span className="text-[12px] font-semibold text-foreground ml-auto">~ {coupon.expiresAt}</span>
+                  <span className="text-[12px] font-semibold text-foreground ml-auto">~ {coupon.expiredAt.slice(0, 10)}</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Tag size={13} className="text-muted-foreground shrink-0" />
@@ -143,6 +200,10 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
               <TicketIcon size={20} className="text-muted-foreground shrink-0" />
               <p className="text-[13px] font-semibold text-muted-foreground">쿠폰이 모두 소진되었습니다.</p>
             </div>
+          )}
+
+          {error && state !== 'sold-out' && (
+            <p className="text-[12px] text-[oklch(0.62_0.24_25)] text-center">{error}</p>
           )}
 
         </div>
