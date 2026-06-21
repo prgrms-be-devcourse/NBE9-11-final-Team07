@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ArrowLeft,
   MapPin,
@@ -17,9 +17,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { popupStores, getOperatingDates, formatDateKorean } from '@/lib/data'
-import type { TimeSlot, GoodsItem, CouponItem, ReservationPayload, GoodsOrderPayload, CouponIssuancePayload } from '@/lib/data'
-import { couponApi, formatDiscount } from '@/lib/coupon-api'
+import { getOperatingDates, formatDateKorean } from '@/lib/data'
+import type { PopupStore, TimeSlot, GoodsItem, CouponItem, ReservationPayload, GoodsOrderPayload, CouponIssuancePayload } from '@/lib/data'
+import { getPopupDetail, getPopupSlots, toPopupStoreFromDetail, toTimeSlot } from '@/lib/popup-api'
 
 interface DetailScreenProps {
   storeId: string
@@ -389,44 +389,57 @@ function CouponCard({ coupon, onIssue }: { coupon: CouponItem; onIssue: () => vo
 }
 
 export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssueCoupon }: DetailScreenProps) {
-  const store = popupStores.find((s) => s.id === storeId)
+  const [store, setStore] = useState<PopupStore | null>(null)
+  const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
+  // 선택한 날짜의 예약 시간대 (getPopupSlots 결과)
+  const [slots, setSlots] = useState<TimeSlot[]>([])
+  const [slotsLoading, setSlotsLoading] = useState(false)
   const [liked, setLiked] = useState(false)
   const [cart, setCart] = useState<Record<string, number>>({})
   // id of the goods item whose detail sheet is open, null = closed
   const [sheetGoodsId, setSheetGoodsId] = useState<string | null>(null)
-  const [coupons, setCoupons] = useState<CouponItem[]>([])
-  const [couponError, setCouponError] = useState<string | null>(null)
 
   useEffect(() => {
-    let cancelled = false
-    setCouponError(null)
-
-    couponApi.getPublicCoupons(storeId)
-      .then((response) => {
-        if (cancelled) return
-        setCoupons(response.map((coupon) => ({
-          id: String(coupon.id),
-          title: coupon.name,
-          discount: formatDiscount(coupon),
-          minOrder: coupon.minOrderAmount
-            ? `${coupon.minOrderAmount.toLocaleString()}원 이상`
-            : '없음',
-          expiresAt: coupon.expiredAt.slice(0, 10),
-          status: coupon.status === 'ACTIVE' ? '발급 가능' : '소진',
-        })))
+    let active = true
+    setLoading(true)
+    getPopupDetail(storeId)
+      .then((res) => {
+        if (active) setStore(toPopupStoreFromDetail(res))
       })
-      .catch((error: Error) => {
-        if (!cancelled) setCouponError(error.message)
+      .catch(() => {
+        if (active) setStore(null)
       })
-
+      .finally(() => {
+        if (active) setLoading(false)
+      })
     return () => {
-      cancelled = true
+      active = false
     }
   }, [storeId])
 
-  if (!store) return null
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
+        <p className="text-sm font-medium">불러오는 중...</p>
+      </div>
+    )
+  }
+
+  if (!store) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+        <p className="text-sm font-medium">팝업스토어를 불러오지 못했습니다.</p>
+        <button
+          onClick={onBack}
+          className="px-4 py-2 rounded-xl bg-secondary text-foreground text-sm font-semibold"
+        >
+          뒤로 가기
+        </button>
+      </div>
+    )
+  }
 
   const isClosed = store.reservationStatus === '마감'
   const isComingSoon = store.reservationStatus === '오픈예정'
@@ -443,6 +456,11 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
   function handleDateSelect(date: string) {
     setSelectedDate(date)
     setSelectedSlot(null)
+    setSlotsLoading(true)
+    getPopupSlots(storeId, date)
+      .then((res) => setSlots((res ?? []).map(toTimeSlot)))
+      .catch(() => setSlots([]))
+      .finally(() => setSlotsLoading(false))
   }
 
   function handleAdd(goodsId: string) {
@@ -598,16 +616,22 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
                       <p className="text-xs font-bold text-muted-foreground tracking-wide">2단계 · 시간대 선택</p>
                       <span className="text-[11px] text-muted-foreground">{formatDateKorean(selectedDate)}</span>
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      {store.timeSlots.map((slot) => (
-                        <TimeSlotButton
-                          key={slot.time}
-                          slot={slot}
-                          selected={selectedSlot === slot.time}
-                          onClick={() => setSelectedSlot(slot.time)}
-                        />
-                      ))}
-                    </div>
+                    {slotsLoading ? (
+                      <p className="text-[12px] text-muted-foreground py-2">시간대를 불러오는 중...</p>
+                    ) : slots.length === 0 ? (
+                      <p className="text-[12px] text-muted-foreground py-2">선택한 날짜에 예약 가능한 시간대가 없습니다.</p>
+                    ) : (
+                      <div className="grid grid-cols-4 gap-2">
+                        {slots.map((slot) => (
+                          <TimeSlotButton
+                            key={slot.time}
+                            slot={slot}
+                            selected={selectedSlot === slot.time}
+                            onClick={() => setSelectedSlot(slot.time)}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </>
@@ -637,23 +661,20 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
           )}
 
           {/* Coupon Section */}
-          {(coupons.length > 0 || couponError) && (
+          {store.coupons.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <TicketIcon size={16} strokeWidth={2} />
                 <SectionTitle>오프라인 쿠폰</SectionTitle>
               </div>
               <div className="space-y-2">
-                {coupons.map((coupon) => (
+                {store.coupons.map((coupon) => (
                   <CouponCard
                     key={coupon.id}
                     coupon={coupon}
                     onIssue={() => onIssueCoupon({ storeId, couponId: coupon.id })}
                   />
                 ))}
-                {couponError && (
-                  <p className="text-xs text-[oklch(0.62_0.24_25)]">{couponError}</p>
-                )}
               </div>
             </div>
           )}

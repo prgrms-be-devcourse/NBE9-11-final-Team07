@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, Plus, Pencil, Trash2, Store, ShoppingBag, Tag } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { orgPopupStores } from '@/lib/data'
 import type { OrgPopupStore } from '@/lib/data'
+import { getPopups, toOrgPopupStore, deletePopup } from '@/lib/popup-api'
 
 interface PopupStoreListScreenProps {
   onBack: () => void
@@ -63,13 +63,40 @@ function DeleteConfirmModal({
 }
 
 export function PopupStoreListScreen({ onBack, onCreate, onEdit, onGoGoods, onGoCoupons }: PopupStoreListScreenProps) {
-  const [stores, setStores] = useState<OrgPopupStore[]>(orgPopupStores)
+  const [stores, setStores] = useState<OrgPopupStore[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [deletingStore, setDeletingStore] = useState<OrgPopupStore | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
-  function handleDeleteConfirm() {
-    if (deletingStore) {
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await getPopups()
+        if (!cancelled) setStores(res.content.map(toOrgPopupStore))
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : '목록을 불러오지 못했습니다.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function handleDeleteConfirm() {
+    if (!deletingStore || deleting) return
+    setDeleting(true)
+    try {
+      await deletePopup(deletingStore.id)
       setStores((prev) => prev.filter((s) => s.id !== deletingStore.id))
       setDeletingStore(null)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '삭제에 실패했습니다.')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -103,7 +130,18 @@ export function PopupStoreListScreen({ onBack, onCreate, onEdit, onGoGoods, onGo
 
       {/* List */}
       <div className="flex-1 overflow-y-auto scrollbar-hide pb-6">
-        {stores.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-[13px] text-muted-foreground">불러오는 중...</p>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 px-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
+              <Store size={28} strokeWidth={1.4} className="text-muted-foreground" />
+            </div>
+            <p className="text-[13px] text-muted-foreground leading-relaxed">{error}</p>
+          </div>
+        ) : stores.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-4 px-8 text-center">
             <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
               <Store size={28} strokeWidth={1.4} className="text-muted-foreground" />
@@ -122,7 +160,9 @@ export function PopupStoreListScreen({ onBack, onCreate, onEdit, onGoGoods, onGo
           </div>
         ) : (
           <div className="space-y-3 px-4 pt-4">
-            {stores.map((store) => (
+            {stores.map((store) => {
+              const ratio = store.capacity > 0 ? store.reservations / store.capacity : 0
+              return (
               <div
                 key={store.id}
                 className="bg-card border border-border rounded-2xl overflow-hidden"
@@ -162,13 +202,13 @@ export function PopupStoreListScreen({ onBack, onCreate, onEdit, onGoGoods, onGo
                       <div
                         className={cn(
                           'h-full rounded-full',
-                          store.reservations / store.capacity >= 1
+                          ratio >= 1
                             ? 'bg-[oklch(0.5_0_0)]'
-                            : store.reservations / store.capacity >= 0.8
+                            : ratio >= 0.8
                             ? 'bg-[oklch(0.62_0.24_25)]'
                             : 'bg-foreground',
                         )}
-                        style={{ width: `${Math.min((store.reservations / store.capacity) * 100, 100)}%` }}
+                        style={{ width: `${Math.min(ratio * 100, 100)}%` }}
                       />
                     </div>
                   </div>
@@ -206,7 +246,8 @@ export function PopupStoreListScreen({ onBack, onCreate, onEdit, onGoGoods, onGo
                   </button>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

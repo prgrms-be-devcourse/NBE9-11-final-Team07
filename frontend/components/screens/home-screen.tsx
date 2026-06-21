@@ -5,8 +5,9 @@ import { ChevronRight, ChevronLeft, TicketIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AppHeader } from '@/components/app-header'
 import { PopupStoreCard } from '@/components/popup-store-card'
-import { popupStores, promoBanners } from '@/lib/data'
+import { promoBanners } from '@/lib/data'
 import type { PopupStore, CouponIssuancePayload } from '@/lib/data'
+import { getPopups, toPopupStoreFromList } from '@/lib/popup-api'
 
 const categories = ['전체', '진행중', '오픈예정', '마감임박', '굿즈판매'] as const
 type Category = (typeof categories)[number]
@@ -24,9 +25,34 @@ interface HomeScreenProps {
 export function HomeScreen({ onStoreSelect, onCouponBannerSelect }: HomeScreenProps) {
   const [activeCategory, setActiveCategory] = useState<Category>('전체')
   const [currentSlide, setCurrentSlide] = useState(0)
+  const [stores, setStores] = useState<PopupStore[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const filtered = filterStores(popupStores, activeCategory)
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    getPopups()
+      .then((res) => {
+        if (!active) return
+        const list = res.content ?? []
+        setStores(list.map(toPopupStoreFromList))
+        setError(null)
+      })
+      .catch((e) => {
+        if (!active) return
+        setError(e instanceof Error ? e.message : '팝업 목록을 불러오지 못했습니다.')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const filtered = filterStores(stores, activeCategory)
 
   const startTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current)
@@ -185,7 +211,17 @@ export function HomeScreen({ onStoreSelect, onCouponBannerSelect }: HomeScreenPr
               onClick={() => onStoreSelect(store.id)}
             />
           ))}
-          {filtered.length === 0 && (
+          {loading && (
+            <div className="col-span-2 flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
+              <p className="text-sm font-medium">불러오는 중...</p>
+            </div>
+          )}
+          {!loading && error && (
+            <div className="col-span-2 flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
+              <p className="text-sm font-medium">{error}</p>
+            </div>
+          )}
+          {!loading && !error && filtered.length === 0 && (
             <div className="col-span-2 flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
               <p className="text-sm font-medium">해당 팝업스토어가 없습니다</p>
             </div>
