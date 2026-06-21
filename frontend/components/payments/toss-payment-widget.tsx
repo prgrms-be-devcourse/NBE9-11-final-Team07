@@ -9,6 +9,7 @@ import type {
 } from '@tosspayments/tosspayments-sdk'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { clearPendingPayment, savePendingPayment } from '@/lib/payment-api'
 
 interface TossPaymentWidgetProps {
   orderId: string
@@ -102,6 +103,7 @@ export function TossPaymentWidget({
     setRequesting(true)
     setError(null)
     try {
+      savePendingPayment({ orderId, orderName, amount })
       await widgetsRef.current.requestPayment({
         orderId,
         orderName,
@@ -111,6 +113,7 @@ export function TossPaymentWidget({
         customerEmail,
       })
     } catch (paymentError) {
+      clearPendingPayment()
       setError(
         paymentError instanceof Error
           ? paymentError.message
