@@ -15,7 +15,10 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  'http://localhost:8080'
 
 export function getAccessToken() {
   if (typeof window === 'undefined') return null
@@ -33,7 +36,11 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers })
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers,
+    credentials: init.credentials ?? 'include',
+  })
   const payload = (await response.json().catch(() => null)) as ApiResponse<T> | null
 
   if (!response.ok) {

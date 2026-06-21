@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { LogIn, LogOut, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { API_BASE_URL } from '@/lib/api'
 
 interface AppHeaderProps {
   className?: string
@@ -25,7 +26,7 @@ export function AppHeader({ className }: AppHeaderProps) {
   async function handleLogout() {
     try {
       // HttpOnly access_token 은 서버만 삭제할 수 있으므로 백엔드 로그아웃 호출
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/logout`, {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       })
