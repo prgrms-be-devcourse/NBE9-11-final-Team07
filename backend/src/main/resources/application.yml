@@ -25,6 +25,11 @@ aws:
   s3:
     region: ${AWS_REGION}
     bucket: ${AWS_S3_BUCKET}
+    # .env 는 Spring Environment 에만 주입되어 AWS SDK 의 DefaultCredentialsProvider(System.getenv)
+    # 가 읽지 못하므로, 자격증명을 프로퍼티로 명시해 StaticCredentialsProvider 로 주입한다.
+    # 운영에서 IAM Role 등 기본 체인을 쓰려면 두 값을 비워두면 된다.
+    access-key: ${AWS_ACCESS_KEY_ID:}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:}
     presigned-url-expiration: 600
 
 jwt:
