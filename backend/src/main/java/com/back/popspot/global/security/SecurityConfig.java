@@ -57,6 +57,7 @@ public class SecurityConfig {
 				.requestMatchers(HttpMethod.GET, "/api/v1/popups/*/goods").permitAll()
 				.requestMatchers("/oauth2/**", "/login/**", "/error").permitAll()
 				.requestMatchers(HttpMethod.POST, "/auth/logout").permitAll()
+				.requestMatchers("/stress/**").permitAll()   // Lua 테스트 후 삭제 예정
 				.anyRequest().authenticated())
 
 			// 구글 OAuth2 로그인
