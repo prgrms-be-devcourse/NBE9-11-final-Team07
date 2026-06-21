@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, MapPin, Calendar, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { popupStores, formatDateKorean } from '@/lib/data'
 import type { ReservationPayload } from '@/lib/data'
-import { TossPaymentWidget } from '@/components/payments/toss-payment-widget'
 import { reservationApi } from '@/lib/reservation-api'
-import type { PopupStoreDetailResponse, ReservationPaymentResponse } from '@/lib/reservation-api'
+import type { PopupStoreDetailResponse } from '@/lib/reservation-api'
+import { savePendingPayment } from '@/lib/payment-api'
 
 interface ReservationPaymentScreenProps {
   payload: ReservationPayload
@@ -56,11 +57,11 @@ export function ReservationPaymentScreen({
   onBack,
   onComplete,
 }: ReservationPaymentScreenProps) {
+  const router = useRouter()
   const store = popupStores.find((s) => s.id === payload.storeId)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [popupDetail, setPopupDetail] = useState<PopupStoreDetailResponse | null>(null)
-  const [paymentReady, setPaymentReady] = useState<ReservationPaymentResponse | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const reservationIdRef = useRef<number | null>(null)
@@ -86,7 +87,7 @@ export function ReservationPaymentScreen({
   const displayName = popupDetail?.title ?? store.name
   const displayLocation = popupDetail?.location ?? store.location
   const displayImage = popupDetail?.imageUrl ?? store.image
-  const ticketPrice = paymentReady?.amount ?? popupDetail?.price ?? store.ticketPrice
+  const ticketPrice = popupDetail?.price ?? store.ticketPrice
   const isFree = popupDetail ? popupDetail.feeType === 'FREE' : ticketPrice === 0
   const canProceed = name.trim().length > 0 && /^010-\d{4}-\d{4}$/.test(phone)
 
@@ -111,7 +112,13 @@ export function ReservationPaymentScreen({
       })
 
       if (payment.orderId && payment.orderName && payment.amount) {
-        setPaymentReady(payment)
+        savePendingPayment({
+          orderId: payment.orderId,
+          orderName: payment.orderName,
+          amount: payment.amount,
+          customerName: name.trim(),
+        })
+        router.push('/payments/checkout')
       } else {
         onComplete()
       }
@@ -220,15 +227,6 @@ export function ReservationPaymentScreen({
             <p className="text-center text-xs text-[oklch(0.62_0.24_25)]">{error}</p>
           )}
 
-          {paymentReady?.orderId && paymentReady.orderName && paymentReady.amount && (
-            <TossPaymentWidget
-              orderId={paymentReady.orderId}
-              orderName={paymentReady.orderName}
-              amount={paymentReady.amount}
-              customerName={name.trim()}
-            />
-          )}
-
           {/* Terms note */}
           <p className="text-[11px] text-muted-foreground leading-relaxed px-1">
             예약 완료 후 취소 시 재예약이 제한될 수 있습니다. 방문 당일 예약 확인증을 제시해 주세요.
@@ -239,7 +237,7 @@ export function ReservationPaymentScreen({
       </div>
 
       {/* Fixed CTA */}
-      {!paymentReady && <div className="px-4 py-3 border-t border-border bg-card shrink-0">
+      <div className="px-4 py-3 border-t border-border bg-card shrink-0">
         <button
           disabled={!canProceed || submitting}
           onClick={handleSubmit}
@@ -257,7 +255,7 @@ export function ReservationPaymentScreen({
             </span>
           ) : isFree ? '무료 예약하기' : `결제하기 · ${ticketPrice.toLocaleString()}원`}
         </button>
-      </div>}
+      </div>
     </div>
   )
 }

@@ -87,7 +87,7 @@ public class PaymentService {
 		if (!"DONE".equals(tossResponse.path("status").asString(null))
 			|| !request.paymentKey().equals(tossResponse.path("paymentKey").asString(null))
 			|| !request.orderId().equals(tossResponse.path("orderId").asString(null))
-			|| !String.valueOf(request.amount()).equals(tossResponse.path("amount").asString(null))
+			|| !String.valueOf(request.amount()).equals(tossResponse.path("totalAmount").asString(null))
 			|| tossResponse.path("approvedAt").asString(null) == null
 			|| tossResponse.path("approvedAt").asString(null).isBlank()) {
 			throw new BusinessException(ErrorCode.PAYMENT_CONFIRM_RESPONSE_MISMATCH);

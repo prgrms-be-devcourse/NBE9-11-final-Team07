@@ -25,6 +25,8 @@ export interface PendingPayment {
   orderId: string
   orderName: string
   amount: number
+  customerName?: string
+  customerEmail?: string
 }
 
 const PENDING_PAYMENT_KEY = 'pendingPayment'
@@ -42,7 +44,9 @@ export function getPendingPayment(): PendingPayment | null {
     if (
       typeof payment.orderId !== 'string' ||
       typeof payment.orderName !== 'string' ||
-      typeof payment.amount !== 'number'
+      typeof payment.amount !== 'number' ||
+      (payment.customerName !== undefined && typeof payment.customerName !== 'string') ||
+      (payment.customerEmail !== undefined && typeof payment.customerEmail !== 'string')
     ) {
       return null
     }

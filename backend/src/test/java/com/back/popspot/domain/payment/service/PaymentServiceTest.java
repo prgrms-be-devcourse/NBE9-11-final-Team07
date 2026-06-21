@@ -197,7 +197,7 @@ class PaymentServiceTest {
 				  "status": "DONE",
 				  "paymentKey": "%s",
 				  "orderId": "%s",
-				  "amount": %d,
+				  "totalAmount": %d,
 				  "approvedAt": "2026-06-16T10:00:00+09:00"
 				}
 				""".formatted(paymentKey, orderId, amount));

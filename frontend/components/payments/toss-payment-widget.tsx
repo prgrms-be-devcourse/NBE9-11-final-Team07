@@ -88,9 +88,15 @@ export function TossPaymentWidget({
       }
     }
 
-    initialize()
+    // React Strict Mode replays effects in development. Deferring initialization
+    // prevents the discarded first effect from rendering a duplicate widget.
+    const initializeTimer = window.setTimeout(() => {
+      void initialize()
+    }, 0)
+
     return () => {
       cancelled = true
+      window.clearTimeout(initializeTimer)
       widgetsRef.current = null
       if (paymentMethodWidget) void paymentMethodWidget.destroy().catch(() => undefined)
       if (agreementWidget) void agreementWidget.destroy().catch(() => undefined)
