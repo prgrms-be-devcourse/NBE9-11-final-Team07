@@ -5,7 +5,7 @@ import { ArrowLeft, TicketIcon, CheckCircle, Loader2, Tag, Clock, ShoppingCart }
 import { cn } from '@/lib/utils'
 import { popupStores } from '@/lib/data'
 import type { CouponIssuancePayload } from '@/lib/data'
-import { ApiError, getAccessToken } from '@/lib/api'
+import { ApiError } from '@/lib/api'
 import { couponApi, formatDiscount } from '@/lib/coupon-api'
 import type { CouponResponse } from '@/lib/coupon-api'
 
@@ -33,9 +33,13 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
         if (!current) throw new Error('발급 가능한 쿠폰을 찾을 수 없습니다.')
 
         let alreadyIssued = false
-        if (getAccessToken()) {
+        try {
           const myCoupons = await couponApi.getMyCoupons()
           alreadyIssued = myCoupons.some((item) => item.couponId === current.id)
+        } catch (myCouponsError) {
+          if (!(myCouponsError instanceof ApiError) || myCouponsError.status !== 401) {
+            throw myCouponsError
+          }
         }
 
         if (!cancelled) {
@@ -57,11 +61,6 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
   }, [payload.couponId, payload.storeId])
 
   async function handleClaim() {
-    if (!getAccessToken()) {
-      setError('로그인 후 쿠폰을 발급받을 수 있습니다.')
-      return
-    }
-
     setState('issuing')
     setError(null)
     try {
@@ -72,7 +71,13 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
         setState('already-issued')
       } else {
         setState('available')
-        setError(issueError instanceof Error ? issueError.message : '쿠폰 발급에 실패했습니다.')
+        setError(
+          issueError instanceof ApiError && issueError.status === 401
+            ? '로그인 후 쿠폰을 발급받을 수 있습니다.'
+            : issueError instanceof Error
+              ? issueError.message
+              : '쿠폰 발급에 실패했습니다.',
+        )
       }
     }
   }
