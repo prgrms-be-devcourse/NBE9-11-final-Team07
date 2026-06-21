@@ -23,6 +23,7 @@ import { GoodsFormScreen } from '@/components/screens/organizer/goods-form-scree
 import type { TabKey } from '@/components/bottom-nav'
 import type { ReservationPayload, GoodsOrderPayload, CouponIssuancePayload } from '@/lib/data'
 import type { ReservationPaymentResponse } from '@/lib/reservation-api'
+import type { GoodsOrderCreateResponse } from '@/lib/goods-api'
 import { orgPopupStores } from '@/lib/data'
 
 type ViewKey =
@@ -51,6 +52,7 @@ export default function Page() {
   const [reservationPayload, setReservationPayload] = useState<ReservationPayload | null>(null)
   const [reservationComplete, setReservationComplete] = useState<ReservationPaymentResponse | null>(null)
   const [goodsOrderPayload, setGoodsOrderPayload] = useState<GoodsOrderPayload | null>(null)
+  const [goodsOrderResult, setGoodsOrderResult] = useState<GoodsOrderCreateResponse | null>(null)
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [couponIssuancePayload, setCouponIssuancePayload] = useState<CouponIssuancePayload | null>(null)
   const [couponIssuancePrevView, setCouponIssuancePrevView] = useState<ViewKey>('home')
@@ -296,9 +298,10 @@ export default function Page() {
             />
           )}
 
-          {currentView === 'goods-complete' && goodsOrderPayload && (
+          {currentView === 'goods-complete' && goodsOrderPayload && goodsOrderResult && (
             <GoodsOrderCompleteScreen
               payload={goodsOrderPayload}
+              orderResult={goodsOrderResult}
               onGoHome={handleGoHome}
               onGoMyPage={handleGoMyPage}
             />
