@@ -1,8 +1,6 @@
 'use client'
 
-import { API_BASE_URL } from '@/lib/api'
-
-const GOOGLE_OAUTH_URL = `${API_BASE_URL}/oauth2/authorization/google`
+const GOOGLE_OAUTH_URL = `${process.env.NEXT_PUBLIC_API_URL}/oauth2/authorization/google`
 
 function GoogleIcon() {
   return (

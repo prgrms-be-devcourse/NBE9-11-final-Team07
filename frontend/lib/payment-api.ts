@@ -1,4 +1,4 @@
-import { API_BASE_URL, ApiError, getAccessToken } from '@/lib/api'
+import { ApiError } from '@/lib/api'
 import type { ApiResponse } from '@/lib/api'
 
 export type PaymentType = 'POPUP' | 'GOODS'
@@ -30,6 +30,7 @@ export interface PendingPayment {
 }
 
 const PENDING_PAYMENT_KEY = 'pendingPayment'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080'
 
 export function savePendingPayment(payment: PendingPayment) {
   window.sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify(payment))
@@ -62,8 +63,6 @@ export function clearPendingPayment() {
 
 export async function confirmPayment(request: PaymentConfirmRequest) {
   const headers = new Headers({ 'Content-Type': 'application/json' })
-  const token = getAccessToken()
-  if (token) headers.set('Authorization', `Bearer ${token}`)
 
   const response = await fetch(`${API_BASE_URL}/api/payments/confirm`, {
     method: 'POST',
