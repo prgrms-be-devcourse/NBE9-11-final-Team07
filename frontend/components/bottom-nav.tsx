@@ -1,9 +1,15 @@
 'use client'
 
-import { Home, CalendarCheck, Ticket, User } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Home, CalendarCheck, Ticket, User, LogIn } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type TabKey = 'home' | 'reservations' | 'coupons' | 'mypage'
+
+// 로그인 여부 판별용 플래그 쿠키 (access_token 은 HttpOnly 라 JS 로 읽을 수 없음)
+function hasLoggedInCookie(): boolean {
+  return document.cookie.split('; ').some((c) => c.startsWith('logged_in='))
+}
 
 const tabs: { key: TabKey; label: string; Icon: typeof Home }[] = [
   { key: 'home', label: '홈', Icon: Home },
@@ -15,9 +21,16 @@ const tabs: { key: TabKey; label: string; Icon: typeof Home }[] = [
 interface BottomNavProps {
   active: TabKey
   onChange: (tab: TabKey) => void
+  onLogin: () => void
 }
 
-export function BottomNav({ active, onChange }: BottomNavProps) {
+export function BottomNav({ active, onChange, onLogin }: BottomNavProps) {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    setIsLoggedIn(hasLoggedInCookie())
+  }, [])
+
   return (
     <nav className="border-t border-border bg-card flex items-stretch">
       {tabs.map(({ key, label, Icon }) => {
@@ -41,6 +54,18 @@ export function BottomNav({ active, onChange }: BottomNavProps) {
           </button>
         )
       })}
+
+      {/* 비회원일 때만 로그인 진입 노출 (로그인 상태의 로그아웃은 헤더에 있음) */}
+      {!isLoggedIn && (
+        <button
+          onClick={onLogin}
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium text-muted-foreground transition-colors active:opacity-60"
+          aria-label="로그인"
+        >
+          <LogIn size={22} strokeWidth={1.6} className="text-muted-foreground" />
+          <span className="leading-none">로그인</span>
+        </button>
+      )}
     </nav>
   )
 }

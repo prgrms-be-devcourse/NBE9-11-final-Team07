@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import { ArrowLeft, Plus, Trash2, Ticket } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowLeft, Loader2, Plus, Trash2, Ticket } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { orgCoupons } from '@/lib/data'
 import type { OrgCoupon, DiscountType } from '@/lib/data'
+import { couponApi } from '@/lib/coupon-api'
+import type { CouponResponse } from '@/lib/coupon-api'
 
 // ─── Create Coupon Modal ──────────────────────────────────────────────────────
 
@@ -336,29 +337,80 @@ interface CouponListScreenProps {
 }
 
 export function CouponListScreen({ onBack, storeId, storeName }: CouponListScreenProps) {
-  const [coupons, setCoupons] = useState<OrgCoupon[]>(() =>
-    orgCoupons.filter((c) => !storeId || c.id.startsWith('oc')),
-  )
+  const apiStoreId = storeId.replace(/^op/, '')
+  const [coupons, setCoupons] = useState<OrgCoupon[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [deletingCoupon, setDeletingCoupon] = useState<OrgCoupon | null>(null)
 
-  let idCounter = coupons.length + 1
-
-  function handleCreate(data: Omit<OrgCoupon, 'id' | 'issuedQuantity' | 'status'>) {
-    const newCoupon: OrgCoupon = {
-      ...data,
-      id: `oc-new-${idCounter++}`,
-      issuedQuantity: 0,
-      status: 'ACTIVE',
+  function toOrgCoupon(coupon: CouponResponse): OrgCoupon {
+    return {
+      id: String(coupon.id),
+      name: coupon.name,
+      discountType: coupon.discountType,
+      discountValue: coupon.discountValue,
+      maxDiscount: coupon.maxDiscountAmount ?? undefined,
+      minOrder: coupon.minOrderAmount ?? undefined,
+      totalQuantity: coupon.totalQuantity,
+      issuedQuantity: coupon.issuedQuantity,
+      issuanceStart: coupon.startedAt.replace('T', ' ').slice(0, 16),
+      expiresAt: coupon.expiredAt.slice(0, 10),
+      status: coupon.status,
     }
-    setCoupons((prev) => [newCoupon, ...prev])
-    setShowCreate(false)
   }
 
-  function handleDeleteConfirm() {
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+
+    couponApi.getHostCoupons(apiStoreId)
+      .then((response) => {
+        if (!cancelled) setCoupons(response.map(toOrgCoupon))
+      })
+      .catch((loadError: Error) => {
+        if (!cancelled) setError(loadError.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [apiStoreId])
+
+  async function handleCreate(data: Omit<OrgCoupon, 'id' | 'issuedQuantity' | 'status'>) {
+    setError(null)
+    try {
+      const created = await couponApi.createHostCoupon(apiStoreId, {
+        name: data.name,
+        discountType: data.discountType,
+        discountValue: data.discountValue,
+        maxDiscountAmount: data.maxDiscount ?? null,
+        minOrderAmount: data.minOrder ?? null,
+        totalQuantity: data.totalQuantity,
+        startedAt: data.issuanceStart,
+        expiredAt: `${data.expiresAt}T23:59:59`,
+      })
+      setCoupons((prev) => [toOrgCoupon(created), ...prev])
+      setShowCreate(false)
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : '쿠폰 생성에 실패했습니다.')
+    }
+  }
+
+  async function handleDeleteConfirm() {
     if (deletingCoupon) {
-      setCoupons((prev) => prev.filter((c) => c.id !== deletingCoupon.id))
-      setDeletingCoupon(null)
+      setError(null)
+      try {
+        await couponApi.deleteHostCoupon(apiStoreId, Number(deletingCoupon.id))
+        setCoupons((prev) => prev.filter((c) => c.id !== deletingCoupon.id))
+        setDeletingCoupon(null)
+      } catch (deleteError) {
+        setError(deleteError instanceof Error ? deleteError.message : '쿠폰 삭제에 실패했습니다.')
+      }
     }
   }
 
@@ -388,7 +440,14 @@ export function CouponListScreen({ onBack, storeId, storeName }: CouponListScree
 
       {/* List */}
       <div className="flex-1 overflow-y-auto scrollbar-hide pb-6">
-        {coupons.length === 0 ? (
+        {error && (
+          <p className="mx-4 mt-3 text-xs text-center text-[oklch(0.62_0.24_25)]">{error}</p>
+        )}
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 size={24} className="animate-spin text-muted-foreground" />
+          </div>
+        ) : coupons.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-4 px-8 text-center">
             <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
               <Ticket size={28} strokeWidth={1.4} className="text-muted-foreground" />

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   MapPin,
@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { popupStores, getOperatingDates, formatDateKorean } from '@/lib/data'
 import type { TimeSlot, GoodsItem, CouponItem, ReservationPayload, GoodsOrderPayload, CouponIssuancePayload } from '@/lib/data'
+import { couponApi, formatDiscount } from '@/lib/coupon-api'
 
 interface DetailScreenProps {
   storeId: string
@@ -395,6 +396,35 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
   const [cart, setCart] = useState<Record<string, number>>({})
   // id of the goods item whose detail sheet is open, null = closed
   const [sheetGoodsId, setSheetGoodsId] = useState<string | null>(null)
+  const [coupons, setCoupons] = useState<CouponItem[]>([])
+  const [couponError, setCouponError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setCouponError(null)
+
+    couponApi.getPublicCoupons(storeId)
+      .then((response) => {
+        if (cancelled) return
+        setCoupons(response.map((coupon) => ({
+          id: String(coupon.id),
+          title: coupon.name,
+          discount: formatDiscount(coupon),
+          minOrder: coupon.minOrderAmount
+            ? `${coupon.minOrderAmount.toLocaleString()}원 이상`
+            : '없음',
+          expiresAt: coupon.expiredAt.slice(0, 10),
+          status: coupon.status === 'ACTIVE' ? '발급 가능' : '소진',
+        })))
+      })
+      .catch((error: Error) => {
+        if (!cancelled) setCouponError(error.message)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [storeId])
 
   if (!store) return null
 
@@ -607,20 +637,23 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
           )}
 
           {/* Coupon Section */}
-          {store.coupons.length > 0 && (
+          {(coupons.length > 0 || couponError) && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <TicketIcon size={16} strokeWidth={2} />
                 <SectionTitle>오프라인 쿠폰</SectionTitle>
               </div>
               <div className="space-y-2">
-                {store.coupons.map((coupon) => (
+                {coupons.map((coupon) => (
                   <CouponCard
                     key={coupon.id}
                     coupon={coupon}
                     onIssue={() => onIssueCoupon({ storeId, couponId: coupon.id })}
                   />
                 ))}
+                {couponError && (
+                  <p className="text-xs text-[oklch(0.62_0.24_25)]">{couponError}</p>
+                )}
               </div>
             </div>
           )}

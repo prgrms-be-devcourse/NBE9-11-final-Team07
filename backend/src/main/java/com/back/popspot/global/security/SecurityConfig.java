@@ -1,5 +1,7 @@
 package com.back.popspot.global.security;
 
+import java.util.List;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -7,6 +9,9 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.back.popspot.global.security.jwt.JwtAuthenticationEntryPoint;
 import com.back.popspot.global.security.jwt.JwtAuthenticationFilter;
@@ -32,6 +37,8 @@ public class SecurityConfig {
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		http
+			// 프론트엔드(localhost:3000)에서 쿠키 기반 인증 요청을 허용하기 위한 CORS
+			.cors(cors -> cors.configurationSource(corsConfigurationSource()))
 			// JWT 기반이므로 form login / http basic / csrf / 세션 모두 사용하지 않는다.
 			.csrf(csrf -> csrf.disable())
 			.headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()))
@@ -49,6 +56,7 @@ public class SecurityConfig {
 				.requestMatchers(HttpMethod.GET, "/api/v1/goods/**").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/v1/popups/*/goods").permitAll()
 				.requestMatchers("/oauth2/**", "/login/**", "/error").permitAll()
+				.requestMatchers(HttpMethod.POST, "/auth/logout").permitAll()
 				.anyRequest().authenticated())
 
 			// 구글 OAuth2 로그인
@@ -72,5 +80,19 @@ public class SecurityConfig {
 				UsernamePasswordAuthenticationFilter.class);
 
 		return http.build();
+	}
+
+	@Bean
+	public CorsConfigurationSource corsConfigurationSource() {
+		CorsConfiguration config = new CorsConfiguration();
+		config.setAllowedOrigins(List.of("http://localhost:3000"));
+		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+		config.setAllowedHeaders(List.of("*"));
+		// 쿠키(access_token) 전송을 위해 필수
+		config.setAllowCredentials(true);
+
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", config);
+		return source;
 	}
 }
