@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ArrowLeft,
   MapPin,
@@ -17,12 +17,13 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { popupStores, getOperatingDates, formatDateKorean } from '@/lib/data'
-import type { TimeSlot, GoodsItem, CouponItem, ReservationPayload, GoodsOrderPayload, CouponIssuancePayload } from '@/lib/data'
+import { getOperatingDates, formatDateKorean } from '@/lib/data'
+import type { PopupStore, TimeSlot, GoodsItem, CouponItem, ReservationPayload, GoodsOrderPayload, CouponIssuancePayload } from '@/lib/data'
+import { getPopupDetail, getPopupSlots, toPopupStoreFromDetail, toTimeSlot } from '@/lib/popup-api'
 import { couponApi, formatDiscount } from '@/lib/coupon-api'
-import { reservationApi } from '@/lib/reservation-api'
-import type { PopupStoreDetailResponse, ReservationSlotResponse } from '@/lib/reservation-api'
 import { goodsApi } from '@/lib/goods-api'
+
+type ReservationSlotView = TimeSlot & { slotId: number }
 
 interface DetailScreenProps {
   storeId: string
@@ -392,43 +393,44 @@ function CouponCard({ coupon, onIssue }: { coupon: CouponItem; onIssue: () => vo
 }
 
 export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssueCoupon }: DetailScreenProps) {
-  const store = popupStores.find((s) => s.id === storeId)
+  const [store, setStore] = useState<PopupStore | null>(null)
+  const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null)
+  const [selectedSlot, setSelectedSlot] = useState<ReservationSlotView | null>(null)
+  // 선택한 날짜의 예약 시간대 (getPopupSlots 결과)
+  const [slots, setSlots] = useState<ReservationSlotView[]>([])
+  const [slotsLoading, setSlotsLoading] = useState(false)
   const [liked, setLiked] = useState(false)
   const [cart, setCart] = useState<Record<string, number>>({})
   // id of the goods item whose detail sheet is open, null = closed
   const [sheetGoodsId, setSheetGoodsId] = useState<string | null>(null)
-  const [coupons, setCoupons] = useState<CouponItem[]>([])
-  const [couponError, setCouponError] = useState<string | null>(null)
-  const [popupDetail, setPopupDetail] = useState<PopupStoreDetailResponse | null>(null)
-  const [slots, setSlots] = useState<ReservationSlotResponse[]>([])
-  const [slotsLoading, setSlotsLoading] = useState(false)
-  const [slotsError, setSlotsError] = useState<string | null>(null)
   const [goods, setGoods] = useState<GoodsItem[]>([])
-  const [goodsError, setGoodsError] = useState<string | null>(null)
+  const [coupons, setCoupons] = useState<CouponItem[]>([])
 
   useEffect(() => {
-    let cancelled = false
-    reservationApi.getPopupDetail(storeId)
-      .then((response) => {
-        if (!cancelled) setPopupDetail(response)
+    let active = true
+    setLoading(true)
+    getPopupDetail(storeId)
+      .then((res) => {
+        if (active) setStore(toPopupStoreFromDetail(res))
       })
       .catch(() => {
-        // Non-reservation UI can continue to use the existing display data.
+        if (active) setStore(null)
       })
-
+      .finally(() => {
+        if (active) setLoading(false)
+      })
     return () => {
-      cancelled = true
+      active = false
     }
   }, [storeId])
 
   useEffect(() => {
-    let cancelled = false
-    setGoodsError(null)
+    let active = true
+
     goodsApi.getByPopup(storeId)
       .then((response) => {
-        if (cancelled) return
+        if (!active) return
         setGoods(response.content.map((item) => ({
           id: String(item.goodsId),
           name: item.name,
@@ -438,25 +440,13 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
           stock: item.stock,
         })))
       })
-      .catch((error: Error) => {
-        if (!cancelled) {
-          setGoods([])
-          setGoodsError(error.message)
-        }
+      .catch(() => {
+        if (active) setGoods([])
       })
-
-    return () => {
-      cancelled = true
-    }
-  }, [storeId])
-
-  useEffect(() => {
-    let cancelled = false
-    setCouponError(null)
 
     couponApi.getPublicCoupons(storeId)
       .then((response) => {
-        if (cancelled) return
+        if (!active) return
         setCoupons(response.map((coupon) => ({
           id: String(coupon.id),
           title: coupon.name,
@@ -468,63 +458,41 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
           status: coupon.status === 'ACTIVE' ? '발급 가능' : '소진',
         })))
       })
-      .catch((error: Error) => {
-        if (!cancelled) setCouponError(error.message)
+      .catch(() => {
+        if (active) setCoupons([])
       })
 
     return () => {
-      cancelled = true
+      active = false
     }
   }, [storeId])
 
-  useEffect(() => {
-    if (!selectedDate) {
-      setSlots([])
-      return
-    }
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
+        <p className="text-sm font-medium">불러오는 중...</p>
+      </div>
+    )
+  }
 
-    let cancelled = false
-    setSlotsLoading(true)
-    setSlotsError(null)
-    reservationApi.getSlots(storeId, selectedDate)
-      .then((response) => {
-        if (!cancelled) setSlots(response)
-      })
-      .catch((error: Error) => {
-        if (!cancelled) {
-          setSlots([])
-          setSlotsError(error.message)
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setSlotsLoading(false)
-      })
+  if (!store) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+        <p className="text-sm font-medium">팝업스토어를 불러오지 못했습니다.</p>
+        <button
+          onClick={onBack}
+          className="px-4 py-2 rounded-xl bg-secondary text-foreground text-sm font-semibold"
+        >
+          뒤로 가기
+        </button>
+      </div>
+    )
+  }
 
-    return () => {
-      cancelled = true
-    }
-  }, [selectedDate, storeId])
-
-  if (!store) return null
-
-  const reservationStatus = popupDetail
-    ? popupDetail.status === 'OPEN'
-      ? '예약 가능'
-      : popupDetail.status === 'UPCOMING'
-        ? '오픈예정'
-        : '마감'
-    : store.reservationStatus
-  const isClosed = reservationStatus === '마감'
-  const isComingSoon = reservationStatus === '오픈예정'
-  const startDate = popupDetail?.openDate.slice(0, 10) ?? store.startDate
-  const endDate = popupDetail?.closeDate.slice(0, 10) ?? store.endDate
-  const operatingDates = getOperatingDates(startDate, endDate)
-  const ticketPrice = popupDetail?.price ?? store.ticketPrice
-  const displayName = popupDetail?.title ?? store.name
-  const displayLocation = popupDetail?.location ?? store.location
-  const displayImage = popupDetail?.imageUrl ?? store.image
-  const displayDescription = popupDetail?.description ?? store.description
-  const displayPeriod = `${startDate} ~ ${endDate}`
+  const isClosed = store.reservationStatus === '마감'
+  const isComingSoon = store.reservationStatus === '오픈예정'
+  const isOpen = store.reservationStatus === '예약 가능' || store.reservationStatus === '마감 임박'
+  const operatingDates = getOperatingDates(store.startDate, store.endDate)
 
   // Cart calculations
   const totalItems = Object.values(cart).reduce((sum, q) => sum + q, 0)
@@ -535,7 +503,15 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
 
   function handleDateSelect(date: string) {
     setSelectedDate(date)
-    setSelectedSlotId(null)
+    setSelectedSlot(null)
+    setSlotsLoading(true)
+    getPopupSlots(storeId, date)
+      .then((res) => setSlots((res ?? []).map((slot) => ({
+        ...toTimeSlot(slot),
+        slotId: slot.slotId,
+      }))))
+      .catch(() => setSlots([]))
+      .finally(() => setSlotsLoading(false))
   }
 
   function handleAdd(goodsId: string) {
@@ -567,8 +543,8 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
         {/* Hero Image */}
         <div className="relative w-full aspect-[4/3] bg-secondary overflow-hidden">
           <img
-            src={displayImage}
-            alt={displayName}
+            src={store.image}
+            alt={store.name}
             className={cn('w-full h-full object-cover', isClosed && 'grayscale')}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
@@ -597,7 +573,7 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
 
           {/* Title overlay */}
           <div className="absolute bottom-0 left-0 right-0 p-4">
-            <h1 className="text-white text-xl font-black leading-tight text-balance">{displayName}</h1>
+            <h1 className="text-white text-xl font-black leading-tight text-balance">{store.name}</h1>
             <div className="flex flex-wrap gap-1.5 mt-2">
               {store.tags.map((tag) => (
                 <span
@@ -625,22 +601,22 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
           <div className="bg-secondary rounded-xl p-4 space-y-2.5">
             <div className="flex items-start gap-2.5">
               <MapPin size={14} strokeWidth={1.8} className="text-muted-foreground mt-0.5 shrink-0" />
-              <span className="text-sm text-foreground">{displayLocation}</span>
+              <span className="text-sm text-foreground">{store.location}</span>
             </div>
             <div className="flex items-start gap-2.5">
               <Calendar size={14} strokeWidth={1.8} className="text-muted-foreground mt-0.5 shrink-0" />
-              <span className="text-sm text-foreground">{displayPeriod}</span>
+              <span className="text-sm text-foreground">{store.period}</span>
             </div>
           </div>
 
           {/* Description */}
-          <p className="text-sm text-muted-foreground leading-relaxed">{displayDescription}</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">{store.description}</p>
 
           {/* Reservation Section */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <SectionTitle>입장권 예약</SectionTitle>
-              <StatusBadge status={reservationStatus} size="md" />
+              <StatusBadge status={store.reservationStatus} size="md" />
             </div>
 
             <div className="bg-[oklch(0.98_0.01_25)] border border-[oklch(0.9_0.03_25)] rounded-xl p-3 flex items-start gap-2">
@@ -691,32 +667,22 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
                       <p className="text-xs font-bold text-muted-foreground tracking-wide">2단계 · 시간대 선택</p>
                       <span className="text-[11px] text-muted-foreground">{formatDateKorean(selectedDate)}</span>
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      {slots.map((slot) => {
-                        const remaining = slot.capacity - slot.reservedCount
-                        const slotView: TimeSlot = {
-                          time: slot.startTime.slice(0, 5),
-                          status: !slot.available
-                            ? '마감'
-                            : remaining <= 3
-                              ? '마감 임박'
-                              : '예약 가능',
-                        }
-                        return (
-                        <TimeSlotButton
-                          key={slot.slotId}
-                          slot={slotView}
-                          selected={selectedSlotId === slot.slotId}
-                          onClick={() => setSelectedSlotId(slot.slotId)}
-                        />
-                        )
-                      })}
-                    </div>
-                    {slotsLoading && <p className="text-xs text-muted-foreground">예약 시간을 불러오는 중...</p>}
-                    {!slotsLoading && slots.length === 0 && (
-                      <p className="text-xs text-muted-foreground">선택한 날짜에 예약 가능한 시간이 없습니다.</p>
+                    {slotsLoading ? (
+                      <p className="text-[12px] text-muted-foreground py-2">시간대를 불러오는 중...</p>
+                    ) : slots.length === 0 ? (
+                      <p className="text-[12px] text-muted-foreground py-2">선택한 날짜에 예약 가능한 시간대가 없습니다.</p>
+                    ) : (
+                      <div className="grid grid-cols-4 gap-2">
+                        {slots.map((slot) => (
+                          <TimeSlotButton
+                            key={slot.slotId}
+                            slot={slot}
+                            selected={selectedSlot?.slotId === slot.slotId}
+                            onClick={() => setSelectedSlot(slot)}
+                          />
+                        ))}
+                      </div>
                     )}
-                    {slotsError && <p className="text-xs text-[oklch(0.62_0.24_25)]">{slotsError}</p>}
                   </div>
                 )}
               </>
@@ -724,7 +690,7 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
           </div>
 
           {/* Goods Section */}
-          {(goods.length > 0 || goodsError) && (
+          {goods.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <ShoppingBag size={16} strokeWidth={2} />
@@ -742,12 +708,11 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
                   />
                 ))}
               </div>
-              {goodsError && <p className="text-xs text-[oklch(0.62_0.24_25)]">{goodsError}</p>}
             </div>
           )}
 
           {/* Coupon Section */}
-          {(coupons.length > 0 || couponError) && (
+          {coupons.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <TicketIcon size={16} strokeWidth={2} />
@@ -761,9 +726,6 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
                     onIssue={() => onIssueCoupon({ storeId, couponId: coupon.id })}
                   />
                 ))}
-                {couponError && (
-                  <p className="text-xs text-[oklch(0.62_0.24_25)]">{couponError}</p>
-                )}
               </div>
             </div>
           )}
@@ -818,35 +780,34 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
             </button>
           ) : (
             <div className="space-y-1.5">
-              {(!selectedDate || !selectedSlotId) && (
+              {(!selectedDate || !selectedSlot) && (
                 <p className="text-center text-xs text-muted-foreground">
                   예약 날짜와 시간을 선택해주세요.
                 </p>
               )}
               <button
-                disabled={!selectedDate || !selectedSlotId}
+                disabled={!selectedDate || !selectedSlot}
                 onClick={() => {
-                  const selectedSlot = slots.find((slot) => slot.slotId === selectedSlotId)
                   if (selectedDate && selectedSlot) {
                     onReserve({
                       storeId,
                       slotId: selectedSlot.slotId,
                       date: selectedDate,
-                      time: selectedSlot.startTime.slice(0, 5),
+                      time: selectedSlot.time,
                     })
                   }
                 }}
                 className={cn(
                   'w-full py-3.5 rounded-xl font-bold text-sm transition-all',
-                  selectedDate && selectedSlotId
+                  selectedDate && selectedSlot
                     ? 'bg-foreground text-background active:scale-[0.98]'
                     : 'bg-secondary text-muted-foreground cursor-not-allowed',
                 )}
               >
-                {!selectedDate || !selectedSlotId
+                {!selectedDate || !selectedSlot
                   ? '지금 예약하기'
-                  : ticketPrice > 0
-                  ? `결제하기 · ${ticketPrice.toLocaleString()}원`
+                  : store.ticketPrice > 0
+                  ? `결제하기 · ${store.ticketPrice.toLocaleString()}원`
                   : '무료 예약하기'}
               </button>
             </div>
