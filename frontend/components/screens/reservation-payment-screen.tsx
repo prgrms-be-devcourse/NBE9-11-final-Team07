@@ -1,10 +1,13 @@
 'use client'
 
-import { useState } from 'react'
-import { ArrowLeft, MapPin, Calendar, Clock } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowLeft, Loader2, MapPin, Calendar, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { popupStores, formatDateKorean } from '@/lib/data'
 import type { ReservationPayload } from '@/lib/data'
+import { TossPaymentWidget } from '@/components/payments/toss-payment-widget'
+import { reservationApi } from '@/lib/reservation-api'
+import type { PopupStoreDetailResponse, ReservationPaymentResponse } from '@/lib/reservation-api'
 
 interface ReservationPaymentScreenProps {
   payload: ReservationPayload
@@ -56,15 +59,67 @@ export function ReservationPaymentScreen({
   const store = popupStores.find((s) => s.id === payload.storeId)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
+  const [popupDetail, setPopupDetail] = useState<PopupStoreDetailResponse | null>(null)
+  const [paymentReady, setPaymentReady] = useState<ReservationPaymentResponse | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const reservationIdRef = useRef<number | null>(null)
+  const idempotencyKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    reservationApi.getPopupDetail(payload.storeId)
+      .then((response) => {
+        if (!cancelled) setPopupDetail(response)
+      })
+      .catch(() => {
+        // The payment preparation response remains the source of truth for the amount.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [payload.storeId])
 
   if (!store) return null
 
-  const isFree = store.ticketPrice === 0
-  const canProceed = name.trim().length > 0 && phone.trim().length >= 8
+  const displayName = popupDetail?.title ?? store.name
+  const displayLocation = popupDetail?.location ?? store.location
+  const displayImage = popupDetail?.imageUrl ?? store.image
+  const ticketPrice = paymentReady?.amount ?? popupDetail?.price ?? store.ticketPrice
+  const isFree = popupDetail ? popupDetail.feeType === 'FREE' : ticketPrice === 0
+  const canProceed = name.trim().length > 0 && /^010-\d{4}-\d{4}$/.test(phone)
 
-  function handleSubmit() {
-    if (!canProceed) return
-    onComplete()
+  async function handleSubmit() {
+    if (!canProceed || submitting) return
+
+    setSubmitting(true)
+    setError(null)
+    try {
+      if (!reservationIdRef.current) {
+        const reservation = await reservationApi.createReservation(payload.slotId)
+        reservationIdRef.current = reservation.reservationId
+      }
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = crypto.randomUUID()
+      }
+
+      const payment = await reservationApi.startPayment(reservationIdRef.current, {
+        name: name.trim(),
+        phone,
+        idempotencyKey: idempotencyKeyRef.current,
+      })
+
+      if (payment.orderId && payment.orderName && payment.amount) {
+        setPaymentReady(payment)
+      } else {
+        onComplete()
+      }
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : '예약 결제를 준비하지 못했습니다.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -92,16 +147,16 @@ export function ReservationPaymentScreen({
               <div className="flex items-center gap-3 p-4 border-b border-border">
                 <div className="w-16 h-16 rounded-xl overflow-hidden bg-card shrink-0">
                   <img
-                    src={store.image}
-                    alt={store.name}
+                    src={displayImage}
+                    alt={displayName}
                     className="w-full h-full object-cover"
                   />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-foreground leading-snug line-clamp-2">{store.name}</p>
+                  <p className="text-sm font-bold text-foreground leading-snug line-clamp-2">{displayName}</p>
                   <div className="flex items-center gap-1 mt-1">
                     <MapPin size={11} className="text-muted-foreground shrink-0" />
-                    <p className="text-xs text-muted-foreground truncate">{store.location}</p>
+                    <p className="text-xs text-muted-foreground truncate">{displayLocation}</p>
                   </div>
                 </div>
               </div>
@@ -149,17 +204,30 @@ export function ReservationPaymentScreen({
               <div className="flex items-center justify-between px-4 py-3">
                 <span className="text-sm text-muted-foreground">입장권 금액</span>
                 <span className="text-sm font-semibold text-foreground">
-                  {isFree ? '무료' : `${store.ticketPrice.toLocaleString()}원`}
+                  {isFree ? '무료' : `${ticketPrice.toLocaleString()}원`}
                 </span>
               </div>
               <div className="flex items-center justify-between px-4 py-3.5 bg-card">
                 <span className="text-sm font-bold text-foreground">최종 결제 금액</span>
                 <span className="text-base font-black text-foreground">
-                  {isFree ? '무료' : `${store.ticketPrice.toLocaleString()}원`}
+                  {isFree ? '무료' : `${ticketPrice.toLocaleString()}원`}
                 </span>
               </div>
             </div>
           </div>
+
+          {error && (
+            <p className="text-center text-xs text-[oklch(0.62_0.24_25)]">{error}</p>
+          )}
+
+          {paymentReady?.orderId && paymentReady.orderName && paymentReady.amount && (
+            <TossPaymentWidget
+              orderId={paymentReady.orderId}
+              orderName={paymentReady.orderName}
+              amount={paymentReady.amount}
+              customerName={name.trim()}
+            />
+          )}
 
           {/* Terms note */}
           <p className="text-[11px] text-muted-foreground leading-relaxed px-1">
@@ -171,20 +239,25 @@ export function ReservationPaymentScreen({
       </div>
 
       {/* Fixed CTA */}
-      <div className="px-4 py-3 border-t border-border bg-card shrink-0">
+      {!paymentReady && <div className="px-4 py-3 border-t border-border bg-card shrink-0">
         <button
-          disabled={!canProceed}
+          disabled={!canProceed || submitting}
           onClick={handleSubmit}
           className={cn(
             'w-full py-4 rounded-xl font-bold text-sm transition-all',
-            canProceed
+            canProceed && !submitting
               ? 'bg-foreground text-background active:scale-[0.98]'
               : 'bg-secondary text-muted-foreground cursor-not-allowed',
           )}
         >
-          {isFree ? '무료 예약하기' : `결제하기 · ${store.ticketPrice.toLocaleString()}원`}
+          {submitting ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 size={16} className="animate-spin" />
+              예약 처리 중...
+            </span>
+          ) : isFree ? '무료 예약하기' : `결제하기 · ${ticketPrice.toLocaleString()}원`}
         </button>
-      </div>
+      </div>}
     </div>
   )
 }
