@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BottomNav } from '@/components/bottom-nav'
 import { HomeScreen } from '@/components/screens/home-screen'
@@ -58,6 +58,15 @@ export default function Page() {
   const [orgCouponStoreId, setOrgCouponStoreId] = useState<string>('')
   const [orgCouponStoreName, setOrgCouponStoreName] = useState<string>('')
   const [orgEditGoodsId, setOrgEditGoodsId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const requestedView = new URLSearchParams(window.location.search).get('view')
+    if (requestedView === 'reservations') {
+      setActiveTab('reservations')
+      setCurrentView('reservations')
+      window.history.replaceState(null, '', '/')
+    }
+  }, [])
 
   // ----- Navigation helpers -----
 

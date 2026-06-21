@@ -80,7 +80,7 @@ function PaymentSuccessContent() {
       <h1 className="text-lg font-bold text-foreground">결제가 완료되었습니다</h1>
       <p className="text-sm text-muted-foreground">{result.orderName}</p>
       <p className="text-xl font-black text-foreground">{result.amount.toLocaleString()}원</p>
-      <HomeLink />
+      <HomeLink paymentType={result.paymentType} />
     </ResultLayout>
   )
 }
@@ -95,10 +95,13 @@ function ResultLayout({ children }: { children: React.ReactNode }) {
   )
 }
 
-function HomeLink() {
+function HomeLink({ paymentType }: { paymentType?: PaymentConfirmResponse['paymentType'] }) {
+  const href = paymentType === 'POPUP' ? '/?view=reservations' : '/'
+  const label = paymentType === 'POPUP' ? '예약 내역 보기' : '홈으로 이동'
+
   return (
-    <Link href="/" className="mt-4 w-full rounded-xl bg-foreground py-3.5 text-sm font-bold text-background">
-      홈으로 이동
+    <Link href={href} className="mt-4 w-full rounded-xl bg-foreground py-3.5 text-sm font-bold text-background">
+      {label}
     </Link>
   )
 }

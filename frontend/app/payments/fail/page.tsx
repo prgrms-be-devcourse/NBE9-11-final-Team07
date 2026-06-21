@@ -1,18 +1,19 @@
 'use client'
 
-import { Suspense, useEffect } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Loader2, XCircle } from 'lucide-react'
-import { clearPendingPayment } from '@/lib/payment-api'
+import { getPendingPayment } from '@/lib/payment-api'
 
 function PaymentFailContent() {
   const searchParams = useSearchParams()
   const message = searchParams.get('message') ?? '결제가 완료되지 않았습니다.'
   const code = searchParams.get('code')
+  const [canRetry, setCanRetry] = useState(false)
 
   useEffect(() => {
-    clearPendingPayment()
+    setCanRetry(getPendingPayment() !== null)
   }, [])
 
   return (
@@ -22,9 +23,16 @@ function PaymentFailContent() {
         <h1 className="text-lg font-bold text-foreground">결제에 실패했습니다</h1>
         <p className="text-sm text-muted-foreground">{message}</p>
         {code && <p className="text-xs text-muted-foreground">오류 코드: {code}</p>}
-        <Link href="/" className="mt-4 w-full rounded-xl bg-foreground py-3.5 text-sm font-bold text-background">
-          홈으로 이동
-        </Link>
+        <div className="mt-4 w-full space-y-2">
+          {canRetry && (
+            <Link href="/payments/checkout" className="block w-full rounded-xl bg-foreground py-3.5 text-sm font-bold text-background">
+              결제 다시 시도
+            </Link>
+          )}
+          <Link href="/" className="block w-full rounded-xl bg-secondary py-3.5 text-sm font-bold text-foreground">
+            홈으로 이동
+          </Link>
+        </div>
       </div>
     </main>
   )
