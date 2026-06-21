@@ -150,6 +150,9 @@ public class PopupStoreHostService {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 
+		// 슬롯 먼저 삭제
+		reservationSlotRepository.deleteByPopupStoreId(popupStoreId);
+
 		// S3 이미지는 커밋 성공 후 삭제 (DB 롤백 시 파일 유실 방지)
 		registerAfterCommitDeletion(popupStore.getImageKey());
 

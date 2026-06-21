@@ -5,8 +5,8 @@ import { ArrowLeft, ImagePlus, Plus, Trash2, X, CalendarDays, Clock, Loader2 } f
 import { cn } from '@/lib/utils'
 import { getOperatingDates, formatDateKorean } from '@/lib/data'
 import type { OrgReservationSlot } from '@/lib/data'
-import { getPopupDetail, getPopupSlots, uploadPopupImage, createPopup, updatePopup, deletePopup, createSlot } from '@/lib/api'
-import type { ReservationSlotResponse } from '@/lib/api'
+import { getPopupDetail, getPopupSlots, uploadPopupImage, createPopup, updatePopup, deletePopup, createSlot } from '@/lib/popup-api'
+import type { ReservationSlotResponse } from '@/lib/popup-api'
 
 // ─── Add Slot Modal ──────────────────────────────────────────────────────────
 
@@ -313,7 +313,7 @@ export function PopupStoreFormScreen({
       try {
         const detailRes = await getPopupDetail(storeId)
         if (cancelled) return
-        const d = detailRes.data
+        const d = detailRes
         const start = d.openDate ? d.openDate.slice(0, 10) : ''
         const end = d.closeDate ? d.closeDate.slice(0, 10) : ''
 
@@ -331,7 +331,6 @@ export function PopupStoreFormScreen({
         const slotLists = await Promise.all(
           dates.map((date) =>
             getPopupSlots(storeId, date)
-              .then((r) => r.data)
               .catch(() => [] as ReservationSlotResponse[]),
           ),
         )
@@ -420,7 +419,7 @@ export function PopupStoreFormScreen({
           imageKey, // 업로드된 tempKey
           description,
         })
-        await createSlotsFor(String(res.data), slots)
+        await createSlotsFor(String(res), slots)
       } else if (storeId) {
         await updatePopup(storeId, {
           title: name,

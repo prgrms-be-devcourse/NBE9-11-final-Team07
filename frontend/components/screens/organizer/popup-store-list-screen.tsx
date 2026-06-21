@@ -5,7 +5,7 @@ import { ArrowLeft, Plus, Pencil, Trash2, Store, ShoppingBag, Tag } from 'lucide
 import { cn } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
 import type { OrgPopupStore } from '@/lib/data'
-import { getPopups, toOrgPopupStore, deletePopup } from '@/lib/api'
+import { getPopups, toOrgPopupStore, deletePopup } from '@/lib/popup-api'
 
 interface PopupStoreListScreenProps {
   onBack: () => void
@@ -74,7 +74,7 @@ export function PopupStoreListScreen({ onBack, onCreate, onEdit, onGoGoods, onGo
     ;(async () => {
       try {
         const res = await getPopups()
-        if (!cancelled) setStores(res.data.content.map(toOrgPopupStore))
+        if (!cancelled) setStores(res.content.map(toOrgPopupStore))
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : '목록을 불러오지 못했습니다.')
       } finally {
