@@ -22,6 +22,7 @@ import type { TimeSlot, GoodsItem, CouponItem, ReservationPayload, GoodsOrderPay
 import { couponApi, formatDiscount } from '@/lib/coupon-api'
 import { reservationApi } from '@/lib/reservation-api'
 import type { PopupStoreDetailResponse, ReservationSlotResponse } from '@/lib/reservation-api'
+import { goodsApi } from '@/lib/goods-api'
 
 interface DetailScreenProps {
   storeId: string
@@ -404,6 +405,8 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
   const [slots, setSlots] = useState<ReservationSlotResponse[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotsError, setSlotsError] = useState<string | null>(null)
+  const [goods, setGoods] = useState<GoodsItem[]>([])
+  const [goodsError, setGoodsError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -413,6 +416,33 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
       })
       .catch(() => {
         // Non-reservation UI can continue to use the existing display data.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [storeId])
+
+  useEffect(() => {
+    let cancelled = false
+    setGoodsError(null)
+    goodsApi.getByPopup(storeId)
+      .then((response) => {
+        if (cancelled) return
+        setGoods(response.content.map((item) => ({
+          id: String(item.goodsId),
+          name: item.name,
+          price: item.price,
+          status: item.status === 'ON_SALE' && item.stock > 0 ? '판매중' : '품절',
+          image: item.thumbnailImageUrl ?? '/placeholder.jpg',
+          stock: item.stock,
+        })))
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setGoods([])
+          setGoodsError(error.message)
+        }
       })
 
     return () => {
@@ -498,7 +528,7 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
 
   // Cart calculations
   const totalItems = Object.values(cart).reduce((sum, q) => sum + q, 0)
-  const totalAmount = store.goods.reduce((sum, item) => {
+  const totalAmount = goods.reduce((sum, item) => {
     return sum + item.price * (cart[item.id] ?? 0)
   }, 0)
   const hasCartItems = totalItems > 0
@@ -694,14 +724,14 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
           </div>
 
           {/* Goods Section */}
-          {store.goods.length > 0 && (
+          {(goods.length > 0 || goodsError) && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <ShoppingBag size={16} strokeWidth={2} />
                 <SectionTitle>한정 굿즈</SectionTitle>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {store.goods.map((item) => (
+                {goods.map((item) => (
                   <GoodsCard
                     key={item.id}
                     item={item}
@@ -712,6 +742,7 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
                   />
                 ))}
               </div>
+              {goodsError && <p className="text-xs text-[oklch(0.62_0.24_25)]">{goodsError}</p>}
             </div>
           )}
 
@@ -744,7 +775,7 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
       {/* Sticky bottom — two CTAs stacked when goods are present */}
       <div className="border-t border-border bg-card">
         {/* Goods CTA */}
-        {store.goods.length > 0 && (
+        {goods.length > 0 && (
           <div className="px-4 pt-3 pb-2">
             {hasCartItems ? (
               <button
@@ -825,7 +856,7 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
 
       {/* Goods Detail Bottom Sheet */}
       {sheetGoodsId && (() => {
-        const sheetItem = store.goods.find((g) => g.id === sheetGoodsId)
+        const sheetItem = goods.find((g) => g.id === sheetGoodsId)
         if (!sheetItem) return null
         return (
           <GoodsDetailSheet

@@ -126,10 +126,6 @@ export default function Page() {
     setCurrentView('goods-order')
   }
 
-  function handleGoodsOrderComplete() {
-    setCurrentView('goods-complete')
-  }
-
   function handleGoHome() {
     setActiveTab('home')
     setCurrentView('home')
@@ -288,7 +284,6 @@ export default function Page() {
             <GoodsOrderScreen
               payload={goodsOrderPayload}
               onBack={handleBack}
-              onComplete={handleGoodsOrderComplete}
             />
           )}
 
