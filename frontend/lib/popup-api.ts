@@ -76,6 +76,9 @@ export const deletePopup = (popupStoreId: string) =>
 export const createSlot = (popupStoreId: string, data: any) =>
     apiRequest<number>(`/host/popups/${popupStoreId}/slots`, {method: 'POST', body: JSON.stringify(data)})
 
+export const deleteSlot = (popupStoreId: string, slotId: string) =>
+    apiRequest<void>(`/host/popups/${popupStoreId}/slots/${slotId}`, {method: 'DELETE'})
+
 export const getPopupImagePresignedUrl = (fileName: string) =>
     apiRequest<PopupImagePresignResponse>(
         `/popups/images/presigned-url?fileName=${encodeURIComponent(fileName)}`

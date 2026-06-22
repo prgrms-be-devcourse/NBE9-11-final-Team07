@@ -5,7 +5,7 @@ import { ArrowLeft, ImagePlus, Plus, Trash2, X, CalendarDays, Clock, Loader2 } f
 import { cn } from '@/lib/utils'
 import { getOperatingDates, formatDateKorean } from '@/lib/data'
 import type { OrgReservationSlot } from '@/lib/data'
-import { getPopupDetail, getPopupSlots, uploadPopupImage, createPopup, updatePopup, deletePopup, createSlot } from '@/lib/popup-api'
+import { getPopupDetail, getPopupSlots, uploadPopupImage, createPopup, updatePopup, deletePopup, createSlot, deleteSlot } from '@/lib/popup-api'
 import type { ReservationSlotResponse } from '@/lib/popup-api'
 
 // ─── Add Slot Modal ──────────────────────────────────────────────────────────
@@ -300,6 +300,7 @@ export function PopupStoreFormScreen({
   const [regEnd, setRegEnd] = useState('')
   const [description, setDescription] = useState('')
   const [slots, setSlots] = useState<OrgReservationSlot[]>([])
+  const [originalSlots, setOriginalSlots] = useState<OrgReservationSlot[]>([])
   const [image, setImage] = useState<string | undefined>(undefined) // 미리보기용 (기존 presigned URL 또는 선택 파일)
   const [imageKey, setImageKey] = useState<string | null>(null)      // 업로드된 tempKey (없으면 변경 안 함)
   const [uploading, setUploading] = useState(false)
@@ -342,6 +343,7 @@ export function PopupStoreFormScreen({
           capacity: s.capacity,
         }))
         setSlots(loadedSlots)
+        setOriginalSlots(loadedSlots)
       } catch {
         // 조회 실패 시 빈 폼으로 진행
       }
@@ -375,6 +377,12 @@ export function PopupStoreFormScreen({
         startTime: toLocalTime(slot.time),
         capacity: slot.capacity,
       })
+    }
+  }
+
+  async function deleteSlotsFor(targetStoreId: string, targetSlots: OrgReservationSlot[]) {
+    for (const slot of targetSlots) {
+      await deleteSlot(targetStoreId, slot.id)
     }
   }
 
@@ -432,6 +440,11 @@ export function PopupStoreFormScreen({
           // 새 이미지를 골랐을 때만 imageKey 전송 (없으면 기존 이미지 유지)
           ...(imageKey ? { imageKey } : {}),
         })
+        const deletedSlots = originalSlots.filter(
+          (original) => !slots.some((slot) => slot.id === original.id),
+        )
+        // 삭제 후 같은 일시로 재생성하는 경우 중복 슬롯 검증을 피하기 위해 삭제를 먼저 처리한다.
+        await deleteSlotsFor(storeId, deletedSlots)
         // 신규 추가된 슬롯(id가 'new-'로 시작)만 생성
         await createSlotsFor(storeId, slots.filter((s) => s.id.startsWith('new-')))
       }
