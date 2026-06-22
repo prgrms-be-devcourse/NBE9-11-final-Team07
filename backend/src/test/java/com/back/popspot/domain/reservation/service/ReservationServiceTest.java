@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -27,6 +28,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations; // [추가]
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.payment.entity.PaymentType;
@@ -68,17 +71,26 @@ class ReservationServiceTest {
 	@Mock
 	private ReservationExpirationService reservationExpirationService;
 
+	@Mock
+	private StringRedisTemplate stringRedisTemplate; // [추가]
+
+	// [추가] ReservationService 생성 헬퍼 — 모든 테스트에서 재사용
+	private ReservationService reservationService() {
+		return new ReservationService(
+				reservationRepository,
+				reservationSlotRepository,
+				paymentRepository,
+				userRepository,
+				reservationExpirationService,
+				stringRedisTemplate
+		);
+	}
+
 	@Test
 	@DisplayName("내 예약 내역 조회 성공")
 	void getMyReservations_success() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		PopupStore freePopupStore = createPopupStore();
 		PopupStore paidPopupStore = createPopupStore();
 		ReservationSlot freeSlot = createReservationSlot(freePopupStore);
@@ -88,9 +100,9 @@ class ReservationServiceTest {
 		Reservation canceledReservation = createReservation(101L, user, paidSlot, ReservationStatus.CANCELED);
 		Pageable pageable = PageRequest.of(0, 10);
 		Page<Reservation> reservations = new PageImpl<>(
-			List.of(confirmedReservation, canceledReservation),
-			PageRequest.of(0, 10),
-			2
+				List.of(confirmedReservation, canceledReservation),
+				PageRequest.of(0, 10),
+				2
 		);
 
 		ReflectionTestUtils.setField(freePopupStore, "title", "무료 팝업");
@@ -109,9 +121,9 @@ class ReservationServiceTest {
 		ReflectionTestUtils.setField(paidSlot, "startTime", LocalTime.of(14, 0));
 
 		when(reservationRepository.findByUserIdAndStatusIn(
-			eq(2L),
-			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
-			any(Pageable.class)
+				eq(2L),
+				eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
+				any(Pageable.class)
 		)).thenReturn(reservations);
 
 		// when
@@ -139,16 +151,16 @@ class ReservationServiceTest {
 		assertEquals(ReservationStatus.CANCELED, canceled.status());
 
 		verify(reservationRepository).findByUserIdAndStatusIn(
-			eq(2L),
-			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
-			argThat(requestedPageable ->
-				requestedPageable.getPageNumber() == 0
-					&& requestedPageable.getPageSize() == 10
-					&& requestedPageable.getSort().equals(Sort.by(
-						Sort.Order.desc("reservedAt"),
-						Sort.Order.desc("id")
-					))
-			)
+				eq(2L),
+				eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
+				argThat(requestedPageable ->
+						requestedPageable.getPageNumber() == 0
+								&& requestedPageable.getPageSize() == 10
+								&& requestedPageable.getSort().equals(Sort.by(
+								Sort.Order.desc("reservedAt"),
+								Sort.Order.desc("id")
+						))
+				)
 		);
 	}
 
@@ -156,20 +168,14 @@ class ReservationServiceTest {
 	@DisplayName("내 예약 내역이 없으면 빈 페이지를 반환한다")
 	void getMyReservations_emptyPage() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		Pageable pageable = PageRequest.of(0, 10);
 		Page<Reservation> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
 
 		when(reservationRepository.findByUserIdAndStatusIn(
-			eq(2L),
-			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
-			any(Pageable.class)
+				eq(2L),
+				eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
+				any(Pageable.class)
 		)).thenReturn(emptyPage);
 
 		// when
@@ -179,9 +185,9 @@ class ReservationServiceTest {
 		assertTrue(response.getContent().isEmpty());
 		assertEquals(0, response.getTotalElements());
 		verify(reservationRepository).findByUserIdAndStatusIn(
-			eq(2L),
-			eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
-			any(Pageable.class)
+				eq(2L),
+				eq(List.of(ReservationStatus.CONFIRMED, ReservationStatus.CANCELED)),
+				any(Pageable.class)
 		);
 	}
 
@@ -189,22 +195,21 @@ class ReservationServiceTest {
 	@DisplayName("예약 선점 성공")
 	void createReservation_holdSuccess() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
 
+		// [추가] Redis mock 세팅 — Lua 성공(1 반환)
+		ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+		when(stringRedisTemplate.opsForValue()).thenReturn(valueOps);
+		when(valueOps.setIfAbsent(any(), any())).thenReturn(true);
+		when(stringRedisTemplate.execute(any(), any(), any())).thenReturn(1L);
+
 		when(reservationSlotRepository.findById(1L)).thenReturn(Optional.of(slot));
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.existsByUserIdAndSlotId(2L, 1L)).thenReturn(false);
-		when(reservationSlotRepository.increaseReservedCountIfAvailable(1L)).thenReturn(1);
 		when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> {
 			Reservation reservation = invocation.getArgument(0);
 			ReflectionTestUtils.setField(reservation, "id", 100L);
@@ -228,13 +233,7 @@ class ReservationServiceTest {
 	@DisplayName("같은 유저 같은 슬롯 중복 선점 실패")
 	void createReservation_fail_duplicateHold() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -246,8 +245,8 @@ class ReservationServiceTest {
 
 		// when
 		BusinessException exception = assertThrows(
-			BusinessException.class,
-			() -> reservationService.createReservation(request, 2L)
+				BusinessException.class,
+				() -> reservationService.createReservation(request, 2L)
 		);
 
 		// then
@@ -258,21 +257,15 @@ class ReservationServiceTest {
 	@DisplayName("존재하지 않는 슬롯이면 선점 실패")
 	void createReservation_fail_slotNotFound() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 
 		when(reservationSlotRepository.findById(1L)).thenReturn(Optional.empty());
 
 		// when
 		BusinessException exception = assertThrows(
-			BusinessException.class,
-			() -> reservationService.createReservation(request, 2L)
+				BusinessException.class,
+				() -> reservationService.createReservation(request, 2L)
 		);
 
 		// then
@@ -283,13 +276,7 @@ class ReservationServiceTest {
 	@DisplayName("예약 가능 기간이 아니면 선점 실패")
 	void createReservation_fail_popupReservationNotAvailable() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -301,8 +288,8 @@ class ReservationServiceTest {
 
 		// when
 		BusinessException exception = assertThrows(
-			BusinessException.class,
-			() -> reservationService.createReservation(request, 2L)
+				BusinessException.class,
+				() -> reservationService.createReservation(request, 2L)
 		);
 
 		// then
@@ -313,27 +300,26 @@ class ReservationServiceTest {
 	@DisplayName("슬롯 정원 초과로 선점 실패")
 	void createReservation_fail_capacityExceeded() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
 
+		// [추가] Redis mock 세팅 — Lua 실패(-1 반환 = 정원 초과)
+		ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+		when(stringRedisTemplate.opsForValue()).thenReturn(valueOps);
+		when(valueOps.setIfAbsent(any(), any())).thenReturn(true);
+		when(stringRedisTemplate.execute(any(), any(), any())).thenReturn(-1L);
+
 		when(reservationSlotRepository.findById(1L)).thenReturn(Optional.of(slot));
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.existsByUserIdAndSlotId(2L, 1L)).thenReturn(false);
-		when(reservationSlotRepository.increaseReservedCountIfAvailable(1L)).thenReturn(0);
 
 		// when
 		BusinessException exception = assertThrows(
-			BusinessException.class,
-			() -> reservationService.createReservation(request, 2L)
+				BusinessException.class,
+				() -> reservationService.createReservation(request, 2L)
 		);
 
 		// then
@@ -344,13 +330,7 @@ class ReservationServiceTest {
 	@DisplayName("예약 취소 성공")
 	void cancelReservation_success() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -358,12 +338,12 @@ class ReservationServiceTest {
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
-			.thenReturn(false);
+				.thenReturn(false);
 		when(reservationRepository.cancelConfirmedReservation(
-			eq(100L),
-			eq(ReservationStatus.CONFIRMED),
-			eq(ReservationStatus.CANCELED),
-			any(LocalDateTime.class)
+				eq(100L),
+				eq(ReservationStatus.CONFIRMED),
+				eq(ReservationStatus.CANCELED),
+				any(LocalDateTime.class)
 		)).thenReturn(1);
 		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
 
@@ -372,10 +352,10 @@ class ReservationServiceTest {
 
 		// then
 		verify(reservationRepository).cancelConfirmedReservation(
-			eq(100L),
-			eq(ReservationStatus.CONFIRMED),
-			eq(ReservationStatus.CANCELED),
-			any(LocalDateTime.class)
+				eq(100L),
+				eq(ReservationStatus.CONFIRMED),
+				eq(ReservationStatus.CANCELED),
+				any(LocalDateTime.class)
 		);
 		verify(reservationSlotRepository).decreaseReservedCount(1L);
 	}
@@ -384,13 +364,7 @@ class ReservationServiceTest {
 	@DisplayName("유료 예약 결제 시작 성공")
 	void startReservationPayment_paidSuccess() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -403,7 +377,7 @@ class ReservationServiceTest {
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
-			.thenReturn(false);
+				.thenReturn(false);
 		when(paymentRepository.findByIdempotencyKey("idem-paid-1")).thenReturn(Optional.empty());
 		when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -418,13 +392,13 @@ class ReservationServiceTest {
 		assertEquals("010-1234-5678", ReflectionTestUtils.getField(reservation, "reservationPhone"));
 
 		verify(paymentRepository).save(argThat(payment ->
-			payment.getReservation().equals(reservation)
-				&& payment.getUser().equals(user)
-				&& payment.getPaymentType() == PaymentType.POPUP
-				&& payment.getStatus() == PaymentStatus.READY
-				&& "idem-paid-1".equals(payment.getIdempotencyKey())
-				&& "성수 빈티지 토이 팝업 예약".equals(payment.getOrderName())
-				&& payment.getAmount() == 5000L
+				payment.getReservation().equals(reservation)
+						&& payment.getUser().equals(user)
+						&& payment.getPaymentType() == PaymentType.POPUP
+						&& payment.getStatus() == PaymentStatus.READY
+						&& "idem-paid-1".equals(payment.getIdempotencyKey())
+						&& "성수 빈티지 토이 팝업 예약".equals(payment.getOrderName())
+						&& payment.getAmount() == 5000L
 		));
 	}
 
@@ -432,13 +406,7 @@ class ReservationServiceTest {
 	@DisplayName("무료 예약 결제 시작 성공")
 	void startReservationPayment_freeSuccess() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -474,32 +442,26 @@ class ReservationServiceTest {
 	@DisplayName("같은 멱등성 키 재요청이면 기존 결제를 재응답한다")
 	void startReservationPayment_success_reuseExistingPaymentByIdempotencyKey() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
 		Reservation reservation = createHeldReservation(100L, user, slot, LocalDateTime.now().plusMinutes(5));
 		ReservationPaymentRequest request = new ReservationPaymentRequest("홍길동", "010-1234-5678", "idem-paid-2");
 		Payment existingPayment = Payment.createReadyReservationPayment(
-			user,
-			reservation,
-			"order-123",
-			"성수 빈티지 토이 팝업 예약",
-			5000L,
-			"idem-paid-2"
+				user,
+				reservation,
+				"order-123",
+				"성수 빈티지 토이 팝업 예약",
+				5000L,
+				"idem-paid-2"
 		);
 
 		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.PAID);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
-			.thenReturn(false);
+				.thenReturn(false);
 		when(paymentRepository.findByIdempotencyKey("idem-paid-2")).thenReturn(Optional.of(existingPayment));
 
 		// when
@@ -516,13 +478,7 @@ class ReservationServiceTest {
 	@DisplayName("선점 시간이 만료되면 예약을 만료 처리하고 결제 시작에 실패한다")
 	void startReservationPayment_fail_expiredHeldUntil() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -531,12 +487,12 @@ class ReservationServiceTest {
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(reservationExpirationService.expireIfHeldAndExpired(eq(reservation), any(LocalDateTime.class)))
-			.thenReturn(true);
+				.thenReturn(true);
 
 		// when
 		BusinessException exception = assertThrows(
-			BusinessException.class,
-			() -> reservationService.startReservationPayment(100L, 2L, request)
+				BusinessException.class,
+				() -> reservationService.startReservationPayment(100L, 2L, request)
 		);
 
 		// then
@@ -549,13 +505,7 @@ class ReservationServiceTest {
 	@DisplayName("본인 예약이 아니면 취소 실패")
 	void cancelReservation_fail_forbidden() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -565,8 +515,8 @@ class ReservationServiceTest {
 
 		// when
 		BusinessException exception = assertThrows(
-			BusinessException.class,
-			() -> reservationService.cancelReservation(100L, 3L)
+				BusinessException.class,
+				() -> reservationService.cancelReservation(100L, 3L)
 		);
 
 		// then
@@ -577,13 +527,7 @@ class ReservationServiceTest {
 	@DisplayName("확정 상태가 아니면 취소 실패")
 	void cancelReservation_fail_notConfirmed() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -593,8 +537,8 @@ class ReservationServiceTest {
 
 		// when
 		BusinessException exception = assertThrows(
-			BusinessException.class,
-			() -> reservationService.cancelReservation(100L, 2L)
+				BusinessException.class,
+				() -> reservationService.cancelReservation(100L, 2L)
 		);
 
 		// then
@@ -605,13 +549,7 @@ class ReservationServiceTest {
 	@DisplayName("취소 기한이 지나면 취소 실패")
 	void cancelReservation_fail_deadlinePassed() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -622,8 +560,8 @@ class ReservationServiceTest {
 
 		// when
 		BusinessException exception = assertThrows(
-			BusinessException.class,
-			() -> reservationService.cancelReservation(100L, 2L)
+				BusinessException.class,
+				() -> reservationService.cancelReservation(100L, 2L)
 		);
 
 		// then
@@ -634,13 +572,7 @@ class ReservationServiceTest {
 	@DisplayName("조건부 상태 변경에 실패하면 취소 실패")
 	void cancelReservation_fail_conditionalCancelUpdate() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			userRepository,
-			reservationExpirationService
-		);
+		ReservationService reservationService = reservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -648,18 +580,18 @@ class ReservationServiceTest {
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
-			.thenReturn(false);
+				.thenReturn(false);
 		when(reservationRepository.cancelConfirmedReservation(
-			eq(100L),
-			eq(ReservationStatus.CONFIRMED),
-			eq(ReservationStatus.CANCELED),
-			any(LocalDateTime.class)
+				eq(100L),
+				eq(ReservationStatus.CONFIRMED),
+				eq(ReservationStatus.CANCELED),
+				any(LocalDateTime.class)
 		)).thenReturn(0);
 
 		// when
 		BusinessException exception = assertThrows(
-			BusinessException.class,
-			() -> reservationService.cancelReservation(100L, 2L)
+				BusinessException.class,
+				() -> reservationService.cancelReservation(100L, 2L)
 		);
 
 		// then
@@ -670,31 +602,26 @@ class ReservationServiceTest {
 	private PopupStore createPopupStore() {
 		PopupStore popupStore = new PopupStore();
 		LocalDateTime now = LocalDateTime.now();
-
 		ReflectionTestUtils.setField(popupStore, "reservationStartAt", now.minusDays(1));
 		ReflectionTestUtils.setField(popupStore, "reservationEndAt", now.plusDays(1));
 		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.FREE);
-
 		return popupStore;
 	}
 
 	private ReservationSlot createReservationSlot(PopupStore popupStore) {
 		ReservationSlot slot = new ReservationSlot();
-
 		ReflectionTestUtils.setField(slot, "id", 1L);
 		ReflectionTestUtils.setField(slot, "popupStore", popupStore);
 		ReflectionTestUtils.setField(slot, "slotDate", LocalDate.now().plusDays(1));
 		ReflectionTestUtils.setField(slot, "startTime", LocalTime.of(10, 0));
 		ReflectionTestUtils.setField(slot, "capacity", 10);
 		ReflectionTestUtils.setField(slot, "reservedCount", 0);
-
 		return slot;
 	}
 
 	private User createUser(Long userId) {
 		User user = User.create("user@test.com", "user");
 		ReflectionTestUtils.setField(user, "id", userId);
-
 		return user;
 	}
 
@@ -702,20 +629,20 @@ class ReservationServiceTest {
 		return createReservation(reservationId, user, slot, ReservationStatus.CONFIRMED);
 	}
 
-	private Reservation createHeldReservation(Long reservationId, User user, ReservationSlot slot, LocalDateTime heldUntil) {
+	private Reservation createHeldReservation(Long reservationId, User user, ReservationSlot slot,
+	                                          LocalDateTime heldUntil) {
 		Reservation reservation = createReservation(reservationId, user, slot, ReservationStatus.HELD);
 		ReflectionTestUtils.setField(reservation, "heldUntil", heldUntil);
 		return reservation;
 	}
 
-	private Reservation createReservation(Long reservationId, User user, ReservationSlot slot, ReservationStatus status) {
+	private Reservation createReservation(Long reservationId, User user, ReservationSlot slot,
+	                                      ReservationStatus status) {
 		Reservation reservation = new Reservation();
-
 		ReflectionTestUtils.setField(reservation, "id", reservationId);
 		ReflectionTestUtils.setField(reservation, "user", user);
 		ReflectionTestUtils.setField(reservation, "slot", slot);
 		ReflectionTestUtils.setField(reservation, "status", status);
-
 		return reservation;
 	}
 }
