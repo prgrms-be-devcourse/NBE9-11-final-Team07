@@ -1,30 +1,22 @@
 package com.back.popspot.domain.goods.controller;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.BDDMockito.given;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.BDDMockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.test.web.servlet.MockMvc;
 
 import com.back.popspot.domain.goods.dto.GoodsOrderCreateResponse;
 import com.back.popspot.domain.goods.dto.GoodsOrderDetailResponse;
@@ -39,14 +31,10 @@ import com.back.popspot.domain.goods.service.GoodsOrderService;
 import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.dto.PageResponse;
+import com.back.popspot.support.IntegrationTestSupport;
 
-import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
-
-@WebMvcTest(GoodsOrderController.class)
-class GoodsOrderControllerTest {
-
-	@Autowired
-	private MockMvc mockMvc;
+@DisplayName("굿즈 주문 API")
+class GoodsOrderControllerTest extends IntegrationTestSupport {
 
 	@MockitoBean
 	private GoodsOrderService goodsOrderService;
@@ -77,16 +65,6 @@ class GoodsOrderControllerTest {
 
 	private UsernamePasswordAuthenticationToken auth() {
 		return new UsernamePasswordAuthenticationToken(1L, null, List.of());
-	}
-
-	@TestConfiguration
-	static class SecurityConfig {
-		@Bean
-		SecurityFilterChain testSecurityFilterChain(HttpSecurity http) throws Exception {
-			http.csrf(csrf -> csrf.disable())
-					.authorizeHttpRequests(authz -> authz.anyRequest().permitAll());
-			return http.build();
-		}
 	}
 
 	@Test
