@@ -68,7 +68,8 @@ class ReservationLuaConcurrencyTest extends IntegrationTestSupport {
         reserveScript.setResultType(Long.class);
 
         // DB 데이터 세팅 (@Transactional 없으니 직접 커밋됨)
-        owner = userRepository.save(User.create("owner@concurrency-test.com", "오너"));
+        owner = userRepository.save(User.create(
+                "owner-" + System.currentTimeMillis() + "@concurrency-test.com", "오너"));
         popupStore = popupStoreRepository.save(createPopupStore(owner));
         slot = reservationSlotRepository.save(createSlot(popupStore, CAPACITY));
 
