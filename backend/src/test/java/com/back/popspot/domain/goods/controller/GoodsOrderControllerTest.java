@@ -11,20 +11,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.List;
 
+import com.back.popspot.support.IntegrationTestSupport;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.test.web.servlet.MockMvc;
 
 import com.back.popspot.domain.goods.dto.GoodsOrderCreateResponse;
 import com.back.popspot.domain.goods.dto.GoodsOrderDetailResponse;
@@ -40,19 +35,11 @@ import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.dto.PageResponse;
 
-import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
-
-@WebMvcTest(GoodsOrderController.class)
-class GoodsOrderControllerTest {
-
-	@Autowired
-	private MockMvc mockMvc;
+@DisplayName("굿즈 주문 API")
+class GoodsOrderControllerTest extends IntegrationTestSupport {
 
 	@MockitoBean
 	private GoodsOrderService goodsOrderService;
-
-	@MockitoBean
-	private JpaMetamodelMappingContext jpaMetamodelMappingContext;
 
 	private User user;
 	private Goods goods;
@@ -79,17 +66,8 @@ class GoodsOrderControllerTest {
 		return new UsernamePasswordAuthenticationToken(1L, null, List.of());
 	}
 
-	@TestConfiguration
-	static class SecurityConfig {
-		@Bean
-		SecurityFilterChain testSecurityFilterChain(HttpSecurity http) throws Exception {
-			http.csrf(csrf -> csrf.disable())
-					.authorizeHttpRequests(authz -> authz.anyRequest().permitAll());
-			return http.build();
-		}
-	}
-
 	@Test
+	@DisplayName("굿즈 주문 생성 시 201과 주문 정보를 반환한다")
 	void createOrder_성공_201() throws Exception {
 		GoodsOrderItem item = new GoodsOrderItem(pendingOrder, goods, 2, 5000, 10000);
 		Payment payment = Payment.createReadyGoodsOrderPayment(
@@ -127,6 +105,7 @@ class GoodsOrderControllerTest {
 	}
 
 	@Test
+	@DisplayName("굿즈 주문 환불 시 200과 REFUNDED 상태를 반환한다")
 	void refundOrder_성공_200() throws Exception {
 		GoodsOrder refundedOrder = new GoodsOrder(user, 10000, 0, 10000, GoodsOrderStatus.REFUNDED,
 				"홍길동", "010-1234-5678", "12345", "서울시", null);
@@ -144,6 +123,7 @@ class GoodsOrderControllerTest {
 	}
 
 	@Test
+	@DisplayName("내 주문 목록 조회 시 200과 페이지 응답을 반환한다")
 	void getMyOrders_성공_200() throws Exception {
 		GoodsOrderSummaryResponse summary = GoodsOrderSummaryResponse.from(pendingOrder, List.of());
 		PageResponse<GoodsOrderSummaryResponse> response = PageResponse.from(new PageImpl<>(List.of(summary)));
@@ -157,6 +137,7 @@ class GoodsOrderControllerTest {
 	}
 
 	@Test
+	@DisplayName("굿즈 주문 상세 조회 시 200과 주문 상세를 반환한다")
 	void getOrderDetail_성공_200() throws Exception {
 		GoodsOrderDetailResponse response = GoodsOrderDetailResponse.from(pendingOrder, List.of());
 		given(goodsOrderService.getOrderDetail(eq(1L), eq(100L))).willReturn(response);
