@@ -8,6 +8,7 @@ import { popupStores } from '@/lib/data'
 import type { GoodsOrderPayload } from '@/lib/data'
 import { goodsApi } from '@/lib/goods-api'
 import type { GoodsSummaryResponse } from '@/lib/goods-api'
+import { createIdempotencyKey } from '@/lib/idempotency'
 import { savePendingPayment } from '@/lib/payment-api'
 import { isValidPhoneNumber, normalizePhoneNumber } from '@/lib/phone'
 
@@ -73,7 +74,7 @@ export function GoodsOrderScreen({ payload, onBack }: GoodsOrderScreenProps) {
     setSubmitting(true)
     setError(null)
     try {
-      if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID()
+      if (!idempotencyKeyRef.current) idempotencyKeyRef.current = createIdempotencyKey()
       const order = await goodsApi.createOrder({
         items: payload.cart.map((item) => ({
           goodsId: Number(item.goodsId),

@@ -8,6 +8,7 @@ import { popupStores, formatDateKorean } from '@/lib/data'
 import type { ReservationPayload } from '@/lib/data'
 import { reservationApi } from '@/lib/reservation-api'
 import type { PopupStoreDetailResponse } from '@/lib/reservation-api'
+import { createIdempotencyKey } from '@/lib/idempotency'
 import { savePendingPayment } from '@/lib/payment-api'
 import { isValidPhoneNumber, normalizePhoneNumber } from '@/lib/phone'
 
@@ -103,7 +104,7 @@ export function ReservationPaymentScreen({
         reservationIdRef.current = reservation.reservationId
       }
       if (!idempotencyKeyRef.current) {
-        idempotencyKeyRef.current = crypto.randomUUID()
+        idempotencyKeyRef.current = createIdempotencyKey()
       }
 
       const payment = await reservationApi.startPayment(reservationIdRef.current, {
