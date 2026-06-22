@@ -23,9 +23,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Table(
 	name = "reservation",
-	uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "slot_id"})
+	uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "slot_id", "active_unique_key"})
 )
 public class Reservation extends BaseEntity {
+	private static final int ACTIVE_UNIQUE_KEY = 1;
+
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "user_id", nullable = false)
 	private User user;
@@ -47,6 +49,9 @@ public class Reservation extends BaseEntity {
 	@Column(name = "canceled_at")
 	private LocalDateTime canceledAt;
 
+	@Column(name = "active_unique_key")
+	private Integer activeUniqueKey;
+
 	@Column(name = "reservation_name", length = 50)
 	private String reservationName;
 
@@ -65,6 +70,7 @@ public class Reservation extends BaseEntity {
 		this.status = status;
 		this.heldUntil = heldUntil;
 		this.reservedAt = reservedAt;
+		this.activeUniqueKey = ACTIVE_UNIQUE_KEY;
 	}
 
 	public static Reservation createHeld(User user, ReservationSlot slot, LocalDateTime now, LocalDateTime heldUntil) {
@@ -74,6 +80,7 @@ public class Reservation extends BaseEntity {
 	public void cancel(LocalDateTime canceledAt) {
 		this.status = ReservationStatus.CANCELED;
 		this.canceledAt = canceledAt;
+		this.activeUniqueKey = null;
 	}
 
 	public void updateReservationInfo(String reservationName, String reservationPhone) {
@@ -87,5 +94,6 @@ public class Reservation extends BaseEntity {
 
 	public void expire() {
 		this.status = ReservationStatus.EXPIRED;
+		this.activeUniqueKey = null;
 	}
 }

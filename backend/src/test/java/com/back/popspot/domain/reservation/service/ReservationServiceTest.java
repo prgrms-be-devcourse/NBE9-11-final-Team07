@@ -225,7 +225,7 @@ class ReservationServiceTest {
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByUserIdAndSlotId(2L, 1L)).thenReturn(false);
+		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
 		// DB 저장은 별도 빈에 위임된다. createHeld 결과에 id 만 채워 반환하도록 흉내낸다.
 		when(reservationCommandService.save(
 			any(User.class),
@@ -284,7 +284,7 @@ class ReservationServiceTest {
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByUserIdAndSlotId(2L, 1L)).thenReturn(true);
+		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(true);
 
 		// when
 		BusinessException exception = assertThrows(
@@ -379,7 +379,7 @@ class ReservationServiceTest {
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByUserIdAndSlotId(2L, 1L)).thenReturn(false);
+		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
 		when(reservationCommandService.save(
 			any(User.class),
 			any(ReservationSlot.class),
@@ -418,7 +418,7 @@ class ReservationServiceTest {
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByUserIdAndSlotId(2L, 1L)).thenReturn(false);
+		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
 		// remaining -1 결과가 -1 → 재고 없음
 		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);

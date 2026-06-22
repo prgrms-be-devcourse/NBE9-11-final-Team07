@@ -109,6 +109,47 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 		// 단일 카운터: 재고의 source of truth 는 Redis remaining (10 → 9 차감)
 		Long remaining = redisTemplate.opsForValue().get(RedisKeys.reservationSlotRemaining(slot.getId()));
 		assertThat(remaining).isEqualTo(9L);
+		assertThat(savedReservation.getActiveUniqueKey()).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("취소 또는 만료 이력만 있으면 같은 슬롯을 다시 예약할 수 있다")
+	void createReservation_success_whenOnlyInactiveReservationsExist() throws Exception {
+		User user = persistUser("inactive-history@test.com");
+		ReservationSlot slot = persistSlot(persistPopup(user, PopupFeeType.FREE, null, "재예약 팝업"), 10, 0);
+		Reservation canceled = persistReservation(user, slot, ReservationStatus.CANCELED);
+		Reservation expired = persistReservation(user, slot, ReservationStatus.EXPIRED);
+
+		flushAndClear();
+
+		mockMvc.perform(post("/reservations")
+				.with(authentication(auth(user.getId())))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "slotId": %d
+					}
+					""".formatted(slot.getId())))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.code").value("SUCCESS"))
+			.andExpect(jsonPath("$.data.status").value("HELD"))
+			.andExpect(jsonPath("$.data.slotId").value(slot.getId()));
+
+		flushAndClear();
+
+		List<Reservation> reservations = reservationRepository.findAll();
+		Reservation savedCanceled = reservationRepository.findById(canceled.getId()).orElseThrow();
+		Reservation savedExpired = reservationRepository.findById(expired.getId()).orElseThrow();
+
+		assertThat(reservations).hasSize(3);
+		assertThat(savedCanceled.getActiveUniqueKey()).isNull();
+		assertThat(savedExpired.getActiveUniqueKey()).isNull();
+		assertThat(reservations)
+			.filteredOn(reservation -> reservation.getStatus() == ReservationStatus.HELD)
+			.hasSize(1)
+			.allSatisfy(reservation -> assertThat(reservation.getActiveUniqueKey()).isEqualTo(1));
+		Long remaining = redisTemplate.opsForValue().get(RedisKeys.reservationSlotRemaining(slot.getId()));
+		assertThat(remaining).isEqualTo(9L);
 	}
 
 	@Test
