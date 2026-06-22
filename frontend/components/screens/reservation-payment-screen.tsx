@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { popupStores, formatDateKorean } from '@/lib/data'
 import type { ReservationPayload } from '@/lib/data'
 import { reservationApi } from '@/lib/reservation-api'
-import type { PopupStoreDetailResponse } from '@/lib/reservation-api'
+import type { PopupStoreDetailResponse, ReservationPaymentResponse } from '@/lib/reservation-api'
 import { createIdempotencyKey } from '@/lib/idempotency'
 import { savePendingPayment } from '@/lib/payment-api'
 import { isValidPhoneNumber, normalizePhoneNumber } from '@/lib/phone'
@@ -15,7 +15,7 @@ import { isValidPhoneNumber, normalizePhoneNumber } from '@/lib/phone'
 interface ReservationPaymentScreenProps {
   payload: ReservationPayload
   onBack: () => void
-  onComplete: () => void
+  onComplete: (reservation: ReservationPaymentResponse) => void
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -122,7 +122,7 @@ export function ReservationPaymentScreen({
         })
         router.push('/payments/checkout')
       } else {
-        onComplete()
+        onComplete(payment)
       }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : '예약 결제를 준비하지 못했습니다.')

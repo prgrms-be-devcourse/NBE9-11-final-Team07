@@ -3,20 +3,29 @@
 import { CheckCircle, Calendar, Clock, MapPin, Home, Ticket } from 'lucide-react'
 import { popupStores, formatDateKorean } from '@/lib/data'
 import type { ReservationPayload } from '@/lib/data'
+import type { ReservationPaymentResponse } from '@/lib/reservation-api'
 
 interface ReservationCompleteScreenProps {
   payload: ReservationPayload
+  reservation: ReservationPaymentResponse | null
   onGoHome: () => void
   onGoReservations: () => void
 }
 
 export function ReservationCompleteScreen({
   payload,
+  reservation,
   onGoHome,
   onGoReservations,
 }: ReservationCompleteScreenProps) {
   const store = popupStores.find((s) => s.id === payload.storeId)
   if (!store) return null
+
+  const popupName = reservation?.popupName ?? store.name
+  const location = reservation?.location ?? store.location
+  const reservationDate = reservation?.reservationDate ?? payload.date
+  const reservationTime = reservation?.reservationTime?.slice(0, 5) ?? payload.time
+  const reservationNumber = reservation?.reservationId ? `RSV-${reservation.reservationId}` : null
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
@@ -33,18 +42,9 @@ export function ReservationCompleteScreen({
           </p>
 
           {/* Ticket card */}
-          <div className="w-full mt-8 bg-secondary rounded-2xl overflow-hidden border border-border">
-            {/* Store image */}
-            <div className="relative w-full h-36 overflow-hidden">
-              <img
-                src={store.image}
-                alt={store.name}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-4">
-                <p className="text-white text-base font-black leading-tight text-left text-balance">{store.name}</p>
-              </div>
+          <div className="w-full mt-8 bg-secondary rounded-2xl overflow-hidden border border-border text-left">
+            <div className="px-4 py-4 bg-foreground text-background">
+              <p className="text-base font-black leading-tight text-balance">{popupName}</p>
             </div>
 
             {/* Ticket dashes */}
@@ -59,18 +59,25 @@ export function ReservationCompleteScreen({
               <div className="flex items-center gap-3">
                 <MapPin size={14} className="text-muted-foreground shrink-0" />
                 <span className="text-xs text-muted-foreground w-16 shrink-0">장소</span>
-                <span className="text-sm font-semibold text-foreground text-right flex-1">{store.location}</span>
+                <span className="text-sm font-semibold text-foreground text-right flex-1">{location}</span>
               </div>
               <div className="flex items-center gap-3">
                 <Calendar size={14} className="text-muted-foreground shrink-0" />
                 <span className="text-xs text-muted-foreground w-16 shrink-0">방문 날짜</span>
-                <span className="text-sm font-semibold text-foreground text-right flex-1">{formatDateKorean(payload.date)}</span>
+                <span className="text-sm font-semibold text-foreground text-right flex-1">{formatDateKorean(reservationDate)}</span>
               </div>
               <div className="flex items-center gap-3">
                 <Clock size={14} className="text-muted-foreground shrink-0" />
                 <span className="text-xs text-muted-foreground w-16 shrink-0">입장 시간</span>
-                <span className="text-sm font-semibold text-foreground text-right flex-1">{payload.time}</span>
+                <span className="text-sm font-semibold text-foreground text-right flex-1">{reservationTime}</span>
               </div>
+              {reservationNumber && (
+                <div className="flex items-center gap-3">
+                  <Ticket size={14} className="text-muted-foreground shrink-0" />
+                  <span className="text-xs text-muted-foreground w-16 shrink-0">예약 번호</span>
+                  <span className="text-sm font-semibold text-foreground text-right flex-1">{reservationNumber}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
