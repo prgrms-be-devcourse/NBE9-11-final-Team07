@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BottomNav } from '@/components/bottom-nav'
 import { HomeScreen } from '@/components/screens/home-screen'
@@ -59,6 +59,15 @@ export default function Page() {
   const [orgCouponStoreName, setOrgCouponStoreName] = useState<string>('')
   const [orgEditGoodsId, setOrgEditGoodsId] = useState<string | null>(null)
 
+  useEffect(() => {
+    const requestedView = new URLSearchParams(window.location.search).get('view')
+    if (requestedView === 'reservations') {
+      setActiveTab('reservations')
+      setCurrentView('reservations')
+      window.history.replaceState(null, '', '/')
+    }
+  }, [])
+
   // ----- Navigation helpers -----
 
   function handleStoreSelect(storeId: string) {
@@ -115,10 +124,6 @@ export default function Page() {
   function handleOrderGoods(payload: GoodsOrderPayload) {
     setGoodsOrderPayload(payload)
     setCurrentView('goods-order')
-  }
-
-  function handleGoodsOrderComplete() {
-    setCurrentView('goods-complete')
   }
 
   function handleGoHome() {
@@ -279,7 +284,6 @@ export default function Page() {
             <GoodsOrderScreen
               payload={goodsOrderPayload}
               onBack={handleBack}
-              onComplete={handleGoodsOrderComplete}
             />
           )}
 

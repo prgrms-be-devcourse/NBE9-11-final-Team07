@@ -26,6 +26,7 @@ export interface PopupStore {
 
 export interface ReservationPayload {
   storeId: string
+  slotId: number
   date: string
   time: string
 }

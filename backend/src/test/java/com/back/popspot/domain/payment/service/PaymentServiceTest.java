@@ -2,8 +2,10 @@ package com.back.popspot.domain.payment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
@@ -15,18 +17,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.TransactionSystemException;
 
 import com.back.popspot.domain.payment.client.TossPaymentsClient;
 import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
 import com.back.popspot.domain.payment.dto.PaymentConfirmResponse;
-import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
-import com.back.popspot.domain.payment.repository.PaymentRepository;
-import com.back.popspot.domain.reservation.entity.Reservation;
-import com.back.popspot.domain.reservation.entity.ReservationStatus;
-import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 
@@ -36,8 +33,10 @@ import tools.jackson.databind.json.JsonMapper;
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceTest {
 
+	private static final LocalDateTime APPROVED_AT = LocalDateTime.of(2026, 6, 16, 10, 0);
+
 	@Mock
-	private PaymentRepository paymentRepository;
+	private PaymentTransactionService paymentTransactionService;
 
 	@Mock
 	private TossPaymentsClient tossPaymentsClient;
@@ -46,104 +45,67 @@ class PaymentServiceTest {
 	private PaymentService paymentService;
 
 	@Test
-	@DisplayName("READY 결제를 승인하고 결제와 예약 상태를 완료 처리한다")
-	void confirmReadyReservationPayment() throws Exception {
-		Reservation reservation = reservation(1L, ReservationStatus.HELD, LocalDateTime.now().plusMinutes(5));
-		Payment payment = readyReservationPayment(reservation);
+	@DisplayName("READY 결제는 토스 승인 후 별도 트랜잭션에서 완료 처리한다")
+	void confirmReadyPayment() throws Exception {
 		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentConfirmResponse expected = paidResponse();
 		JsonNode tossResponse = tossResponse("payment-key", "order-id", 1000L);
 
-		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
+		given(paymentTransactionService.prepare(request)).willReturn(Optional.empty());
 		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse);
+		given(paymentTransactionService.complete(request, APPROVED_AT)).willReturn(expected);
 
 		PaymentConfirmResponse response = paymentService.confirm(request);
 
-		assertThat(response.paymentId()).isEqualTo(10L);
-		assertThat(response.paymentType()).isEqualTo(PaymentType.POPUP);
-		assertThat(response.orderId()).isEqualTo("order-id");
-		assertThat(response.paymentKey()).isEqualTo("payment-key");
-		assertThat(response.amount()).isEqualTo(1000L);
-		assertThat(response.status()).isEqualTo(PaymentStatus.PAID);
-		assertThat(response.approvedAt()).isEqualTo(LocalDateTime.of(2026, 6, 16, 10, 0));
-		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
-		assertThat(payment.getPaymentKey()).isEqualTo("payment-key");
-		assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+		assertThat(response).isEqualTo(expected);
+		verify(paymentTransactionService).complete(request, APPROVED_AT);
 	}
 
 	@Test
-	@DisplayName("요청 금액이 결제 금액과 다르면 승인하지 않는다")
-	void rejectAmountMismatch() {
-		Payment payment = readyPayment();
-		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 2000L);
+	@DisplayName("토스 승인 후 DB 커밋에 실패하면 재요청으로 결제를 완료한다")
+	void recoverPaymentOnRetryAfterCommitFailure() throws Exception {
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentConfirmResponse expected = paidResponse();
+		JsonNode tossResponse = tossResponse("payment-key", "order-id", 1000L);
 
-		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
+		given(paymentTransactionService.prepare(request)).willReturn(Optional.empty());
+		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse);
+		given(paymentTransactionService.complete(request, APPROVED_AT))
+			.willThrow(new TransactionSystemException("commit failed"))
+			.willReturn(expected);
 
 		assertThatThrownBy(() -> paymentService.confirm(request))
-			.isInstanceOf(BusinessException.class)
-			.extracting("errorCode")
-			.isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
+			.isInstanceOf(TransactionSystemException.class);
 
-		verify(tossPaymentsClient, never()).confirm(request);
+		PaymentConfirmResponse response = paymentService.confirm(request);
+
+		assertThat(response).isEqualTo(expected);
+		verify(tossPaymentsClient, times(2)).confirm(request);
+		verify(paymentTransactionService, times(2)).complete(request, APPROVED_AT);
 	}
 
 	@Test
-	@DisplayName("이미 승인된 결제는 같은 결제 키 요청에 기존 결과를 반환한다")
+	@DisplayName("이미 승인된 결제는 토스 API를 호출하지 않고 기존 결과를 반환한다")
 	void returnExistingDonePayment() {
-		Payment payment = readyPayment();
-		payment.complete("payment-key", LocalDateTime.of(2026, 6, 16, 10, 0));
 		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentConfirmResponse expected = paidResponse();
 
-		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
+		given(paymentTransactionService.prepare(request)).willReturn(Optional.of(expected));
 
 		PaymentConfirmResponse response = paymentService.confirm(request);
 
-		assertThat(response.status()).isEqualTo(PaymentStatus.PAID);
-		assertThat(response.paymentKey()).isEqualTo("payment-key");
+		assertThat(response).isEqualTo(expected);
 		verify(tossPaymentsClient, never()).confirm(request);
+		verify(paymentTransactionService, never()).complete(any(), any());
 	}
 
 	@Test
-	@DisplayName("예약 선점 시간이 만료된 결제는 승인하지 않는다")
-	void rejectExpiredReservationPayment() {
-		Reservation reservation = reservation(1L, ReservationStatus.HELD, LocalDateTime.now().minusSeconds(1));
-		Payment payment = readyReservationPayment(reservation);
-		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
-
-		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
-
-		assertThatThrownBy(() -> paymentService.confirm(request))
-			.isInstanceOf(BusinessException.class)
-			.extracting("errorCode")
-			.isEqualTo(ErrorCode.RESERVATION_PAYMENT_EXPIRED);
-
-		verify(tossPaymentsClient, never()).confirm(request);
-	}
-
-	@Test
-	@DisplayName("예약 상태가 HELD가 아니면 결제를 승인하지 않는다")
-	void rejectNotHeldReservationPayment() {
-		Reservation reservation = reservation(1L, ReservationStatus.CANCELED, LocalDateTime.now().plusMinutes(5));
-		Payment payment = readyReservationPayment(reservation);
-		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
-
-		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
-
-		assertThatThrownBy(() -> paymentService.confirm(request))
-			.isInstanceOf(BusinessException.class)
-			.extracting("errorCode")
-			.isEqualTo(ErrorCode.RESERVATION_PAYMENT_NOT_ALLOWED_STATUS);
-
-		verify(tossPaymentsClient, never()).confirm(request);
-	}
-
-	@Test
-	@DisplayName("토스 승인 응답이 요청 정보와 다르면 결제를 완료하지 않는다")
+	@DisplayName("토스 승인 응답이 요청 정보와 다르면 완료 트랜잭션을 실행하지 않는다")
 	void rejectTossResponseMismatch() throws Exception {
-		Payment payment = readyPayment();
 		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
 		JsonNode tossResponse = tossResponse("other-payment-key", "order-id", 1000L);
 
-		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
+		given(paymentTransactionService.prepare(request)).willReturn(Optional.empty());
 		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse);
 
 		assertThatThrownBy(() -> paymentService.confirm(request))
@@ -151,43 +113,20 @@ class PaymentServiceTest {
 			.extracting("errorCode")
 			.isEqualTo(ErrorCode.PAYMENT_CONFIRM_RESPONSE_MISMATCH);
 
-		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.READY);
+		verify(paymentTransactionService, never()).complete(any(), any());
 	}
 
-	private Payment readyPayment() {
-		User user = User.create("user@example.com", "사용자");
-		Payment payment = Payment.createReady(
-			user,
-			PaymentType.GOODS,
+	private PaymentConfirmResponse paidResponse() {
+		return new PaymentConfirmResponse(
+			10L,
+			PaymentType.POPUP,
 			"order-id",
-			"굿즈 결제",
-			1000L,
-			"idempotency-key"
-		);
-		ReflectionTestUtils.setField(payment, "id", 10L);
-		return payment;
-	}
-
-	private Payment readyReservationPayment(Reservation reservation) {
-		User user = User.create("user@example.com", "사용자");
-		Payment payment = Payment.createReadyReservationPayment(
-			user,
-			reservation,
-			"order-id",
+			"payment-key",
 			"예약 결제",
 			1000L,
-			"idempotency-key"
+			PaymentStatus.PAID,
+			APPROVED_AT
 		);
-		ReflectionTestUtils.setField(payment, "id", 10L);
-		return payment;
-	}
-
-	private Reservation reservation(Long id, ReservationStatus status, LocalDateTime heldUntil) {
-		Reservation reservation = new Reservation();
-		ReflectionTestUtils.setField(reservation, "id", id);
-		ReflectionTestUtils.setField(reservation, "status", status);
-		ReflectionTestUtils.setField(reservation, "heldUntil", heldUntil);
-		return reservation;
 	}
 
 	private JsonNode tossResponse(String paymentKey, String orderId, long amount) throws Exception {
@@ -197,7 +136,7 @@ class PaymentServiceTest {
 				  "status": "DONE",
 				  "paymentKey": "%s",
 				  "orderId": "%s",
-				  "amount": %d,
+				  "totalAmount": %d,
 				  "approvedAt": "2026-06-16T10:00:00+09:00"
 				}
 				""".formatted(paymentKey, orderId, amount));

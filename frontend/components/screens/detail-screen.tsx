@@ -20,6 +20,10 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { getOperatingDates, formatDateKorean } from '@/lib/data'
 import type { PopupStore, TimeSlot, GoodsItem, CouponItem, ReservationPayload, GoodsOrderPayload, CouponIssuancePayload } from '@/lib/data'
 import { getPopupDetail, getPopupSlots, toPopupStoreFromDetail, toTimeSlot } from '@/lib/popup-api'
+import { couponApi, formatDiscount } from '@/lib/coupon-api'
+import { goodsApi } from '@/lib/goods-api'
+
+type ReservationSlotView = TimeSlot & { slotId: number }
 
 interface DetailScreenProps {
   storeId: string
@@ -392,14 +396,16 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
   const [store, setStore] = useState<PopupStore | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
+  const [selectedSlot, setSelectedSlot] = useState<ReservationSlotView | null>(null)
   // 선택한 날짜의 예약 시간대 (getPopupSlots 결과)
-  const [slots, setSlots] = useState<TimeSlot[]>([])
+  const [slots, setSlots] = useState<ReservationSlotView[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [liked, setLiked] = useState(false)
   const [cart, setCart] = useState<Record<string, number>>({})
   // id of the goods item whose detail sheet is open, null = closed
   const [sheetGoodsId, setSheetGoodsId] = useState<string | null>(null)
+  const [goods, setGoods] = useState<GoodsItem[]>([])
+  const [coupons, setCoupons] = useState<CouponItem[]>([])
 
   useEffect(() => {
     let active = true
@@ -414,6 +420,48 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
       .finally(() => {
         if (active) setLoading(false)
       })
+    return () => {
+      active = false
+    }
+  }, [storeId])
+
+  useEffect(() => {
+    let active = true
+
+    goodsApi.getByPopup(storeId)
+      .then((response) => {
+        if (!active) return
+        setGoods(response.content.map((item) => ({
+          id: String(item.goodsId),
+          name: item.name,
+          price: item.price,
+          status: item.status === 'ON_SALE' && item.stock > 0 ? '판매중' : '품절',
+          image: item.thumbnailImageUrl ?? '/placeholder.jpg',
+          stock: item.stock,
+        })))
+      })
+      .catch(() => {
+        if (active) setGoods([])
+      })
+
+    couponApi.getPublicCoupons(storeId)
+      .then((response) => {
+        if (!active) return
+        setCoupons(response.map((coupon) => ({
+          id: String(coupon.id),
+          title: coupon.name,
+          discount: formatDiscount(coupon),
+          minOrder: coupon.minOrderAmount
+            ? `${coupon.minOrderAmount.toLocaleString()}원 이상`
+            : '없음',
+          expiresAt: coupon.expiredAt.slice(0, 10),
+          status: coupon.status === 'ACTIVE' ? '발급 가능' : '소진',
+        })))
+      })
+      .catch(() => {
+        if (active) setCoupons([])
+      })
+
     return () => {
       active = false
     }
@@ -448,7 +496,7 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
 
   // Cart calculations
   const totalItems = Object.values(cart).reduce((sum, q) => sum + q, 0)
-  const totalAmount = store.goods.reduce((sum, item) => {
+  const totalAmount = goods.reduce((sum, item) => {
     return sum + item.price * (cart[item.id] ?? 0)
   }, 0)
   const hasCartItems = totalItems > 0
@@ -458,7 +506,10 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
     setSelectedSlot(null)
     setSlotsLoading(true)
     getPopupSlots(storeId, date)
-      .then((res) => setSlots((res ?? []).map(toTimeSlot)))
+      .then((res) => setSlots((res ?? []).map((slot) => ({
+        ...toTimeSlot(slot),
+        slotId: slot.slotId,
+      }))))
       .catch(() => setSlots([]))
       .finally(() => setSlotsLoading(false))
   }
@@ -624,10 +675,10 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
                       <div className="grid grid-cols-4 gap-2">
                         {slots.map((slot) => (
                           <TimeSlotButton
-                            key={slot.time}
+                            key={slot.slotId}
                             slot={slot}
-                            selected={selectedSlot === slot.time}
-                            onClick={() => setSelectedSlot(slot.time)}
+                            selected={selectedSlot?.slotId === slot.slotId}
+                            onClick={() => setSelectedSlot(slot)}
                           />
                         ))}
                       </div>
@@ -639,14 +690,14 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
           </div>
 
           {/* Goods Section */}
-          {store.goods.length > 0 && (
+          {goods.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <ShoppingBag size={16} strokeWidth={2} />
                 <SectionTitle>한정 굿즈</SectionTitle>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {store.goods.map((item) => (
+                {goods.map((item) => (
                   <GoodsCard
                     key={item.id}
                     item={item}
@@ -661,14 +712,14 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
           )}
 
           {/* Coupon Section */}
-          {store.coupons.length > 0 && (
+          {coupons.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <TicketIcon size={16} strokeWidth={2} />
                 <SectionTitle>오프라인 쿠폰</SectionTitle>
               </div>
               <div className="space-y-2">
-                {store.coupons.map((coupon) => (
+                {coupons.map((coupon) => (
                   <CouponCard
                     key={coupon.id}
                     coupon={coupon}
@@ -686,7 +737,7 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
       {/* Sticky bottom — two CTAs stacked when goods are present */}
       <div className="border-t border-border bg-card">
         {/* Goods CTA */}
-        {store.goods.length > 0 && (
+        {goods.length > 0 && (
           <div className="px-4 pt-3 pb-2">
             {hasCartItems ? (
               <button
@@ -738,7 +789,12 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
                 disabled={!selectedDate || !selectedSlot}
                 onClick={() => {
                   if (selectedDate && selectedSlot) {
-                    onReserve({ storeId, date: selectedDate, time: selectedSlot })
+                    onReserve({
+                      storeId,
+                      slotId: selectedSlot.slotId,
+                      date: selectedDate,
+                      time: selectedSlot.time,
+                    })
                   }
                 }}
                 className={cn(
@@ -761,7 +817,7 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
 
       {/* Goods Detail Bottom Sheet */}
       {sheetGoodsId && (() => {
-        const sheetItem = store.goods.find((g) => g.id === sheetGoodsId)
+        const sheetItem = goods.find((g) => g.id === sheetGoodsId)
         if (!sheetItem) return null
         return (
           <GoodsDetailSheet
