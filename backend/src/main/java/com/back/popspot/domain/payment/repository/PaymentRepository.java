@@ -21,4 +21,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 	Optional<Payment> findByIdempotencyKey(String idempotencyKey);
 
 	Optional<Payment> findByOrderId(String orderId);
+
+	// 굿즈 주문에 연결된 결제 조회 (환불 오케스트레이션 시 사용)
+	Optional<Payment> findByGoodsOrder_Id(Long goodsOrderId);
 }
