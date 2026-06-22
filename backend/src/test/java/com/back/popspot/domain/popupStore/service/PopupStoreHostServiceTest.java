@@ -16,6 +16,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -32,6 +34,7 @@ import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
+import com.back.popspot.global.redis.RedisKeys;
 import com.back.popspot.global.s3.S3Service;
 
 import jakarta.persistence.EntityManager;
@@ -53,6 +56,12 @@ class PopupStoreHostServiceTest {
 
 	@Mock
 	private S3Service s3Service;
+
+	@Mock
+	private RedisTemplate<String, Long> redisTemplate;
+
+	@Mock
+	private ValueOperations<String, Long> valueOperations;
 
 	@InjectMocks
 	private PopupStoreHostService popupStoreHostService;
@@ -260,7 +269,7 @@ class PopupStoreHostServiceTest {
 	}
 
 	@Test
-	@DisplayName("슬롯 생성: 소유자 + 운영 기간 내 날짜면 저장하고 id 를 반환한다")
+	@DisplayName("슬롯 생성: 소유자 + 운영 기간 내 날짜면 저장하고 id 를 반환하며 카운터를 req=0, remaining=capacity 로 초기화한다")
 	void createSlot_validOwnerInRange_savesAndReturnsId() {
 		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupForSlot(USER_ID)));
 		when(reservationSlotRepository.save(any(ReservationSlot.class))).thenAnswer(invocation -> {
@@ -268,11 +277,46 @@ class PopupStoreHostServiceTest {
 			ReflectionTestUtils.setField(saved, "id", 500L);
 			return saved;
 		});
+		// 트랜잭션 동기화가 없으면 초기화가 즉시 실행된다
+		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
 		Long id = popupStoreHostService.createSlot(USER_ID, 10L, slotRequest(LocalDate.of(2026, 7, 5)));
 
 		assertThat(id).isEqualTo(500L);
 		verify(reservationSlotRepository).save(any(ReservationSlot.class));
+		// capacity 는 slotRequest 의 10
+		verify(valueOperations).set(RedisKeys.reservationSlotReqCount(500L), 0L);
+		verify(valueOperations).set(RedisKeys.reservationSlotRemaining(500L), 10L);
+	}
+
+	@Test
+	@DisplayName("슬롯 생성: Redis 카운터 초기화는 트랜잭션 커밋 후(afterCommit)에 실행된다")
+	void createSlot_initializesCountersAfterCommit() {
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupForSlot(USER_ID)));
+		when(reservationSlotRepository.save(any(ReservationSlot.class))).thenAnswer(invocation -> {
+			ReservationSlot saved = invocation.getArgument(0);
+			ReflectionTestUtils.setField(saved, "id", 500L);
+			return saved;
+		});
+		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+		TransactionSynchronizationManager.initSynchronization();
+		try {
+			popupStoreHostService.createSlot(USER_ID, 10L, slotRequest(LocalDate.of(2026, 7, 5)));
+
+			// 커밋 전: 아직 카운터를 세팅하지 않는다
+			verify(valueOperations, never()).set(any(), any());
+
+			// 등록된 동기화의 afterCommit 수동 실행
+			TransactionSynchronizationManager.getSynchronizations()
+				.forEach(TransactionSynchronization::afterCommit);
+
+			// 커밋 후: req=0, remaining=capacity 세팅
+			verify(valueOperations).set(RedisKeys.reservationSlotReqCount(500L), 0L);
+			verify(valueOperations).set(RedisKeys.reservationSlotRemaining(500L), 10L);
+		} finally {
+			TransactionSynchronizationManager.clearSynchronization();
+		}
 	}
 
 	@Test

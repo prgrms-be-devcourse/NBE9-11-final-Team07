@@ -11,11 +11,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -35,6 +38,7 @@ import com.back.popspot.domain.reservation.entity.ReservationStatus;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
+import com.back.popspot.global.redis.RedisKeys;
 import com.back.popspot.support.IntegrationTestSupport;
 
 import jakarta.persistence.EntityManager;
@@ -59,6 +63,22 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private PaymentRepository paymentRepository;
+
+	@Autowired
+	private RedisTemplate<String, Long> redisTemplate;
+
+	// 테스트에서 초기화한 이중 카운터 키를 추적해 @AfterEach 에서 정리한다.
+	// (Redis 는 JPA 트랜잭션 롤백 대상이 아니라 키가 남기 때문에 직접 지워야 한다.)
+	private final List<Long> persistedSlotIds = new ArrayList<>();
+
+	@AfterEach
+	void cleanUpRedisCounters() {
+		for (Long slotId : persistedSlotIds) {
+			redisTemplate.delete(RedisKeys.reservationSlotReqCount(slotId));
+			redisTemplate.delete(RedisKeys.reservationSlotRemaining(slotId));
+		}
+		persistedSlotIds.clear();
+	}
 
 	@Test
 	@DisplayName("예약 선점에 성공하면 HELD 예약을 저장하고 슬롯 예약 수를 증가시킨다")
@@ -246,7 +266,16 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 		);
 		ReservationSlot slot = ReservationSlot.of(popupStore, request);
 		ReflectionTestUtils.setField(slot, "reservedCount", reservedCount);
-		return reservationSlotRepository.save(slot);
+		ReservationSlot saved = reservationSlotRepository.save(slot);
+
+		// 운영에선 슬롯 생성 커밋 후 카운터가 초기화되지만, 통합 테스트는 @Transactional 이라
+		// afterCommit 이 돌지 않는다. 이미 잡힌 reservedCount 와 정합하도록 직접 초기화한다.
+		// (req = 이미 점유한 수, remaining = 남은 자리)
+		redisTemplate.opsForValue().set(RedisKeys.reservationSlotReqCount(saved.getId()), (long) reservedCount);
+		redisTemplate.opsForValue().set(RedisKeys.reservationSlotRemaining(saved.getId()), (long) (capacity - reservedCount));
+		persistedSlotIds.add(saved.getId());
+
+		return saved;
 	}
 
 	private Reservation persistReservation(User user, ReservationSlot slot, ReservationStatus status) {

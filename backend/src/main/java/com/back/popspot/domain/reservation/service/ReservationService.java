@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +33,7 @@ import com.back.popspot.domain.user.repository.UserRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 import com.back.popspot.global.exception.ReservationPaymentExpiredException;
+import com.back.popspot.global.redis.RedisKeys;
 
 import lombok.RequiredArgsConstructor;
 
@@ -50,6 +52,7 @@ public class ReservationService {
 	private final PaymentRepository paymentRepository;
 	private final UserRepository userRepository;
 	private final ReservationExpirationService reservationExpirationService;
+	private final RedisTemplate<String, Long> redisTemplate;
 
 	@Transactional(readOnly = true)
 	public Page<MyReservationResponse> getMyReservations(Long userId, Pageable pageable) {
@@ -93,16 +96,43 @@ public class ReservationService {
 			throw new BusinessException(ErrorCode.RESERVATION_ALREADY_EXISTS);
 		}
 
-		int updatedCount = reservationSlotRepository.increaseReservedCountIfAvailable(slot.getId());
-		if (updatedCount == 0) {
+		Long slotId = slot.getId();
+		String reqCountKey = RedisKeys.reservationSlotReqCount(slotId);
+		String remainingKey = RedisKeys.reservationSlotRemaining(slotId);
+
+		// 이중 카운터 1단계 - 요청 카운터(req) 증가, capacity 초과 시 즉시 DECR 후 차단
+		Long reqCount = redisTemplate.opsForValue().increment(reqCountKey);
+		if (reqCount == null || reqCount > slot.getCapacity()) {
+			redisTemplate.opsForValue().decrement(reqCountKey);
 			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
 		}
 
-		LocalDateTime heldUntil = now.plusMinutes(HOLD_MINUTES);
-		Reservation reservation = Reservation.createHeld(user, slot, now, heldUntil);
-		reservationRepository.save(reservation);
+		// 이중 카운터 2단계 - 통과한 요청만 남은 재고(remaining) 차감
+		Long remaining = redisTemplate.opsForValue().decrement(remainingKey);
+		if (remaining == null || remaining < 0) {
+			// 남은 자리 없음/미초기화 → req, remaining 둘 다 롤백
+			redisTemplate.opsForValue().increment(remainingKey);
+			redisTemplate.opsForValue().decrement(reqCountKey);
+			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
+		}
 
-		return ReservationCreateResponse.from(reservation);
+		// 이중 카운터 3단계 - 실제 DB 반영. 워커/DB 처리 실패 시 두 카운터 모두 롤백
+		try {
+			int updatedCount = reservationSlotRepository.increaseReservedCountIfAvailable(slotId);
+			if (updatedCount == 0) {
+				throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
+			}
+
+			LocalDateTime heldUntil = now.plusMinutes(HOLD_MINUTES);
+			Reservation reservation = Reservation.createHeld(user, slot, now, heldUntil);
+			reservationRepository.save(reservation);
+
+			return ReservationCreateResponse.from(reservation);
+		} catch (RuntimeException e) {
+			redisTemplate.opsForValue().increment(remainingKey);
+			redisTemplate.opsForValue().decrement(reqCountKey);
+			throw e;
+		}
 	}
 
 	@Transactional
