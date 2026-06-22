@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 import com.back.popspot.domain.payment.dto.PaymentCancelRequest;
 import com.back.popspot.domain.payment.service.PaymentService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -41,7 +42,9 @@ import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.support.TransactionTemplate;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GoodsOrderService {
@@ -53,6 +56,7 @@ public class GoodsOrderService {
 	private final GoodsOrderItemRepository goodsOrderItemRepository;
 	private final PaymentRepository paymentRepository;
 	private final PaymentService paymentService;
+	private final TransactionTemplate transactionTemplate;
 
 	@Transactional
 	public GoodsOrderCreateResponse createOrder(Long userId, GoodsOrderCreateRequest request) {
@@ -142,8 +146,9 @@ public class GoodsOrderService {
 		return items.get(0).getGoods().getName() + " 외 " + (items.size() - 1) + "건";
 	}
 
-	@Transactional
+	// @Transactional 제거 — 외부 PG 호출이 있어서 트랜잭션 밖에서 실행
 	public GoodsOrderRefundResponse refundOrder(Long userId, Long goodsOrderId) {
+		// 검증은 트랜잭션 없이 조회
 		GoodsOrder order = goodsOrderRepository.findById(goodsOrderId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 		if (!order.getUser().getId().equals(userId)) {
@@ -158,19 +163,19 @@ public class GoodsOrderService {
 		Payment payment = paymentRepository.findByGoodsOrder_Id(goodsOrderId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
-		// PG 환불 요청 — 성공 확정 후 재고 복구 + 상태 변경 진행
+		// PG 환불 요청 — 트랜잭션 외부에서 실행 (커넥션 점유 방지)
 		String idempotencyKey = "refund-" + goodsOrderId + "-" + userId;
 		PaymentCancelRequest cancelRequest = new PaymentCancelRequest("굿즈 주문 환불", idempotencyKey);
 		paymentService.cancel(payment.getId(), userId, cancelRequest);
 
-		// 재고 복구 — 차감했던 수량만큼 되돌림
-		List<GoodsOrderItem> items = goodsOrderItemRepository.findByGoodsOrder_Id(goodsOrderId);
-		for (GoodsOrderItem item : items) {
-			goodsRepository.increaseStock(item.getGoods().getId(), item.getQuantity());
-		}
-
-		// 주문 상태 변경
-		order.updateStatus(GoodsOrderStatus.REFUNDED);
+		// PG 환불 성공 확정 후 DB 작업만 트랜잭션으로 처리
+		transactionTemplate.executeWithoutResult(status -> {
+			List<GoodsOrderItem> items = goodsOrderItemRepository.findByGoodsOrder_Id(goodsOrderId);
+			for (GoodsOrderItem item : items) {
+				goodsRepository.increaseStock(item.getGoods().getId(), item.getQuantity());
+			}
+			order.updateStatus(GoodsOrderStatus.REFUNDED);
+		});
 
 		return GoodsOrderRefundResponse.from(order);
 	}
@@ -229,5 +234,20 @@ public class GoodsOrderService {
 				.collect(Collectors.toList());
 
 		return GoodsOrderDetailResponse.from(order, detailItems);
+	}
+
+	// 스케줄러에서 주문별로 호출 — 독립 트랜잭션으로 처리
+	@Transactional
+	public void expireOrder(GoodsOrder order, LocalDateTime now) {
+		// 경합 가드 — 조회 이후 상태가 바뀌었을 경우 스킵
+		if (!order.isExpired(now)) {
+			return;
+		}
+		List<GoodsOrderItem> items = goodsOrderItemRepository.findByGoodsOrder_Id(order.getId());
+		for (GoodsOrderItem item : items) {
+			goodsRepository.increaseStock(item.getGoods().getId(), item.getQuantity());
+		}
+		order.expire();
+		log.info("[GoodsOrderScheduler] 주문 만료 처리 완료 — goodsOrderId: {}", order.getId());
 	}
 }

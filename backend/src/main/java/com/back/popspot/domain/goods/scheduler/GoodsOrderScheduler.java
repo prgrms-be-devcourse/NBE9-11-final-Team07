@@ -5,13 +5,10 @@ import java.util.List;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import com.back.popspot.domain.goods.entity.GoodsOrder;
-import com.back.popspot.domain.goods.entity.GoodsOrderItem;
-import com.back.popspot.domain.goods.repository.GoodsOrderItemRepository;
 import com.back.popspot.domain.goods.repository.GoodsOrderRepository;
-import com.back.popspot.domain.goods.repository.GoodsRepository;
+import com.back.popspot.domain.goods.service.GoodsOrderService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,12 +19,10 @@ import lombok.extern.slf4j.Slf4j;
 public class GoodsOrderScheduler {
 
     private final GoodsOrderRepository goodsOrderRepository;
-    private final GoodsOrderItemRepository goodsOrderItemRepository;
-    private final GoodsRepository goodsRepository;
+    private final GoodsOrderService goodsOrderService;
 
     // 1분마다 실행
     @Scheduled(fixedDelay = 60_000)
-    @Transactional
     public void expireOrders() {
         LocalDateTime now = LocalDateTime.now();
         List<GoodsOrder> expiredOrders = goodsOrderRepository.findExpiredPendingOrders(now);
@@ -38,17 +33,14 @@ public class GoodsOrderScheduler {
 
         log.info("[GoodsOrderScheduler] 만료 처리 대상 주문 수: {}", expiredOrders.size());
 
+        // 주문별로 독립 트랜잭션 처리 — 하나 실패해도 나머지 정상 처리
         for (GoodsOrder order : expiredOrders) {
-            // 경합 가드 — 조회 이후 상태가 바뀌었을 경우 스킵
-            if (!order.isExpired(now)) {
-                continue;
+            try {
+                goodsOrderService.expireOrder(order, now);
+            } catch (Exception e) {
+                log.error("[GoodsOrderScheduler] 주문 만료 처리 실패 — goodsOrderId: {}, error: {}",
+                        order.getId(), e.getMessage());
             }
-            List<GoodsOrderItem> items = goodsOrderItemRepository.findByGoodsOrder_Id(order.getId());
-            for (GoodsOrderItem item : items) {
-                goodsRepository.increaseStock(item.getGoods().getId(), item.getQuantity());
-            }
-            order.expire();
-            log.info("[GoodsOrderScheduler] 주문 만료 처리 완료 — goodsOrderId: {}", order.getId());
         }
     }
 }

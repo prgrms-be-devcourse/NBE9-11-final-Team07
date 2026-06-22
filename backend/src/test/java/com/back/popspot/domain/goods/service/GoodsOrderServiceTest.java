@@ -10,8 +10,10 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.back.popspot.domain.goods.dto.GoodsOrderCreateRequest;
 import com.back.popspot.domain.goods.dto.GoodsOrderCreateResponse;
@@ -57,6 +61,7 @@ class GoodsOrderServiceTest {
 	@Mock private GoodsOrderItemRepository goodsOrderItemRepository;
 	@Mock private PaymentRepository paymentRepository;
 	@Mock private PaymentService paymentService;
+	@Mock private TransactionTemplate transactionTemplate;
 
 	@InjectMocks
 	private GoodsOrderService goodsOrderService;
@@ -178,7 +183,6 @@ class GoodsOrderServiceTest {
 		assertThat(response.getGoodsOrderId()).isEqualTo(100L);
 		assertThat(response.getOrderId()).isEqualTo("order-id");
 		assertThat(response.getAmount()).isEqualTo(10000L);
-		// 멱등성 처리 — 재고 차감이 일어나지 않아야 함
 		then(goodsRepository).should(never()).decreaseStock(anyLong(), anyInt());
 	}
 
@@ -193,6 +197,13 @@ class GoodsOrderServiceTest {
 
 		given(goodsOrderRepository.findById(100L)).willReturn(Optional.of(paidOrder));
 		given(paymentRepository.findByGoodsOrder_Id(100L)).willReturn(Optional.of(payment));
+
+		// TransactionTemplate.executeWithoutResult 실행 시 람다 직접 실행되도록 stub
+		org.mockito.BDDMockito.willAnswer(invocation -> {
+			Consumer<TransactionStatus> action = invocation.getArgument(0);
+			action.accept(null);
+			return null;
+		}).given(transactionTemplate).executeWithoutResult(any());
 		given(goodsOrderItemRepository.findByGoodsOrder_Id(100L)).willReturn(List.of(orderItem));
 
 		GoodsOrderRefundResponse response = goodsOrderService.refundOrder(1L, 100L);
@@ -301,6 +312,36 @@ class GoodsOrderServiceTest {
 				.isInstanceOf(BusinessException.class)
 				.extracting("errorCode")
 				.isEqualTo(ErrorCode.FORBIDDEN);
+	}
+
+	// ── expireOrder ───────────────────────────────────────────────────────────
+
+	@Test
+	void expireOrder_만료된_주문_재고_복구_및_EXPIRED_처리() {
+		GoodsOrder expiredOrder = new GoodsOrder(user, 10000, 0, 10000, GoodsOrderStatus.PENDING,
+				"홍길동", "010-1234-5678", "12345", "서울시", null);
+		ReflectionTestUtils.setField(expiredOrder, "id", 200L);
+		expiredOrder.setExpiresAt(LocalDateTime.now().minusMinutes(1));
+		GoodsOrderItem expiredItem = new GoodsOrderItem(expiredOrder, goods, 2, 5000, 10000);
+
+		given(goodsOrderItemRepository.findByGoodsOrder_Id(200L)).willReturn(List.of(expiredItem));
+
+		goodsOrderService.expireOrder(expiredOrder, LocalDateTime.now());
+
+		then(goodsRepository).should().increaseStock(10L, 2);
+		assertThat(expiredOrder.getStatus()).isEqualTo(GoodsOrderStatus.EXPIRED);
+	}
+
+	@Test
+	void expireOrder_경합_가드_만료_아닌_주문은_스킵() {
+		GoodsOrder notExpiredOrder = new GoodsOrder(user, 10000, 0, 10000, GoodsOrderStatus.PENDING,
+				"홍길동", "010-1234-5678", "12345", "서울시", null);
+		ReflectionTestUtils.setField(notExpiredOrder, "id", 200L);
+		notExpiredOrder.setExpiresAt(LocalDateTime.now().plusMinutes(10));
+
+		goodsOrderService.expireOrder(notExpiredOrder, LocalDateTime.now());
+
+		then(goodsRepository).should(never()).increaseStock(anyLong(), anyInt());
 	}
 
 	// ── 헬퍼 ─────────────────────────────────────────────────────────────────
