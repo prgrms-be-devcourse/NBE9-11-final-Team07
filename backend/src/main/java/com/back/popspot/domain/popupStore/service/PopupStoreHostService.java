@@ -149,7 +149,7 @@ public class PopupStoreHostService {
 		}
 
 		// 운영이 이미 시작됐으면(now >= openDate) 삭제 불가
-		if (!LocalDateTime.now().isBefore(popupStore.getOpenDate())) {
+		if (!LocalDateTime.now().isBefore(popupStore.getReservationStartAt())) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 
@@ -274,7 +274,7 @@ public class PopupStoreHostService {
 	private void registerAfterCommitSlotCounterInit(Long slotId, int capacity) {
 		Runnable init = () -> {
 			redisTemplate.opsForValue().set(RedisKeys.reservationSlotReqCount(slotId), 0L);
-			redisTemplate.opsForValue().set(RedisKeys.reservationSlotRemaining(slotId), (long) capacity);
+			redisTemplate.opsForValue().set(RedisKeys.reservationSlotRemaining(slotId), (long)capacity);
 		};
 		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
 			init.run();
