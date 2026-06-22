@@ -3,7 +3,12 @@ package com.back.popspot.domain.goods.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
 import java.util.List;
 import java.util.Optional;
@@ -35,6 +40,7 @@ import com.back.popspot.domain.goods.repository.GoodsOrderRepository;
 import com.back.popspot.domain.goods.repository.GoodsRepository;
 import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
+import com.back.popspot.domain.payment.service.PaymentService;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
 import com.back.popspot.global.dto.PageResponse;
@@ -44,23 +50,13 @@ import com.back.popspot.global.exception.ErrorCode;
 @ExtendWith(MockitoExtension.class)
 class GoodsOrderServiceTest {
 
-	@Mock
-	private UserRepository userRepository;
-
-	@Mock
-	private GoodsRepository goodsRepository;
-
-	@Mock
-	private GoodsImageRepository goodsImageRepository;
-
-	@Mock
-	private GoodsOrderRepository goodsOrderRepository;
-
-	@Mock
-	private GoodsOrderItemRepository goodsOrderItemRepository;
-
-	@Mock
-	private PaymentRepository paymentRepository;
+	@Mock private UserRepository userRepository;
+	@Mock private GoodsRepository goodsRepository;
+	@Mock private GoodsImageRepository goodsImageRepository;
+	@Mock private GoodsOrderRepository goodsOrderRepository;
+	@Mock private GoodsOrderItemRepository goodsOrderItemRepository;
+	@Mock private PaymentRepository paymentRepository;
+	@Mock private PaymentService paymentService;
 
 	@InjectMocks
 	private GoodsOrderService goodsOrderService;
@@ -108,6 +104,8 @@ class GoodsOrderServiceTest {
 		return request;
 	}
 
+	// ── createOrder ──────────────────────────────────────────────────────────
+
 	@Test
 	void createOrder_성공() {
 		Payment payment = readyGoodsPayment(order);
@@ -115,6 +113,7 @@ class GoodsOrderServiceTest {
 		given(userRepository.findById(1L)).willReturn(Optional.of(user));
 		given(paymentRepository.findByIdempotencyKey("idempotency-key")).willReturn(Optional.empty());
 		given(goodsRepository.findByIdAndDeletedAtIsNull(10L)).willReturn(Optional.of(goods));
+		given(goodsRepository.decreaseStock(10L, 2)).willReturn(1);
 		given(goodsOrderRepository.save(any())).willReturn(order);
 		given(goodsOrderItemRepository.save(any())).willReturn(orderItem);
 		given(paymentRepository.save(any())).willReturn(payment);
@@ -158,6 +157,7 @@ class GoodsOrderServiceTest {
 		given(userRepository.findById(1L)).willReturn(Optional.of(user));
 		given(paymentRepository.findByIdempotencyKey("idempotency-key")).willReturn(Optional.empty());
 		given(goodsRepository.findByIdAndDeletedAtIsNull(10L)).willReturn(Optional.of(goods));
+		given(goodsRepository.decreaseStock(10L, 100)).willReturn(0);
 
 		assertThatThrownBy(() -> goodsOrderService.createOrder(1L, buildCreateRequest(10L, 100)))
 				.isInstanceOf(BusinessException.class)
@@ -178,18 +178,27 @@ class GoodsOrderServiceTest {
 		assertThat(response.getGoodsOrderId()).isEqualTo(100L);
 		assertThat(response.getOrderId()).isEqualTo("order-id");
 		assertThat(response.getAmount()).isEqualTo(10000L);
-		assertThat(goods.getStock()).isEqualTo(10);
+		// 멱등성 처리 — 재고 차감이 일어나지 않아야 함
+		then(goodsRepository).should(never()).decreaseStock(anyLong(), anyInt());
 	}
+
+	// ── refundOrder ───────────────────────────────────────────────────────────
 
 	@Test
 	void refundOrder_성공() {
 		GoodsOrder paidOrder = new GoodsOrder(user, 10000, 0, 10000, GoodsOrderStatus.PAID,
 				"홍길동", "010-1234-5678", "12345", "서울시", null);
 		ReflectionTestUtils.setField(paidOrder, "id", 100L);
+		Payment payment = readyGoodsPayment(paidOrder);
+
 		given(goodsOrderRepository.findById(100L)).willReturn(Optional.of(paidOrder));
+		given(paymentRepository.findByGoodsOrder_Id(100L)).willReturn(Optional.of(payment));
+		given(goodsOrderItemRepository.findByGoodsOrder_Id(100L)).willReturn(List.of(orderItem));
 
 		GoodsOrderRefundResponse response = goodsOrderService.refundOrder(1L, 100L);
 
+		then(paymentService).should().cancel(eq(payment.getId()), eq(1L), any());
+		then(goodsRepository).should().increaseStock(10L, 2);
 		assertThat(response.getStatus()).isEqualTo(GoodsOrderStatus.REFUNDED);
 	}
 
@@ -224,6 +233,23 @@ class GoodsOrderServiceTest {
 	}
 
 	@Test
+	void refundOrder_이미_환불된_주문_GOODS_ORDER_REFUND_NOT_ALLOWED() {
+		GoodsOrder refundedOrder = new GoodsOrder(user, 10000, 0, 10000, GoodsOrderStatus.REFUNDED,
+				"홍길동", "010-1234-5678", "12345", "서울시", null);
+		ReflectionTestUtils.setField(refundedOrder, "id", 100L);
+		given(goodsOrderRepository.findById(100L)).willReturn(Optional.of(refundedOrder));
+
+		assertThatThrownBy(() -> goodsOrderService.refundOrder(1L, 100L))
+				.isInstanceOf(BusinessException.class)
+				.extracting("errorCode")
+				.isEqualTo(ErrorCode.GOODS_ORDER_REFUND_NOT_ALLOWED);
+
+		then(paymentService).should(never()).cancel(anyLong(), anyLong(), any());
+	}
+
+	// ── getMyOrders ───────────────────────────────────────────────────────────
+
+	@Test
 	void getMyOrders_성공_상태필터없음() {
 		Page<GoodsOrder> page = new PageImpl<>(List.of(order));
 		given(goodsOrderRepository.findByUser_Id(1L, PageRequest.of(0, 20))).willReturn(page);
@@ -249,18 +275,22 @@ class GoodsOrderServiceTest {
 		assertThat(response.getContent()).hasSize(1);
 	}
 
+	// ── getOrderDetail ────────────────────────────────────────────────────────
+
 	@Test
 	void getOrderDetail_성공() {
 		given(goodsOrderRepository.findById(100L)).willReturn(Optional.of(order));
 		given(goodsOrderItemRepository.findByGoodsOrder_Id(100L)).willReturn(List.of(orderItem));
-		given(goodsImageRepository.findFirstByGoods_IdAndImageTypeOrderByIdAsc(any(), any()))
-				.willReturn(Optional.empty());
+		given(goodsImageRepository.findByGoods_IdInAndImageTypeOrderByIdAsc(any(), any()))
+				.willReturn(List.of());
 
 		GoodsOrderDetailResponse response = goodsOrderService.getOrderDetail(1L, 100L);
 
 		assertThat(response.getGoodsOrderId()).isEqualTo(100L);
 		assertThat(response.getItems()).hasSize(1);
 		assertThat(response.getItems().get(0).getThumbnailImageKey()).isNull();
+		then(goodsImageRepository).should()
+				.findByGoods_IdInAndImageTypeOrderByIdAsc(any(), any());
 	}
 
 	@Test
@@ -272,6 +302,8 @@ class GoodsOrderServiceTest {
 				.extracting("errorCode")
 				.isEqualTo(ErrorCode.FORBIDDEN);
 	}
+
+	// ── 헬퍼 ─────────────────────────────────────────────────────────────────
 
 	private Payment readyGoodsPayment(GoodsOrder order) {
 		Payment payment = Payment.createReadyGoodsOrderPayment(
