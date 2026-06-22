@@ -26,3 +26,5 @@ waiting-queue:
   batch-size: 3
   scheduler-fixed-rate-ms: 3600000
   proceed-ttl-seconds: 1
+  poll-interval-seconds: 1
+  last-seen-ttl-seconds: 3

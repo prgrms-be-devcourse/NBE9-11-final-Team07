@@ -1,4 +1,4 @@
-package com.back.popspot.global.queue;
+package com.back.popspot.global.queue.interceptor;
 
 import java.io.IOException;
 
@@ -8,6 +8,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import com.back.popspot.global.queue.service.WaitingQueueRedisService;
 import com.back.popspot.global.response.CommonApiResponse;
 
 import jakarta.servlet.http.HttpServletRequest;

@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +29,9 @@ import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
+import com.back.popspot.global.queue.config.WaitingQueueProperties;
+import com.back.popspot.global.queue.scheduler.WaitingQueueScheduler;
+import com.back.popspot.global.queue.service.WaitingQueueRedisService;
 import com.back.popspot.support.IntegrationTestSupport;
 
 @DisplayName("대기열 엔진 통합 테스트")
@@ -201,6 +205,97 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 		Thread.sleep(1500L);
 
 		assertThat(redisTemplate.hasKey(proceedKey)).isFalse();
+	}
+
+	// ── 폴링 검증 1: 순번 정확도 ──────────────────────────────────────────
+
+	@Test
+	@DisplayName("폴링검증1: 진입 순서대로 ZRANK 기반 순번 1·2·3 부여")
+	void 순번_진입순서와_일치() throws Exception {
+		long userId1 = 10L, userId2 = 20L, userId3 = 30L;
+		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId1));
+		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId2));
+		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId3));
+
+		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
+				.with(authentication(auth(userId1))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.status").value("WAITING"))
+			.andExpect(jsonPath("$.data.rank").value(1));
+
+		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
+				.with(authentication(auth(userId2))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.rank").value(2));
+
+		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
+				.with(authentication(auth(userId3))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.rank").value(3));
+	}
+
+	// ── 폴링 검증 2: 3-상태 분기 ─────────────────────────────────────────
+
+	@Test
+	@DisplayName("폴링검증2: (a) proceed 있음 → ADMITTED, (b) ZSET에만 있음 → WAITING+순번, (c) 둘 다 없음 → NOT_IN_QUEUE")
+	void 상태_3분기() throws Exception {
+		// (a) ADMITTED
+		long admittedId = 11L;
+		redisTemplate.opsForValue().set("proceed:popup:" + TEST_POPUP_ID + ":" + admittedId, "1");
+
+		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
+				.with(authentication(auth(admittedId))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.status").value("ADMITTED"));
+
+		// (b) WAITING + 순번
+		long waitingId = 22L;
+		queueService.enqueue(TEST_POPUP_ID, String.valueOf(waitingId));
+
+		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
+				.with(authentication(auth(waitingId))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.status").value("WAITING"))
+			.andExpect(jsonPath("$.data.rank").isNumber())
+			.andExpect(jsonPath("$.data.estimatedSeconds").isNumber())
+			.andExpect(jsonPath("$.data.pollIntervalSeconds").value(properties.pollIntervalSeconds()));
+
+		// (c) NOT_IN_QUEUE
+		long unknownId = 33L;
+
+		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
+				.with(authentication(auth(unknownId))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.status").value("NOT_IN_QUEUE"));
+	}
+
+	// ── 폴링 검증 3: lastSeen TTL 갱신 ───────────────────────────────────
+
+	@Test
+	@DisplayName("폴링검증3: WAITING 폴링 시마다 lastSeen TTL이 갱신됨")
+	void lastSeen_폴링시_TTL_갱신() throws Exception {
+		long userId = 55L;
+		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId));
+		String lastSeenKey = "lastSeen:popup:" + TEST_POPUP_ID + ":" + userId;
+
+		// 첫 번째 폴링 → lastSeen 키 생성 (TTL=3s)
+		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
+				.with(authentication(auth(userId))))
+			.andExpect(status().isOk());
+
+		assertThat(redisTemplate.hasKey(lastSeenKey)).isTrue();
+
+		// 1.1초 대기 → TTL ≈ 1.9s로 소진
+		Thread.sleep(1100);
+		Long ttlBeforeReset = redisTemplate.getExpire(lastSeenKey, TimeUnit.SECONDS);
+
+		// 두 번째 폴링 → TTL 3s로 갱신
+		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
+				.with(authentication(auth(userId))))
+			.andExpect(status().isOk());
+
+		Long ttlAfterReset = redisTemplate.getExpire(lastSeenKey, TimeUnit.SECONDS);
+		assertThat(ttlAfterReset).isGreaterThan(ttlBeforeReset);
 	}
 
 	// ── 헬퍼 ─────────────────────────────────────────────────────────────

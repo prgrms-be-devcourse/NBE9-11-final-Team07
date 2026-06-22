@@ -1,4 +1,4 @@
-package com.back.popspot.global.queue;
+package com.back.popspot.global.queue.service;
 
 import java.time.Duration;
 import java.util.Collections;
@@ -9,6 +9,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.stereotype.Service;
 
+import com.back.popspot.global.queue.config.WaitingQueueProperties;
+
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -18,6 +20,7 @@ public class WaitingQueueRedisService {
 	private static final String SEQ_KEY = "seq:popup:%d";
 	private static final String WAITING_KEY = "waiting:popup:%d";
 	private static final String PROCEED_KEY = "proceed:popup:%d:%s";
+	private static final String LAST_SEEN_KEY = "lastSeen:popup:%d:%s";
 
 	private final StringRedisTemplate redisTemplate;
 	private final WaitingQueueProperties properties;
@@ -48,6 +51,18 @@ public class WaitingQueueRedisService {
 				Duration.ofSeconds(properties.proceedTtlSeconds())
 			);
 		}
+	}
+
+	public Long getQueueRank(long popupId, String userId) {
+		return redisTemplate.opsForZSet().rank(String.format(WAITING_KEY, popupId), userId);
+	}
+
+	public void setLastSeen(long popupId, String userId) {
+		redisTemplate.opsForValue().set(
+			String.format(LAST_SEEN_KEY, popupId, userId),
+			String.valueOf(System.currentTimeMillis()),
+			Duration.ofSeconds(properties.lastSeenTtlSeconds())
+		);
 	}
 
 	public Set<Long> getActivePopupIds() {

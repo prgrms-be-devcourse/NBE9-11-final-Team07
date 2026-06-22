@@ -1,9 +1,12 @@
-package com.back.popspot.global.queue;
+package com.back.popspot.global.queue.scheduler;
 
 import java.util.Set;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import com.back.popspot.global.queue.config.WaitingQueueProperties;
+import com.back.popspot.global.queue.service.WaitingQueueRedisService;
 
 import lombok.RequiredArgsConstructor;
 

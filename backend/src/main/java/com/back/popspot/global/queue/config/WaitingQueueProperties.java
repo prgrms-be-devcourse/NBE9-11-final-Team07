@@ -1,4 +1,4 @@
-package com.back.popspot.global.queue;
+package com.back.popspot.global.queue.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -6,6 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record WaitingQueueProperties(
     int batchSize,
     long schedulerFixedRateMs,
-    long proceedTtlSeconds
+    long proceedTtlSeconds,
+    int pollIntervalSeconds,
+    int lastSeenTtlSeconds
 ) {
 }
