@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.TransactionSystemException;
 
 import com.back.popspot.domain.payment.client.TossPaymentsClient;
 import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
@@ -57,6 +59,29 @@ class PaymentServiceTest {
 
 		assertThat(response).isEqualTo(expected);
 		verify(paymentTransactionService).complete(request, APPROVED_AT);
+	}
+
+	@Test
+	@DisplayName("토스 승인 후 DB 커밋에 실패하면 재요청으로 결제를 완료한다")
+	void recoverPaymentOnRetryAfterCommitFailure() throws Exception {
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentConfirmResponse expected = paidResponse();
+		JsonNode tossResponse = tossResponse("payment-key", "order-id", 1000L);
+
+		given(paymentTransactionService.prepare(request)).willReturn(Optional.empty());
+		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse);
+		given(paymentTransactionService.complete(request, APPROVED_AT))
+			.willThrow(new TransactionSystemException("commit failed"))
+			.willReturn(expected);
+
+		assertThatThrownBy(() -> paymentService.confirm(request))
+			.isInstanceOf(TransactionSystemException.class);
+
+		PaymentConfirmResponse response = paymentService.confirm(request);
+
+		assertThat(response).isEqualTo(expected);
+		verify(tossPaymentsClient, times(2)).confirm(request);
+		verify(paymentTransactionService, times(2)).complete(request, APPROVED_AT);
 	}
 
 	@Test
