@@ -118,11 +118,6 @@ public class ReservationService {
 
 		// 이중 카운터 3단계 - 실제 DB 반영. 워커/DB 처리 실패 시 두 카운터 모두 롤백
 		try {
-			int updatedCount = reservationSlotRepository.increaseReservedCountIfAvailable(slotId);
-			if (updatedCount == 0) {
-				throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
-			}
-
 			LocalDateTime heldUntil = now.plusMinutes(HOLD_MINUTES);
 			Reservation reservation = Reservation.createHeld(user, slot, now, heldUntil);
 			reservationRepository.save(reservation);
