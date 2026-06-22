@@ -9,6 +9,7 @@ import type { GoodsOrderPayload } from '@/lib/data'
 import { goodsApi } from '@/lib/goods-api'
 import type { GoodsSummaryResponse } from '@/lib/goods-api'
 import { savePendingPayment } from '@/lib/payment-api'
+import { isValidPhoneNumber, normalizePhoneNumber } from '@/lib/phone'
 
 interface GoodsOrderScreenProps {
   payload: GoodsOrderPayload
@@ -59,7 +60,11 @@ export function GoodsOrderScreen({ payload, onBack }: GoodsOrderScreenProps) {
   const finalAmount = subtotal
 
   const isFormValid = Boolean(
-    name.trim() && phone.trim() && postalCode.trim() && address.trim() && cartLines.length,
+    name.trim() &&
+      isValidPhoneNumber(phone) &&
+      postalCode.trim() &&
+      address.trim() &&
+      cartLines.length,
   )
 
   async function handleSubmit() {
@@ -77,7 +82,7 @@ export function GoodsOrderScreen({ payload, onBack }: GoodsOrderScreenProps) {
         couponId: null,
         idempotencyKey: idempotencyKeyRef.current,
         receiverName: name.trim(),
-        receiverPhone: phone.trim(),
+        receiverPhone: normalizePhoneNumber(phone),
         postalCode: postalCode.trim(),
         address: address.trim(),
         addressDetail: detailAddress.trim() || null,

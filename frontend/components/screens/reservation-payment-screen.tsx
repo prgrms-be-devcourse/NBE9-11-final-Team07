@@ -9,6 +9,7 @@ import type { ReservationPayload } from '@/lib/data'
 import { reservationApi } from '@/lib/reservation-api'
 import type { PopupStoreDetailResponse } from '@/lib/reservation-api'
 import { savePendingPayment } from '@/lib/payment-api'
+import { isValidPhoneNumber, normalizePhoneNumber } from '@/lib/phone'
 
 interface ReservationPaymentScreenProps {
   payload: ReservationPayload
@@ -89,7 +90,7 @@ export function ReservationPaymentScreen({
   const displayImage = popupDetail?.imageUrl ?? store.image
   const ticketPrice = popupDetail?.price ?? store.ticketPrice
   const isFree = popupDetail ? popupDetail.feeType === 'FREE' : ticketPrice === 0
-  const canProceed = name.trim().length > 0 && /^010-\d{4}-\d{4}$/.test(phone)
+  const canProceed = name.trim().length > 0 && isValidPhoneNumber(phone)
 
   async function handleSubmit() {
     if (!canProceed || submitting) return
@@ -107,7 +108,7 @@ export function ReservationPaymentScreen({
 
       const payment = await reservationApi.startPayment(reservationIdRef.current, {
         name: name.trim(),
-        phone,
+        phone: normalizePhoneNumber(phone),
         idempotencyKey: idempotencyKeyRef.current,
       })
 
