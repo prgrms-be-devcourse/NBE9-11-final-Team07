@@ -18,10 +18,16 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.TransactionSystemException;
+import org.springframework.web.client.RestClientException;
 
 import com.back.popspot.domain.payment.client.TossPaymentsClient;
 import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
 import com.back.popspot.domain.payment.dto.PaymentConfirmResponse;
+import com.back.popspot.domain.payment.dto.PaymentCancelCommand;
+import com.back.popspot.domain.payment.dto.PaymentCancelPreparation;
+import com.back.popspot.domain.payment.dto.PaymentCancelRequest;
+import com.back.popspot.domain.payment.dto.PaymentCancelResponse;
+import com.back.popspot.domain.payment.entity.PaymentRefundStatus;
 import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.global.exception.BusinessException;
@@ -116,6 +122,78 @@ class PaymentServiceTest {
 		verify(paymentTransactionService, never()).complete(any(), any());
 	}
 
+	@Test
+	@DisplayName("결제 전액 취소 성공 응답을 검증한 후 완료 처리한다")
+	void cancelPaidPayment() throws Exception {
+		PaymentCancelRequest request = new PaymentCancelRequest("구매자 변심", "cancel-key");
+		PaymentCancelCommand command = cancelCommand();
+		PaymentCancelResponse expected = canceledResponse();
+		JsonNode tossResponse = cancelResponse("CANCELED", "DONE", 1000L);
+
+		given(paymentTransactionService.prepareCancel(10L, 1L, request))
+			.willReturn(PaymentCancelPreparation.required(command));
+		given(tossPaymentsClient.cancel(command)).willReturn(tossResponse);
+		given(paymentTransactionService.completeCancel(
+			command,
+			"transaction-key",
+			LocalDateTime.of(2026, 6, 16, 11, 0)
+		)).willReturn(expected);
+
+		PaymentCancelResponse response = paymentService.cancel(10L, 1L, request);
+
+		assertThat(response).isEqualTo(expected);
+	}
+
+	@Test
+	@DisplayName("이미 취소된 결제는 토스 API를 다시 호출하지 않는다")
+	void returnExistingCanceledPayment() {
+		PaymentCancelRequest request = new PaymentCancelRequest("구매자 변심", "cancel-key");
+		PaymentCancelResponse expected = canceledResponse();
+		given(paymentTransactionService.prepareCancel(10L, 1L, request))
+			.willReturn(PaymentCancelPreparation.completed(expected));
+
+		PaymentCancelResponse response = paymentService.cancel(10L, 1L, request);
+
+		assertThat(response).isEqualTo(expected);
+		verify(tossPaymentsClient, never()).cancel(any());
+	}
+
+	@Test
+	@DisplayName("토스 취소 호출이 실패하면 환불 요청을 실패 처리한다")
+	void failCancelWhenTossCallFails() {
+		PaymentCancelRequest request = new PaymentCancelRequest("구매자 변심", "cancel-key");
+		PaymentCancelCommand command = cancelCommand();
+		given(paymentTransactionService.prepareCancel(10L, 1L, request))
+			.willReturn(PaymentCancelPreparation.required(command));
+		given(tossPaymentsClient.cancel(command)).willThrow(new RestClientException("toss error"));
+
+		assertThatThrownBy(() -> paymentService.cancel(10L, 1L, request))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(ErrorCode.PAYMENT_CANCEL_FAILED);
+
+		verify(paymentTransactionService).failCancel("cancel-key");
+		verify(paymentTransactionService, never()).completeCancel(any(), any(), any());
+	}
+
+	@Test
+	@DisplayName("토스 취소 응답이 전액 취소 완료가 아니면 완료 처리하지 않는다")
+	void rejectPartialCancelResponse() throws Exception {
+		PaymentCancelRequest request = new PaymentCancelRequest("구매자 변심", "cancel-key");
+		PaymentCancelCommand command = cancelCommand();
+		given(paymentTransactionService.prepareCancel(10L, 1L, request))
+			.willReturn(PaymentCancelPreparation.required(command));
+		given(tossPaymentsClient.cancel(command)).willReturn(cancelResponse("PARTIAL_CANCELED", "DONE", 500L));
+
+		assertThatThrownBy(() -> paymentService.cancel(10L, 1L, request))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(ErrorCode.PAYMENT_CANCEL_RESPONSE_MISMATCH);
+
+		verify(paymentTransactionService).failCancel("cancel-key");
+		verify(paymentTransactionService, never()).completeCancel(any(), any(), any());
+	}
+
 	private PaymentConfirmResponse paidResponse() {
 		return new PaymentConfirmResponse(
 			10L,
@@ -139,6 +217,49 @@ class PaymentServiceTest {
 				  "totalAmount": %d,
 				  "approvedAt": "2026-06-16T10:00:00+09:00"
 				}
-				""".formatted(paymentKey, orderId, amount));
+					""".formatted(paymentKey, orderId, amount));
+	}
+
+	private PaymentCancelCommand cancelCommand() {
+		return new PaymentCancelCommand(
+			10L,
+			"payment-key",
+			"order-id",
+			1000L,
+			"구매자 변심",
+			"cancel-key"
+		);
+	}
+
+	private PaymentCancelResponse canceledResponse() {
+		return new PaymentCancelResponse(
+			20L,
+			10L,
+			"payment-key",
+			"order-id",
+			1000L,
+			PaymentStatus.CANCELED,
+			PaymentRefundStatus.DONE,
+			"transaction-key",
+			LocalDateTime.of(2026, 6, 16, 11, 0)
+		);
+	}
+
+	private JsonNode cancelResponse(String status, String cancelStatus, long cancelAmount) throws Exception {
+		return JsonMapper.builder().build()
+			.readTree("""
+				{
+				  "status": "%s",
+				  "paymentKey": "payment-key",
+				  "orderId": "order-id",
+				  "balanceAmount": 0,
+				  "cancels": [{
+				    "cancelStatus": "%s",
+				    "cancelAmount": %d,
+				    "transactionKey": "transaction-key",
+				    "canceledAt": "2026-06-16T11:00:00+09:00"
+				  }]
+				}
+				""".formatted(status, cancelStatus, cancelAmount));
 	}
 }

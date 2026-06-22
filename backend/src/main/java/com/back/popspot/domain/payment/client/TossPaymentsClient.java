@@ -5,6 +5,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
+import com.back.popspot.domain.payment.dto.PaymentCancelCommand;
+import com.back.popspot.domain.payment.dto.TossPaymentCancelRequest;
 
 import lombok.RequiredArgsConstructor;
 import tools.jackson.databind.JsonNode;
@@ -21,6 +23,16 @@ public class TossPaymentsClient {
 			.uri("/v1/payments/confirm")
 			.contentType(MediaType.APPLICATION_JSON)
 			.body(request)
+			.retrieve()
+			.body(JsonNode.class);
+	}
+
+	public JsonNode cancel(PaymentCancelCommand command) {
+		return tossPaymentsRestClient.post()
+			.uri("/v1/payments/{paymentKey}/cancel", command.paymentKey())
+			.contentType(MediaType.APPLICATION_JSON)
+			.header("Idempotency-Key", command.idempotencyKey())
+			.body(new TossPaymentCancelRequest(command.cancelReason()))
 			.retrieve()
 			.body(JsonNode.class);
 	}
