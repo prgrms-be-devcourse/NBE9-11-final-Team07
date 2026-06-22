@@ -33,10 +33,12 @@ const PENDING_PAYMENT_KEY = 'pendingPayment'
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080'
 
 export function savePendingPayment(payment: PendingPayment) {
+  if (typeof window === 'undefined') return
   window.sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify(payment))
 }
 
 export function getPendingPayment(): PendingPayment | null {
+  if (typeof window === 'undefined') return null
   const value = window.sessionStorage.getItem(PENDING_PAYMENT_KEY)
   if (!value) return null
 
@@ -58,6 +60,7 @@ export function getPendingPayment(): PendingPayment | null {
 }
 
 export function clearPendingPayment() {
+  if (typeof window === 'undefined') return
   window.sessionStorage.removeItem(PENDING_PAYMENT_KEY)
 }
 
