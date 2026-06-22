@@ -24,4 +24,13 @@ public class WaitingQueueScheduler {
 			queueService.admitBatch(popupId, properties.batchSize());
 		}
 	}
+
+	// TODO: 멀티 인스턴스 전환 시 admitWaiting과 마찬가지로 분산락 대상이 됨.
+	@Scheduled(fixedRateString = "${waiting-queue.sweeper-fixed-rate-ms}")
+	public void sweepWaiting() {
+		Set<Long> popupIds = queueService.getActivePopupIds();
+		for (Long popupId : popupIds) {
+			queueService.sweepAbsentMembers(popupId);
+		}
+	}
 }

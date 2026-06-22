@@ -28,3 +28,4 @@ waiting-queue:
   proceed-ttl-seconds: 1
   poll-interval-seconds: 1
   last-seen-ttl-seconds: 3
+  sweeper-fixed-rate-ms: 3600000

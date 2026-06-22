@@ -53,6 +53,7 @@ waiting-queue:
   proceed-ttl-seconds: 180
   poll-interval-seconds: 5
   last-seen-ttl-seconds: 20
+  sweeper-fixed-rate-ms: 15000
 
 management:
   endpoints:
