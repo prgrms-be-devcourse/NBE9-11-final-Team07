@@ -22,6 +22,7 @@ import { GoodsListScreen } from '@/components/screens/organizer/goods-list-scree
 import { GoodsFormScreen } from '@/components/screens/organizer/goods-form-screen'
 import type { TabKey } from '@/components/bottom-nav'
 import type { ReservationPayload, GoodsOrderPayload, CouponIssuancePayload } from '@/lib/data'
+import type { ReservationPaymentResponse } from '@/lib/reservation-api'
 import { orgPopupStores } from '@/lib/data'
 
 type ViewKey =
@@ -48,6 +49,7 @@ export default function Page() {
   const [currentView, setCurrentView] = useState<ViewKey>('home')
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null)
   const [reservationPayload, setReservationPayload] = useState<ReservationPayload | null>(null)
+  const [reservationComplete, setReservationComplete] = useState<ReservationPaymentResponse | null>(null)
   const [goodsOrderPayload, setGoodsOrderPayload] = useState<GoodsOrderPayload | null>(null)
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [couponIssuancePayload, setCouponIssuancePayload] = useState<CouponIssuancePayload | null>(null)
@@ -80,6 +82,7 @@ export default function Page() {
     setCurrentView(tab)
     setSelectedStoreId(null)
     setReservationPayload(null)
+    setReservationComplete(null)
     setGoodsOrderPayload(null)
     setSelectedOrderId(null)
   }
@@ -107,6 +110,7 @@ export default function Page() {
       setCurrentView(activeTab)
       setSelectedStoreId(null)
       setReservationPayload(null)
+      setReservationComplete(null)
       setGoodsOrderPayload(null)
       setSelectedOrderId(null)
     }
@@ -114,10 +118,12 @@ export default function Page() {
 
   function handleReserve(payload: ReservationPayload) {
     setReservationPayload(payload)
+    setReservationComplete(null)
     setCurrentView('payment')
   }
 
-  function handlePaymentComplete() {
+  function handlePaymentComplete(reservation: ReservationPaymentResponse) {
+    setReservationComplete(reservation)
     setCurrentView('complete')
   }
 
@@ -131,6 +137,7 @@ export default function Page() {
     setCurrentView('home')
     setSelectedStoreId(null)
     setReservationPayload(null)
+    setReservationComplete(null)
     setGoodsOrderPayload(null)
     setSelectedOrderId(null)
   }
@@ -140,6 +147,7 @@ export default function Page() {
     setCurrentView('reservations')
     setSelectedStoreId(null)
     setReservationPayload(null)
+    setReservationComplete(null)
     setGoodsOrderPayload(null)
   }
 
@@ -275,6 +283,7 @@ export default function Page() {
           {currentView === 'complete' && reservationPayload && (
             <ReservationCompleteScreen
               payload={reservationPayload}
+              reservation={reservationComplete}
               onGoHome={handleGoHome}
               onGoReservations={handleGoReservations}
             />

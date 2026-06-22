@@ -49,6 +49,24 @@ export interface ReservationPaymentResponse {
   amount: number | null
 }
 
+export interface Page<T> {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+}
+
+export interface MyReservationResponse {
+  reservationId: number
+  popupName: string
+  location: string
+  reservationDate: string
+  reservationTime: string
+  price: number
+  status: Extract<ReservationStatus, 'CONFIRMED' | 'CANCELED'>
+}
+
 export const reservationApi = {
   getPopupDetail: (popupStoreId: string) =>
     apiRequest<PopupStoreDetailResponse>(`/popups/${popupStoreId}`),
@@ -71,5 +89,13 @@ export const reservationApi = {
     apiRequest<ReservationPaymentResponse>(`/reservations/${reservationId}/payments`, {
       method: 'POST',
       body: JSON.stringify(request),
+    }),
+
+  getMyReservations: () =>
+    apiRequest<Page<MyReservationResponse>>('/me/reservations?size=50'),
+
+  cancelReservation: (reservationId: number) =>
+    apiRequest<void>(`/reservations/${reservationId}`, {
+      method: 'DELETE',
     }),
 }
