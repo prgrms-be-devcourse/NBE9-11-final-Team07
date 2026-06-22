@@ -155,6 +155,10 @@ public class Payment extends BaseEntity {
 		return status == PaymentStatus.READY;
 	}
 
+	public boolean isCanceled() {
+		return status == PaymentStatus.CANCELED;
+	}
+
 	public void complete(String paymentKey, LocalDateTime approvedAt) {
 		this.paymentKey = paymentKey;
 		this.status = PaymentStatus.PAID;
@@ -167,5 +171,9 @@ public class Payment extends BaseEntity {
 		if (goodsOrder != null) {
 			goodsOrder.updateStatus(GoodsOrderStatus.PAID);
 		}
+	}
+
+	public void cancel() {
+		this.status = PaymentStatus.CANCELED;
 	}
 }

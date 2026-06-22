@@ -30,7 +30,7 @@ public class PaymentRefund extends BaseEntity {
 	private User user;
 
 	@Column(name = "refund_amount", nullable = false)
-	private int refundAmount;
+	private long refundAmount;
 
 	@Enumerated(EnumType.STRING)
 	@Column(length = 30, nullable = false)
@@ -39,6 +39,43 @@ public class PaymentRefund extends BaseEntity {
 	@Column(length = 255)
 	private String reason;
 
+	@Column(name = "idempotency_key", length = 300, unique = true, nullable = false)
+	private String idempotencyKey;
+
+	@Column(name = "transaction_key", length = 64)
+	private String transactionKey;
+
 	@Column(name = "completed_at")
 	private LocalDateTime completedAt;
+
+	public static PaymentRefund request(
+		Payment payment,
+		User user,
+		long refundAmount,
+		String reason,
+		String idempotencyKey
+	) {
+		PaymentRefund refund = new PaymentRefund();
+		refund.payment = payment;
+		refund.user = user;
+		refund.refundAmount = refundAmount;
+		refund.status = PaymentRefundStatus.REQUESTED;
+		refund.reason = reason;
+		refund.idempotencyKey = idempotencyKey;
+		return refund;
+	}
+
+	public void retry() {
+		this.status = PaymentRefundStatus.REQUESTED;
+	}
+
+	public void complete(String transactionKey, LocalDateTime completedAt) {
+		this.status = PaymentRefundStatus.DONE;
+		this.transactionKey = transactionKey;
+		this.completedAt = completedAt;
+	}
+
+	public void fail() {
+		this.status = PaymentRefundStatus.FAILED;
+	}
 }

@@ -6,10 +6,15 @@ import java.time.format.DateTimeParseException;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 
 import com.back.popspot.domain.payment.client.TossPaymentsClient;
 import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
 import com.back.popspot.domain.payment.dto.PaymentConfirmResponse;
+import com.back.popspot.domain.payment.dto.PaymentCancelCommand;
+import com.back.popspot.domain.payment.dto.PaymentCancelPreparation;
+import com.back.popspot.domain.payment.dto.PaymentCancelRequest;
+import com.back.popspot.domain.payment.dto.PaymentCancelResponse;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 
@@ -35,6 +40,36 @@ public class PaymentService {
 		return paymentTransactionService.complete(request, extractApprovedAt(tossResponse));
 	}
 
+	public PaymentCancelResponse cancel(Long paymentId, Long userId, PaymentCancelRequest request) {
+		PaymentCancelPreparation preparation = paymentTransactionService.prepareCancel(paymentId, userId, request);
+		if (preparation.isCompleted()) {
+			return preparation.existingResponse();
+		}
+
+		PaymentCancelCommand command = preparation.command();
+		JsonNode tossResponse;
+		try {
+			tossResponse = tossPaymentsClient.cancel(command);
+		} catch (RestClientException exception) {
+			paymentTransactionService.failCancel(command.idempotencyKey());
+			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED);
+		}
+
+		try {
+			validateTossCancelResponse(tossResponse, command);
+		} catch (BusinessException exception) {
+			paymentTransactionService.failCancel(command.idempotencyKey());
+			throw exception;
+		}
+
+		JsonNode cancel = tossResponse.path("cancels").get(tossResponse.path("cancels").size() - 1);
+		return paymentTransactionService.completeCancel(
+			command,
+			cancel.path("transactionKey").asString(),
+			extractCanceledAt(cancel)
+		);
+	}
+
 	private void validateTossConfirmResponse(JsonNode tossResponse, PaymentConfirmRequest request) {
 		if (!"DONE".equals(tossResponse.path("status").asString(null))
 			|| !request.paymentKey().equals(tossResponse.path("paymentKey").asString(null))
@@ -52,6 +87,34 @@ public class PaymentService {
 			return OffsetDateTime.parse(approvedAt).toLocalDateTime();
 		} catch (DateTimeParseException e) {
 			throw new BusinessException(ErrorCode.PAYMENT_CONFIRM_RESPONSE_MISMATCH);
+		}
+	}
+
+	private void validateTossCancelResponse(JsonNode tossResponse, PaymentCancelCommand command) {
+		JsonNode cancels = tossResponse.path("cancels");
+		if (!"CANCELED".equals(tossResponse.path("status").asString(null))
+			|| !command.paymentKey().equals(tossResponse.path("paymentKey").asString(null))
+			|| !command.orderId().equals(tossResponse.path("orderId").asString(null))
+			|| tossResponse.path("balanceAmount").asLong(-1L) != 0L
+			|| !cancels.isArray()
+			|| cancels.isEmpty()) {
+			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_RESPONSE_MISMATCH);
+		}
+
+		JsonNode cancel = cancels.get(cancels.size() - 1);
+		if (!"DONE".equals(cancel.path("cancelStatus").asString(null))
+			|| cancel.path("cancelAmount").asLong(-1L) != command.amount()
+			|| cancel.path("transactionKey").asString("").isBlank()
+			|| cancel.path("canceledAt").asString("").isBlank()) {
+			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_RESPONSE_MISMATCH);
+		}
+	}
+
+	private LocalDateTime extractCanceledAt(JsonNode cancel) {
+		try {
+			return OffsetDateTime.parse(cancel.path("canceledAt").asString()).toLocalDateTime();
+		} catch (DateTimeParseException exception) {
+			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_RESPONSE_MISMATCH);
 		}
 	}
 }
