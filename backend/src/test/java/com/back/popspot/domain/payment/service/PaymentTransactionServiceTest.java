@@ -160,6 +160,41 @@ class PaymentTransactionServiceTest {
 	}
 
 	@Test
+	@DisplayName("실패한 환불 기록이 있으면 새로운 멱등키로 취소를 재시도한다")
+	void retryFailedPaymentCancelWithNewIdempotencyKey() {
+		Payment payment = paidPayment();
+		PaymentRefund failedRefund = refund(payment, PaymentRefundStatus.FAILED);
+		PaymentCancelRequest request = new PaymentCancelRequest("재시도", "new-cancel-key");
+		given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
+		given(paymentRefundRepository.findByIdempotencyKey("new-cancel-key")).willReturn(Optional.empty());
+		given(paymentRefundRepository.findFirstByPaymentIdOrderByIdDesc(10L))
+			.willReturn(Optional.of(failedRefund));
+
+		PaymentCancelPreparation preparation = paymentTransactionService.prepareCancel(10L, 1L, request);
+
+		assertThat(preparation.isCompleted()).isFalse();
+		assertThat(preparation.command().idempotencyKey()).isEqualTo("new-cancel-key");
+		assertThat(preparation.command().cancelReason()).isEqualTo("재시도");
+	}
+
+	@Test
+	@DisplayName("진행 중인 환불 기록이 있으면 새로운 멱등키 취소를 거부한다")
+	void rejectNewCancelWhileRefundIsRequested() {
+		Payment payment = paidPayment();
+		PaymentRefund requestedRefund = refund(payment, PaymentRefundStatus.REQUESTED);
+		PaymentCancelRequest request = new PaymentCancelRequest("중복 요청", "new-cancel-key");
+		given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
+		given(paymentRefundRepository.findByIdempotencyKey("new-cancel-key")).willReturn(Optional.empty());
+		given(paymentRefundRepository.findFirstByPaymentIdOrderByIdDesc(10L))
+			.willReturn(Optional.of(requestedRefund));
+
+		assertBusinessException(
+			() -> paymentTransactionService.prepareCancel(10L, 1L, request),
+			ErrorCode.PAYMENT_CANCEL_ALREADY_REQUESTED
+		);
+	}
+
+	@Test
 	@DisplayName("토스 취소 완료 후 결제와 환불 상태를 변경한다")
 	void completePaymentCancel() {
 		Payment payment = paidPayment();

@@ -83,9 +83,11 @@ public class PaymentTransactionService {
 		}
 
 		validateCancelable(payment);
-		if (paymentRefundRepository.findFirstByPaymentIdOrderByIdDesc(paymentId).isPresent()) {
-			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_ALREADY_REQUESTED);
-		}
+		paymentRefundRepository.findFirstByPaymentIdOrderByIdDesc(paymentId)
+			.filter(refund -> refund.getStatus() == PaymentRefundStatus.REQUESTED)
+			.ifPresent(refund -> {
+				throw new BusinessException(ErrorCode.PAYMENT_CANCEL_ALREADY_REQUESTED);
+			});
 
 		PaymentRefund refund = PaymentRefund.request(
 			payment,
