@@ -96,7 +96,7 @@ public class ReservationService {
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		// 중복 예약 방지
-		if (reservationRepository.existsByUserIdAndSlotId(user.getId(), slot.getId())) {
+		if (reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(user.getId(), slot.getId())) {
 			throw new BusinessException(ErrorCode.RESERVATION_ALREADY_EXISTS);
 		}
 
