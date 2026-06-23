@@ -21,6 +21,7 @@ import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
 import com.back.popspot.domain.goods.dto.GoodsSummaryResponse;
 import com.back.popspot.domain.goods.dto.GoodsUpdateRequest;
 import com.back.popspot.domain.goods.dto.GoodsUpdateResponse;
+import com.back.popspot.domain.goods.dto.HostGoodsDetailResponse;
 import com.back.popspot.domain.goods.dto.HostGoodsListResponse;
 import com.back.popspot.domain.goods.entity.Goods;
 import com.back.popspot.domain.goods.entity.GoodsImage;
@@ -143,6 +144,25 @@ public class GoodsService {
 			.toList();
 	}
 
+	@Transactional(readOnly = true)
+	public HostGoodsDetailResponse getHostGoodsDetail(Long userId, Long goodsId) {
+		Goods goods = goodsRepository.findById(goodsId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.GOODS_NOT_FOUND));
+		if (!goods.getPopupStore().getUser().getId().equals(userId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN);
+		}
+		Map<GoodsImageType, String> imageMap = goodsImageRepository.findByGoods(goods)
+			.stream()
+			.collect(Collectors.toMap(GoodsImage::getImageType, GoodsImage::getImageKey));
+		String productUrl = imageMap.containsKey(GoodsImageType.PRODUCT)
+			? s3Service.generatePresignedGetUrl(imageMap.get(GoodsImageType.PRODUCT))
+			: null;
+		String detailUrl = imageMap.containsKey(GoodsImageType.DETAIL)
+			? s3Service.generatePresignedGetUrl(imageMap.get(GoodsImageType.DETAIL))
+			: null;
+		return HostGoodsDetailResponse.from(goods, productUrl, detailUrl);
+	}
+
 	@Transactional
 	public GoodsUpdateResponse updateHostGoods(Long userId, Long goodsId, GoodsUpdateRequest request) {
 		Goods goods = goodsRepository.findById(goodsId)
@@ -235,10 +255,7 @@ public class GoodsService {
 				String productUrl = images.containsKey(GoodsImageType.PRODUCT)
 					? s3Service.generatePresignedGetUrl(images.get(GoodsImageType.PRODUCT))
 					: null;
-				String detailUrl = images.containsKey(GoodsImageType.DETAIL)
-					? s3Service.generatePresignedGetUrl(images.get(GoodsImageType.DETAIL))
-					: null;
-				return HostGoodsListResponse.from(goods, productUrl, detailUrl);
+				return HostGoodsListResponse.from(goods, productUrl);
 			})
 			.toList();
 	}
