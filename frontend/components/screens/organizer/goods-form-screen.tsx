@@ -1,50 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ImagePlus, Loader2, X, Trash2 } from 'lucide-react'
+import { ArrowLeft, ImagePlus, Loader2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { uploadGoodsImage, registerGoods, getHostGoodsDetail, updateHostGoods, deleteHostGoods } from '@/lib/goods-api'
+import { uploadGoodsImage, registerGoods, getHostGoodsDetail, updateHostGoods } from '@/lib/goods-api'
 import type { ImageKeyEntry } from '@/lib/goods-api'
-
-// ─── Delete Confirm Modal ─────────────────────────────────────────────────────
-
-function DeleteGoodsModal({
-  goodsName,
-  onCancel,
-  onConfirm,
-}: {
-  goodsName: string
-  onCancel: () => void
-  onConfirm: () => void
-}) {
-  return (
-    <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full bg-card rounded-t-3xl p-6 pb-8 space-y-4">
-        <h3 className="text-base font-bold text-foreground">굿즈를 삭제하시겠습니까?</h3>
-        <p className="text-[13px] font-semibold text-foreground bg-secondary rounded-xl px-4 py-3">
-          {goodsName}
-        </p>
-        <p className="text-[13px] text-muted-foreground leading-relaxed">
-          삭제된 굿즈는 복구할 수 없습니다.
-        </p>
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-3.5 rounded-xl bg-secondary text-foreground font-semibold text-sm"
-          >
-            취소
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 py-3.5 rounded-xl bg-[oklch(0.62_0.24_25)] text-white font-semibold text-sm"
-          >
-            삭제
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ─── Image Picker Slot ────────────────────────────────────────────────────────
 
@@ -118,7 +78,6 @@ interface GoodsFormScreenProps {
   goodsId?: string
   onBack: () => void
   onSaved: () => void
-  onDeleted?: () => void
 }
 
 export function GoodsFormScreen({
@@ -128,7 +87,6 @@ export function GoodsFormScreen({
   goodsId,
   onBack,
   onSaved,
-  onDeleted,
 }: GoodsFormScreenProps) {
   const [loading, setLoading] = useState(mode === 'edit')
   const [name, setName] = useState('')
@@ -144,7 +102,6 @@ export function GoodsFormScreen({
   const [uploadingDetail, setUploadingDetail] = useState(false)
 
   const [saving, setSaving] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   useEffect(() => {
     if (mode !== 'edit' || !goodsId) return
@@ -417,18 +374,6 @@ export function GoodsFormScreen({
           />
         </div>
 
-        {/* Edit-only: delete section */}
-        {isEdit && (
-          <div className="pt-2 border-t border-border">
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] font-semibold text-[oklch(0.62_0.24_25)] bg-[oklch(0.97_0.06_25)] active:opacity-80 transition-opacity"
-            >
-              <Trash2 size={14} strokeWidth={2} />
-              이 굿즈 삭제
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Bottom actions */}
@@ -453,22 +398,6 @@ export function GoodsFormScreen({
         </button>
       </div>
 
-      {/* Delete modal */}
-      {showDeleteModal && (
-        <DeleteGoodsModal
-          goodsName={name || '이 굿즈'}
-          onCancel={() => setShowDeleteModal(false)}
-          onConfirm={async () => {
-            setShowDeleteModal(false)
-            try {
-              await deleteHostGoods(goodsId!)
-              onDeleted?.()
-            } catch (e) {
-              alert(e instanceof Error ? e.message : '삭제에 실패했습니다.')
-            }
-          }}
-        />
-      )}
     </div>
   )
 }

@@ -144,7 +144,6 @@ export default function OrganizerPage() {
               goodsId={editGoodsId}
               onBack={handleBack}
               onSaved={handleBack}
-              onDeleted={handleBack}
             />
           )}
 
