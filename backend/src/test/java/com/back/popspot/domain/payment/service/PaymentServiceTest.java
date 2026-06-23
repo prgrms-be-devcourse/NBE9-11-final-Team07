@@ -123,6 +123,56 @@ class PaymentServiceTest {
 	}
 
 	@Test
+	@DisplayName("승인 후 예약을 확정할 수 없으면 토스 결제를 보상 취소한다")
+	void compensateWhenReservationCannotBeConfirmed() throws Exception {
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentCancelCommand command = cancelCommand();
+		JsonNode tossResponse = tossResponse("payment-key", "order-id", 1000L);
+		JsonNode cancelResponse = cancelResponse("CANCELED", "DONE", 1000L);
+
+		given(paymentTransactionService.prepare(request)).willReturn(Optional.empty());
+		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse);
+		given(paymentTransactionService.complete(request, APPROVED_AT))
+			.willThrow(new BusinessException(ErrorCode.RESERVATION_PAYMENT_EXPIRED));
+		given(paymentTransactionService.prepareCompensation(request, "결제 승인 후 주문 확정 실패"))
+			.willReturn(command);
+		given(tossPaymentsClient.cancel(command)).willReturn(cancelResponse);
+
+		assertThatThrownBy(() -> paymentService.confirm(request))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(ErrorCode.RESERVATION_PAYMENT_EXPIRED);
+
+		verify(paymentTransactionService).completeCompensation(
+			command,
+			"transaction-key",
+			LocalDateTime.of(2026, 6, 16, 11, 0)
+		);
+	}
+
+	@Test
+	@DisplayName("보상 취소 호출이 실패하면 보상 실패 상태로 기록한다")
+	void recordFailedCompensation() throws Exception {
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentCancelCommand command = cancelCommand();
+
+		given(paymentTransactionService.prepare(request)).willReturn(Optional.empty());
+		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse("payment-key", "order-id", 1000L));
+		given(paymentTransactionService.complete(request, APPROVED_AT))
+			.willThrow(new BusinessException(ErrorCode.RESERVATION_PAYMENT_EXPIRED));
+		given(paymentTransactionService.prepareCompensation(request, "결제 승인 후 주문 확정 실패"))
+			.willReturn(command);
+		given(tossPaymentsClient.cancel(command)).willThrow(new RestClientException("toss error"));
+
+		assertThatThrownBy(() -> paymentService.confirm(request))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(ErrorCode.RESERVATION_PAYMENT_EXPIRED);
+
+		verify(paymentTransactionService).failCompensation(command);
+	}
+
+	@Test
 	@DisplayName("결제 전액 취소 성공 응답을 검증한 후 완료 처리한다")
 	void cancelPaidPayment() throws Exception {
 		PaymentCancelRequest request = new PaymentCancelRequest("구매자 변심", "cancel-key");

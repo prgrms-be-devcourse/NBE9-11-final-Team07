@@ -57,6 +57,7 @@ class PaymentTransactionServiceTest {
 		Optional<PaymentConfirmResponse> result = paymentTransactionService.prepare(request);
 
 		assertThat(result).isEmpty();
+		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CONFIRMING);
 	}
 
 	@Test
@@ -120,6 +121,7 @@ class PaymentTransactionServiceTest {
 	void rejectReservationExpiredBeforeCompletion() {
 		Reservation reservation = reservation(ReservationStatus.HELD, LocalDateTime.now().minusSeconds(1));
 		Payment payment = readyReservationPayment(reservation);
+		payment.beginConfirmation();
 		PaymentConfirmRequest request = request(1000L);
 		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
 
@@ -127,6 +129,42 @@ class PaymentTransactionServiceTest {
 			() -> paymentTransactionService.complete(request, APPROVED_AT),
 			ErrorCode.RESERVATION_PAYMENT_EXPIRED
 		);
+	}
+
+	@Test
+	@DisplayName("주문 확정 실패 후 결제 보상 요청을 생성한다")
+	void preparePaymentCompensation() {
+		Payment payment = readyPayment();
+		payment.beginConfirmation();
+		PaymentConfirmRequest request = request(1000L);
+		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
+		given(paymentRefundRepository.findByIdempotencyKey("confirm-compensation:order-id"))
+			.willReturn(Optional.empty());
+
+		PaymentCancelCommand command = paymentTransactionService.prepareCompensation(request, "주문 확정 실패");
+
+		assertThat(command.paymentKey()).isEqualTo("payment-key");
+		assertThat(command.idempotencyKey()).isEqualTo("confirm-compensation:order-id");
+		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.COMPENSATING);
+	}
+
+	@Test
+	@DisplayName("보상 취소가 실패하면 결제를 재처리 대상 상태로 남긴다")
+	void failPaymentCompensation() {
+		Payment payment = readyPayment();
+		payment.beginConfirmation();
+		payment.beginCompensation("payment-key");
+		PaymentRefund refund = refund(payment, PaymentRefundStatus.REQUESTED);
+		PaymentCancelCommand command = new PaymentCancelCommand(
+			10L, "payment-key", "order-id", 1000L, "주문 확정 실패", "cancel-key"
+		);
+		given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
+		given(paymentRefundRepository.findByIdempotencyKey("cancel-key")).willReturn(Optional.of(refund));
+
+		paymentTransactionService.failCompensation(command);
+
+		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.COMPENSATION_FAILED);
+		assertThat(refund.getStatus()).isEqualTo(PaymentRefundStatus.FAILED);
 	}
 
 	@Test

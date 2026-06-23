@@ -155,8 +155,16 @@ public class Payment extends BaseEntity {
 		return status == PaymentStatus.READY;
 	}
 
+	public boolean isConfirming() {
+		return status == PaymentStatus.CONFIRMING;
+	}
+
 	public boolean isCanceled() {
 		return status == PaymentStatus.CANCELED;
+	}
+
+	public void beginConfirmation() {
+		this.status = PaymentStatus.CONFIRMING;
 	}
 
 	public void complete(String paymentKey, LocalDateTime approvedAt) {
@@ -175,5 +183,18 @@ public class Payment extends BaseEntity {
 
 	public void cancel() {
 		this.status = PaymentStatus.CANCELED;
+	}
+
+	public void beginCompensation(String paymentKey) {
+		this.paymentKey = paymentKey;
+		this.status = PaymentStatus.COMPENSATING;
+	}
+
+	public void failCompensation() {
+		this.status = PaymentStatus.COMPENSATION_FAILED;
+	}
+
+	public void retryCompensation() {
+		this.status = PaymentStatus.COMPENSATING;
 	}
 }
