@@ -167,10 +167,9 @@ export default function Page() {
     setCurrentView('purchase-detail')
   }
 
-  function handleCouponBannerSelect(payload: CouponIssuancePayload) {
-    setCouponIssuancePayload(payload)
-    setCouponIssuancePrevView(currentView)
-    setCurrentView('coupon-issuance')
+  function handleCouponBannerSelect(storeId: string) {
+    setSelectedStoreId(storeId)
+    setCurrentView('detail')
   }
 
   function handleIssueCoupon(payload: CouponIssuancePayload) {

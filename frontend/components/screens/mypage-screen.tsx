@@ -4,10 +4,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { ChevronRight, CalendarCheck, ShoppingBag, Ticket, Settings, Store } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { userProfile, purchasedGoods, claimedCoupons } from '@/lib/data'
+import { userProfile, purchasedGoods } from '@/lib/data'
 import { reservationApi } from '@/lib/reservation-api'
 import type { MyReservationResponse } from '@/lib/reservation-api'
 import type { ReservationHistoryStatus } from '@/lib/data'
+import { couponApi, formatDiscount } from '@/lib/coupon-api'
+import type { UserCouponResponse } from '@/lib/coupon-api'
 
 interface MyPageScreenProps {
   onViewAllReservations: () => void
@@ -65,8 +67,9 @@ export function MyPageScreen({
 }: MyPageScreenProps) {
   const [reservations, setReservations] = useState<MyReservationResponse[]>([])
   const [reservationsError, setReservationsError] = useState<string | null>(null)
+  const [coupons, setCoupons] = useState<UserCouponResponse[]>([])
+  const [couponsError, setCouponsError] = useState<string | null>(null)
   const recentPurchases = purchasedGoods.slice(0, 2)
-  const recentCoupons = claimedCoupons.filter((c) => !c.isUsed).slice(0, 3)
 
   const loadReservations = useCallback(async () => {
     try {
@@ -79,11 +82,24 @@ export function MyPageScreen({
     }
   }, [])
 
+  const loadCoupons = useCallback(async () => {
+    try {
+      const response = await couponApi.getMyCoupons()
+      setCoupons(response.filter((coupon) => coupon.status === 'ISSUED'))
+      setCouponsError(null)
+    } catch (e) {
+      setCoupons([])
+      setCouponsError(e instanceof Error ? e.message : '쿠폰 목록을 불러오지 못했습니다.')
+    }
+  }, [])
+
   useEffect(() => {
     void loadReservations()
-  }, [loadReservations])
+    void loadCoupons()
+  }, [loadReservations, loadCoupons])
 
   const recentReservations = reservations.slice(0, 3)
+  const recentCoupons = coupons.slice(0, 3)
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -109,7 +125,7 @@ export function MyPageScreen({
             {[
               { label: '예약', value: reservations.length, Icon: CalendarCheck },
               { label: '구매', value: userProfile.purchases, Icon: ShoppingBag },
-              { label: '쿠폰', value: userProfile.coupons, Icon: Ticket },
+              { label: '쿠폰', value: coupons.length, Icon: Ticket },
             ].map(({ label, value, Icon }, i) => (
               <div
                 key={label}
@@ -196,7 +212,13 @@ export function MyPageScreen({
 
         {/* Recent Coupons */}
         <SectionHeader title="보유 쿠폰" onViewAll={onViewAllCoupons} />
-        {recentCoupons.length === 0 ? (
+        {couponsError ? (
+          <div className="px-4">
+            <div className="flex items-center justify-center py-6 bg-secondary rounded-xl">
+              <p className="text-[13px] text-muted-foreground">{couponsError}</p>
+            </div>
+          </div>
+        ) : recentCoupons.length === 0 ? (
           <div className="px-4">
             <div className="flex items-center justify-center py-6 bg-secondary rounded-xl">
               <p className="text-[13px] text-muted-foreground">보유한 쿠폰이 없습니다.</p>
@@ -213,12 +235,12 @@ export function MyPageScreen({
                   <Ticket size={16} className="text-[oklch(0.4_0.1_145)]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-semibold text-foreground line-clamp-1">{coupon.title}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{coupon.discount}</p>
+                  <p className="text-[12px] font-semibold text-foreground line-clamp-1">{coupon.name}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{coupon.popupStoreTitle}</p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-[13px] font-black text-[oklch(0.62_0.24_25)]">{coupon.discount}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">~{coupon.expiresAt}</p>
+                  <p className="text-[13px] font-black text-[oklch(0.62_0.24_25)]">{formatDiscount(coupon)}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">~{coupon.expiredAt.slice(0, 10)}</p>
                 </div>
               </div>
             ))}
