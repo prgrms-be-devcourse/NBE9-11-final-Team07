@@ -52,6 +52,7 @@ public class ReservationService {
 	private final PaymentRepository paymentRepository;
 	private final UserRepository userRepository;
 	private final ReservationExpirationService reservationExpirationService;
+	private final ReservationCommandService reservationCommandService;
 	private final RedisTemplate<String, Long> redisTemplate;
 
 	@Transactional(readOnly = true)
@@ -70,9 +71,12 @@ public class ReservationService {
 		).map(MyReservationResponse::from);
 	}
 
-	@Transactional
+	// @Transactional 을 두지 않는다. Redis 차감/롤백을 트랜잭션 밖에서 수행해 커넥션 점유를 막고,
+	// DB 저장은 별도 빈(ReservationCommandService)의 트랜잭션에 위임한다.
 	public ReservationCreateResponse createReservation(ReservationCreateRequest request, Long userId) {
-		ReservationSlot slot = reservationSlotRepository.findById(request.slotId())
+		// 1. 검증용 DB 읽기는 Redis 차감 전에 끝낸다. (popupStore 까지 join fetch 로 함께 로딩)
+		//    각 조회는 짧은 단일 트랜잭션으로 즉시 커넥션을 반납한다.
+		ReservationSlot slot = reservationSlotRepository.findByIdWithPopupStore(request.slotId())
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_SLOT_NOT_FOUND));
 
 		LocalDateTime now = LocalDateTime.now();
@@ -99,7 +103,7 @@ public class ReservationService {
 		Long slotId = slot.getId();
 		String remainingKey = RedisKeys.reservationSlotRemaining(slotId);
 
-		// 단일 카운터 - 남은 재고(remaining) 선차감. DECR 반환값만으로 동시성 제어가 완결된다.
+		// 2. 모든 검증 통과 후 단일 카운터(remaining) 선차감. DECR 반환값만으로 동시성 제어가 완결된다.
 		Long after = redisTemplate.opsForValue().decrement(remainingKey);
 		if (after == null || after < 0) {
 			// 남은 자리 없음/미초기화 → remaining 롤백
@@ -107,11 +111,11 @@ public class ReservationService {
 			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
 		}
 
-		// 실제 DB 반영. 워커/DB 처리 실패 시 remaining 롤백
+		// 3. DB 저장은 별도 빈의 @Transactional 메서드에 위임한다.
+		//    커밋 단계 실패까지 여기 try-catch 가 잡아 remaining 을 롤백한다.
 		try {
 			LocalDateTime heldUntil = now.plusMinutes(HOLD_MINUTES);
-			Reservation reservation = Reservation.createHeld(user, slot, now, heldUntil);
-			reservationRepository.save(reservation);
+			Reservation reservation = reservationCommandService.save(user, slot, now, heldUntil);
 
 			return ReservationCreateResponse.from(reservation);
 		} catch (RuntimeException e) {
