@@ -1,6 +1,48 @@
 import { apiRequest } from '@/lib/api'
 
 export type GoodsStatus = 'ON_SALE' | 'ENDED'
+export type GoodsImageType = 'PRODUCT' | 'DETAIL'
+
+export interface GoodsImagePresignRequest {
+  imageType: GoodsImageType
+  fileNames: string[]
+}
+
+export interface GoodsImagePresignResponse {
+  imageKey: string
+  presignedUrl: string
+}
+
+export interface ImageKeyEntry {
+  imageKey: string
+  imageType: GoodsImageType
+}
+
+export async function presignGoodsImage(
+  imageType: GoodsImageType,
+  fileName: string,
+): Promise<GoodsImagePresignResponse> {
+  const results = await apiRequest<GoodsImagePresignResponse[]>('/api/v1/host/goods/images', {
+    method: 'POST',
+    body: JSON.stringify({ imageType, fileNames: [fileName] } satisfies GoodsImagePresignRequest),
+  })
+  return results[0]
+}
+
+export async function uploadGoodsImageToS3(presignedUrl: string, file: File): Promise<void> {
+  const res = await fetch(presignedUrl, { method: 'PUT', body: file })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    const code = body.match(/<Code>(.*?)<\/Code>/)?.[1]
+    throw new Error(`이미지 업로드 실패 (${res.status}${code ? `: ${code}` : ''})`)
+  }
+}
+
+export async function uploadGoodsImage(imageType: GoodsImageType, file: File): Promise<string> {
+  const { imageKey, presignedUrl } = await presignGoodsImage(imageType, file.name)
+  await uploadGoodsImageToS3(presignedUrl, file)
+  return imageKey
+}
 
 export interface HostGoodsListResponse {
   id: number
