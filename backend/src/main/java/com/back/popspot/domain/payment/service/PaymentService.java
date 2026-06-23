@@ -3,6 +3,7 @@ package com.back.popspot.domain.payment.service;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -19,11 +20,14 @@ import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import tools.jackson.databind.JsonNode;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentService {
+	private static final String CONFIRM_COMPENSATION_REASON = "결제 승인 후 주문 확정 실패";
 
 	private final PaymentTransactionService paymentTransactionService;
 	private final TossPaymentsClient tossPaymentsClient;
@@ -37,7 +41,61 @@ public class PaymentService {
 		JsonNode tossResponse = tossPaymentsClient.confirm(request);
 		validateTossConfirmResponse(tossResponse, request);
 
-		return paymentTransactionService.complete(request, extractApprovedAt(tossResponse));
+		try {
+			return paymentTransactionService.complete(request, extractApprovedAt(tossResponse));
+		} catch (BusinessException exception) {
+			if (requiresCompensation(exception)) {
+				compensateConfirmedPayment(request);
+			}
+			throw exception;
+		}
+	}
+
+	private boolean requiresCompensation(BusinessException exception) {
+		return exception.getErrorCode() == ErrorCode.RESERVATION_PAYMENT_EXPIRED
+			|| exception.getErrorCode() == ErrorCode.RESERVATION_PAYMENT_NOT_ALLOWED_STATUS;
+	}
+
+	private void compensateConfirmedPayment(PaymentConfirmRequest request) {
+		PaymentCancelCommand command;
+		try {
+			command = paymentTransactionService.prepareCompensation(
+				request,
+				CONFIRM_COMPENSATION_REASON
+			);
+		} catch (RuntimeException preparationException) {
+			log.error("Payment compensation preparation failed. orderId={}",
+				request.orderId(), preparationException);
+			return;
+		}
+
+		executeCompensation(command);
+	}
+
+	public void retryFailedCompensations() {
+		List<PaymentCancelCommand> commands = paymentTransactionService.prepareFailedCompensations();
+		commands.forEach(this::executeCompensation);
+	}
+
+	private void executeCompensation(PaymentCancelCommand command) {
+		try {
+			JsonNode tossResponse = tossPaymentsClient.cancel(command);
+			validateTossCancelResponse(tossResponse, command);
+			JsonNode cancel = tossResponse.path("cancels").get(tossResponse.path("cancels").size() - 1);
+			paymentTransactionService.completeCompensation(
+				command,
+				cancel.path("transactionKey").asString(),
+				extractCanceledAt(cancel)
+			);
+		} catch (RuntimeException compensationException) {
+			try {
+				paymentTransactionService.failCompensation(command);
+			} catch (RuntimeException recordingException) {
+				compensationException.addSuppressed(recordingException);
+			}
+			log.error("Payment compensation failed. paymentId={}, orderId={}",
+				command.paymentId(), command.orderId(), compensationException);
+		}
 	}
 
 	public PaymentCancelResponse cancel(Long paymentId, Long userId, PaymentCancelRequest request) {

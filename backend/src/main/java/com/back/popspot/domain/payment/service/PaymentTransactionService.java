@@ -1,6 +1,7 @@
 package com.back.popspot.domain.payment.service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import com.back.popspot.domain.payment.dto.PaymentCancelResponse;
 import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.entity.PaymentRefund;
 import com.back.popspot.domain.payment.entity.PaymentRefundStatus;
+import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
 import com.back.popspot.domain.payment.repository.PaymentRefundRepository;
 import com.back.popspot.domain.reservation.entity.Reservation;
@@ -31,7 +33,7 @@ public class PaymentTransactionService {
 	private final PaymentRepository paymentRepository;
 	private final PaymentRefundRepository paymentRefundRepository;
 
-	@Transactional(readOnly = true)
+	@Transactional
 	public Optional<PaymentConfirmResponse> prepare(PaymentConfirmRequest request) {
 		Payment payment = getPayment(request.orderId());
 		validatePayment(payment, request);
@@ -39,6 +41,9 @@ public class PaymentTransactionService {
 		if (payment.isPaid()) {
 			validatePaymentKey(payment, request.paymentKey());
 			return Optional.of(PaymentConfirmResponse.from(payment));
+		}
+		if (payment.isReady()) {
+			payment.beginConfirmation();
 		}
 
 		return Optional.empty();
@@ -54,8 +59,82 @@ public class PaymentTransactionService {
 			return PaymentConfirmResponse.from(payment);
 		}
 
+		validateReservationPayment(payment);
 		payment.complete(request.paymentKey(), approvedAt);
 		return PaymentConfirmResponse.from(payment);
+	}
+
+	@Transactional
+	public PaymentCancelCommand prepareCompensation(PaymentConfirmRequest request, String reason) {
+		Payment payment = getPayment(request.orderId());
+		if (!payment.isConfirming()) {
+			throw new BusinessException(ErrorCode.PAYMENT_CONFIRM_NOT_ALLOWED_STATUS);
+		}
+
+		String idempotencyKey = compensationIdempotencyKey(payment);
+		Optional<PaymentRefund> existing = paymentRefundRepository.findByIdempotencyKey(idempotencyKey);
+		if (existing.isPresent()) {
+			existing.get().retry();
+		} else {
+			paymentRefundRepository.save(PaymentRefund.request(
+				payment,
+				payment.getUser(),
+				payment.getAmount(),
+				reason,
+				idempotencyKey
+			));
+		}
+
+		payment.beginCompensation(request.paymentKey());
+		return new PaymentCancelCommand(
+			payment.getId(),
+			request.paymentKey(),
+			payment.getOrderId(),
+			payment.getAmount(),
+			reason,
+			idempotencyKey
+		);
+	}
+
+	@Transactional
+	public void completeCompensation(
+		PaymentCancelCommand command,
+		String transactionKey,
+		LocalDateTime canceledAt
+	) {
+		Payment payment = getPayment(command.paymentId());
+		PaymentRefund refund = getRefund(command.idempotencyKey());
+		payment.cancel();
+		refund.complete(transactionKey, canceledAt);
+	}
+
+	@Transactional
+	public void failCompensation(PaymentCancelCommand command) {
+		Payment payment = getPayment(command.paymentId());
+		PaymentRefund refund = getRefund(command.idempotencyKey());
+		payment.failCompensation();
+		refund.fail();
+	}
+
+	@Transactional
+	public List<PaymentCancelCommand> prepareFailedCompensations() {
+		return paymentRefundRepository.findTop20ByStatusOrderByIdAsc(PaymentRefundStatus.FAILED)
+			.stream()
+			.filter(refund -> refund.getPayment().getStatus() == PaymentStatus.COMPENSATION_FAILED)
+			.map(refund -> {
+				Payment payment = refund.getPayment();
+				payment.retryCompensation();
+				refund.retry();
+				return new PaymentCancelCommand(
+					payment.getId(),
+					payment.getPaymentKey(),
+					payment.getOrderId(),
+					payment.getAmount(),
+					refund.getReason(),
+					refund.getIdempotencyKey()
+				);
+			})
+			.toList();
 	}
 
 	@Transactional
@@ -186,10 +265,16 @@ public class PaymentTransactionService {
 		if (payment.isPaid()) {
 			return;
 		}
-		if (!payment.isReady()) {
+		if (!payment.isReady() && !payment.isConfirming()) {
 			throw new BusinessException(ErrorCode.PAYMENT_CONFIRM_NOT_ALLOWED_STATUS);
 		}
-		validateReservationPayment(payment);
+		if (payment.isReady()) {
+			validateReservationPayment(payment);
+		}
+	}
+
+	private String compensationIdempotencyKey(Payment payment) {
+		return "confirm-compensation:" + payment.getOrderId();
 	}
 
 	private void validateAmount(Payment payment, long requestAmount) {
