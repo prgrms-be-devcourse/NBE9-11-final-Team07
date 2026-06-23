@@ -97,26 +97,17 @@ public class ReservationService {
 		}
 
 		Long slotId = slot.getId();
-		String reqCountKey = RedisKeys.reservationSlotReqCount(slotId);
 		String remainingKey = RedisKeys.reservationSlotRemaining(slotId);
 
-		// 이중 카운터 1단계 - 요청 카운터(req) 증가, capacity 초과 시 즉시 DECR 후 차단
-		Long reqCount = redisTemplate.opsForValue().increment(reqCountKey);
-		if (reqCount == null || reqCount > slot.getCapacity()) {
-			redisTemplate.opsForValue().decrement(reqCountKey);
-			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
-		}
-
-		// 이중 카운터 2단계 - 통과한 요청만 남은 재고(remaining) 차감
-		Long remaining = redisTemplate.opsForValue().decrement(remainingKey);
-		if (remaining == null || remaining < 0) {
-			// 남은 자리 없음/미초기화 → req, remaining 둘 다 롤백
+		// 단일 카운터 - 남은 재고(remaining) 선차감. DECR 반환값만으로 동시성 제어가 완결된다.
+		Long after = redisTemplate.opsForValue().decrement(remainingKey);
+		if (after == null || after < 0) {
+			// 남은 자리 없음/미초기화 → remaining 롤백
 			redisTemplate.opsForValue().increment(remainingKey);
-			redisTemplate.opsForValue().decrement(reqCountKey);
 			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
 		}
 
-		// 이중 카운터 3단계 - 실제 DB 반영. 워커/DB 처리 실패 시 두 카운터 모두 롤백
+		// 실제 DB 반영. 워커/DB 처리 실패 시 remaining 롤백
 		try {
 			LocalDateTime heldUntil = now.plusMinutes(HOLD_MINUTES);
 			Reservation reservation = Reservation.createHeld(user, slot, now, heldUntil);
@@ -125,7 +116,6 @@ public class ReservationService {
 			return ReservationCreateResponse.from(reservation);
 		} catch (RuntimeException e) {
 			redisTemplate.opsForValue().increment(remainingKey);
-			redisTemplate.opsForValue().decrement(reqCountKey);
 			throw e;
 		}
 	}
@@ -170,6 +160,9 @@ public class ReservationService {
 		if (updatedCount == 0) {
 			throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
 		}
+
+		// 취소로 자리가 비었으므로 재고 카운터 복구
+		redisTemplate.opsForValue().increment(RedisKeys.reservationSlotRemaining(reservation.getSlot().getId()));
 	}
 
 	@Transactional(noRollbackFor = ReservationPaymentExpiredException.class)

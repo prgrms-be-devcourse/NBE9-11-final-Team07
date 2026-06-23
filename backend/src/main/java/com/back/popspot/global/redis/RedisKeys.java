@@ -5,11 +5,6 @@ public final class RedisKeys {
 
 	private RedisKeys() {}
 
-	// 내가 추가할 것 (이중카운터)
-	public static String reservationSlotReqCount(Long slotId) {
-		return PREFIX + ":reservation:slot:" + slotId + ":req";
-	}
-
 	public static String reservationSlotRemaining(Long slotId) {
 		return PREFIX + ":reservation:slot:" + slotId + ":remaining";
 	}

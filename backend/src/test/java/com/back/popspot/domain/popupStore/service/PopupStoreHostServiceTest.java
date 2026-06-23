@@ -269,7 +269,7 @@ class PopupStoreHostServiceTest {
 	}
 
 	@Test
-	@DisplayName("슬롯 생성: 소유자 + 운영 기간 내 날짜면 저장하고 id 를 반환하며 카운터를 req=0, remaining=capacity 로 초기화한다")
+	@DisplayName("슬롯 생성: 소유자 + 운영 기간 내 날짜면 저장하고 id 를 반환하며 카운터를 remaining=capacity 로 초기화한다")
 	void createSlot_validOwnerInRange_savesAndReturnsId() {
 		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupForSlot(USER_ID)));
 		when(reservationSlotRepository.save(any(ReservationSlot.class))).thenAnswer(invocation -> {
@@ -285,7 +285,6 @@ class PopupStoreHostServiceTest {
 		assertThat(id).isEqualTo(500L);
 		verify(reservationSlotRepository).save(any(ReservationSlot.class));
 		// capacity 는 slotRequest 의 10
-		verify(valueOperations).set(RedisKeys.reservationSlotReqCount(500L), 0L);
 		verify(valueOperations).set(RedisKeys.reservationSlotRemaining(500L), 10L);
 	}
 
@@ -311,8 +310,7 @@ class PopupStoreHostServiceTest {
 			TransactionSynchronizationManager.getSynchronizations()
 				.forEach(TransactionSynchronization::afterCommit);
 
-			// 커밋 후: req=0, remaining=capacity 세팅
-			verify(valueOperations).set(RedisKeys.reservationSlotReqCount(500L), 0L);
+			// 커밋 후: remaining=capacity 세팅
 			verify(valueOperations).set(RedisKeys.reservationSlotRemaining(500L), 10L);
 		} finally {
 			TransactionSynchronizationManager.clearSynchronization();
@@ -570,6 +568,8 @@ class PopupStoreHostServiceTest {
 		PopupStore popupStore = new PopupStore();
 		ReflectionTestUtils.setField(popupStore, "user", owner);
 		ReflectionTestUtils.setField(popupStore, "openDate", openDate);
+		// 삭제 가드는 reservationStartAt 을 기준으로 하므로 동일 시점으로 함께 설정한다.
+		ReflectionTestUtils.setField(popupStore, "reservationStartAt", openDate);
 		return popupStore;
 	}
 

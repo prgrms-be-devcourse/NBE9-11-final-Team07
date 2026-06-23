@@ -185,7 +185,7 @@ public class PopupStoreHostService {
 		ReservationSlot slot = ReservationSlot.of(popupStore, request);
 		reservationSlotRepository.save(slot);
 
-		// 이중 카운터(req=0, remaining=capacity) 초기화는 DB 커밋 성공 후 실행한다.
+		// 재고 카운터(remaining=capacity) 초기화는 DB 커밋 성공 후 실행한다.
 		// 트랜잭션이 롤백되면 슬롯이 존재하지 않으므로 Redis 카운터도 만들지 않는다.
 		registerAfterCommitSlotCounterInit(slot.getId(), slot.getCapacity());
 
@@ -262,6 +262,9 @@ public class PopupStoreHostService {
 		}
 
 		reservationSlotRepository.delete(slot);
+
+		// 슬롯 삭제 시 재고 카운터 키도 함께 정리 (고아 키 방지)
+		redisTemplate.delete(RedisKeys.reservationSlotRemaining(slotId));
 	}
 
 	// 임시 키(temp/...)의 파일명을 팝업 정식 경로(popup/{id}/{fileName})로 변환
@@ -269,13 +272,10 @@ public class PopupStoreHostService {
 		return "popup/" + popupStoreId + "/" + s3Service.extractFileName(tempKey);
 	}
 
-	// 트랜잭션 커밋 성공 후에 슬롯 이중 카운터를 초기화한다. (req=0, remaining=capacity)
+	// 트랜잭션 커밋 성공 후에 슬롯 재고 카운터를 초기화한다. (remaining=capacity)
 	// 동기화가 비활성(트랜잭션 밖)이면 즉시 실행한다.
 	private void registerAfterCommitSlotCounterInit(Long slotId, int capacity) {
-		Runnable init = () -> {
-			redisTemplate.opsForValue().set(RedisKeys.reservationSlotReqCount(slotId), 0L);
-			redisTemplate.opsForValue().set(RedisKeys.reservationSlotRemaining(slotId), (long)capacity);
-		};
+		Runnable init = () -> redisTemplate.opsForValue().set(RedisKeys.reservationSlotRemaining(slotId), (long)capacity);
 		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
 			init.run();
 			return;
