@@ -299,7 +299,7 @@ class GoodsOrderServiceTest {
 
 		assertThat(response.getGoodsOrderId()).isEqualTo(100L);
 		assertThat(response.getItems()).hasSize(1);
-		assertThat(response.getItems().get(0).getThumbnailImageKey()).isNull();
+		assertThat(response.getItems().get(0).getThumbnailImageUrl()).isNull();
 		then(goodsImageRepository).should()
 				.findByGoods_IdInAndImageTypeOrderByIdAsc(any(), any());
 	}
