@@ -1,10 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ArrowLeft, Plus, Pencil, Trash2, ShoppingBag } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { orgGoods } from '@/lib/data'
-import type { OrgGoods } from '@/lib/data'
+import { hostGoodsApi } from '@/lib/goods-api'
+import type { HostGoodsListResponse } from '@/lib/goods-api'
+
+function goodsStatusFromStock(stock: number): 'ON_SALE' | 'SOLD_OUT' {
+  return stock === 0 ? 'SOLD_OUT' : 'ON_SALE'
+}
 
 // ─── Delete Modal ─────────────────────────────────────────────────────────────
 
@@ -13,7 +17,7 @@ function DeleteGoodsModal({
   onCancel,
   onConfirm,
 }: {
-  goods: OrgGoods
+  goods: HostGoodsListResponse
   onCancel: () => void
   onConfirm: () => void
 }) {
@@ -23,7 +27,7 @@ function DeleteGoodsModal({
         <h3 className="text-base font-bold text-foreground">굿즈를 삭제하시겠습니까?</h3>
         <div className="flex items-center gap-3 bg-secondary rounded-xl p-3">
           <img
-            src={goods.thumbnail}
+            src={goods.productImageUrl ?? undefined}
             alt={goods.name}
             crossOrigin="anonymous"
             className="w-12 h-12 rounded-lg object-cover shrink-0"
@@ -64,12 +68,12 @@ function GoodsCard({
   onEdit,
   onDelete,
 }: {
-  goods: OrgGoods
+  goods: HostGoodsListResponse
   onEdit: () => void
   onDelete: () => void
 }) {
+  const derivedStatus = goodsStatusFromStock(goods.stock)
   const statusLabel: Record<string, string> = {
-    READY: '판매 준비',
     ON_SALE: '판매중',
     SOLD_OUT: '품절',
   }
@@ -78,15 +82,15 @@ function GoodsCard({
     <div className="bg-card border border-border rounded-2xl overflow-hidden">
       <div className="flex items-start gap-3 p-3.5">
         <img
-          src={goods.thumbnail}
+          src={goods.productImageUrl ?? undefined}
           alt={goods.name}
           crossOrigin="anonymous"
           className="w-[72px] h-[72px] rounded-xl object-cover shrink-0"
         />
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center gap-1.5">
-            <StatusBadge status={goods.status} size="sm" />
-            <span className="text-[10px] text-muted-foreground">{statusLabel[goods.status]}</span>
+            <StatusBadge status={derivedStatus} size="sm" />
+            <span className="text-[10px] text-muted-foreground">{statusLabel[derivedStatus]}</span>
           </div>
           <p className="text-[13px] font-bold text-foreground leading-snug line-clamp-2">
             {goods.name}
@@ -122,7 +126,6 @@ function GoodsCard({
 
 interface GoodsListScreenProps {
   storeId: string
-  storeName: string
   onBack: () => void
   onAdd: () => void
   onEdit: (goodsId: string) => void
@@ -130,15 +133,34 @@ interface GoodsListScreenProps {
 
 export function GoodsListScreen({
   storeId,
-  storeName,
   onBack,
   onAdd,
   onEdit,
 }: GoodsListScreenProps) {
-  const [goodsList, setGoodsList] = useState<OrgGoods[]>(() =>
-    orgGoods.filter((g) => g.storeId === storeId),
-  )
-  const [deletingGoods, setDeletingGoods] = useState<OrgGoods | null>(null)
+  const [goodsList, setGoodsList] = useState<HostGoodsListResponse[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [deletingGoods, setDeletingGoods] = useState<HostGoodsListResponse | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    hostGoodsApi.getGoods(storeId)
+      .then((data) => {
+        if (!cancelled) {
+          setGoodsList(data)
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : '굿즈 목록을 불러오지 못했습니다.')
+          setLoading(false)
+        }
+      })
+    return () => { cancelled = true }
+  }, [storeId])
 
   function handleDeleteConfirm() {
     if (deletingGoods) {
@@ -159,7 +181,6 @@ export function GoodsListScreen({
           <ArrowLeft size={20} strokeWidth={2} />
         </button>
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] text-muted-foreground truncate">{storeName}</p>
           <h1 className="text-[15px] font-bold text-foreground leading-tight">굿즈 관리</h1>
         </div>
         <button
@@ -173,7 +194,15 @@ export function GoodsListScreen({
 
       {/* List */}
       <div className="flex-1 overflow-y-auto scrollbar-hide pb-6">
-        {goodsList.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-[13px] text-muted-foreground">불러오는 중...</p>
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center h-full px-8 text-center">
+            <p className="text-[13px] text-muted-foreground">{error}</p>
+          </div>
+        ) : goodsList.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-4 px-8 text-center">
             <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
               <ShoppingBag size={28} strokeWidth={1.4} className="text-muted-foreground" />
@@ -196,7 +225,7 @@ export function GoodsListScreen({
               <GoodsCard
                 key={goods.id}
                 goods={goods}
-                onEdit={() => onEdit(goods.id)}
+                onEdit={() => onEdit(String(goods.id))}
                 onDelete={() => setDeletingGoods(goods)}
               />
             ))}

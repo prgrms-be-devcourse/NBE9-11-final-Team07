@@ -1,6 +1,15 @@
 import { apiRequest } from '@/lib/api'
 
 export type GoodsStatus = 'ON_SALE' | 'ENDED'
+
+export interface HostGoodsListResponse {
+  id: number
+  name: string
+  price: number
+  stock: number
+  productImageUrl: string | null
+  detailImageUrl: string | null
+}
 export type GoodsOrderStatus = 'PENDING' | 'PAID' | 'REFUNDED'
 
 export interface PageResponse<T> {
@@ -46,6 +55,11 @@ export interface GoodsOrderCreateResponse {
   orderId: string
   orderName: string
   amount: number
+}
+
+export const hostGoodsApi = {
+  getGoods: (popupStoreId: string) =>
+    apiRequest<HostGoodsListResponse[]>(`/api/v1/host/popups/${popupStoreId}/goods`),
 }
 
 export const goodsApi = {
