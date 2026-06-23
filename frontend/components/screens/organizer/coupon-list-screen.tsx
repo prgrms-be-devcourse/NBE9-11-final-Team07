@@ -214,7 +214,7 @@ function DeleteCouponModal({
           {couponName}
         </p>
         <p className="text-[13px] text-muted-foreground leading-relaxed">
-          삭제된 쿠폰은 복구할 수 없으며, 이미 발급된 쿠폰도 사용할 수 없게 됩니다.
+          삭제된 쿠폰은 복구할 수 없습니다. 이미 발급된 쿠폰은 삭제할 수 없습니다.
         </p>
         <div className="flex gap-2 pt-1">
           <button
