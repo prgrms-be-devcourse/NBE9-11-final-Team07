@@ -25,6 +25,7 @@ import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
 import com.back.popspot.domain.goods.dto.GoodsSummaryResponse;
 import com.back.popspot.domain.goods.dto.GoodsUpdateRequest;
 import com.back.popspot.domain.goods.dto.GoodsUpdateResponse;
+import com.back.popspot.domain.goods.dto.HostGoodsDetailResponse;
 import com.back.popspot.domain.goods.dto.HostGoodsListResponse;
 import com.back.popspot.domain.goods.entity.GoodsStatus;
 import com.back.popspot.domain.goods.service.GoodsService;
@@ -107,6 +108,14 @@ public class GoodsController {
 	) {
 		goodsService.deleteHostGoods(userId, goodsId);
 		return ResponseEntity.ok(CommonApiResponse.successMessage("굿즈가 삭제되었습니다."));
+	}
+
+	@GetMapping("/host/goods/{goodsId}")
+	public ResponseEntity<CommonApiResponse<HostGoodsDetailResponse>> getHostGoodsDetail(
+		@AuthenticationPrincipal Long userId,
+		@PathVariable Long goodsId
+	) {
+		return ResponseEntity.ok(CommonApiResponse.success(goodsService.getHostGoodsDetail(userId, goodsId)));
 	}
 
 	@GetMapping("/host/popups/{popupStoreId}/goods")
