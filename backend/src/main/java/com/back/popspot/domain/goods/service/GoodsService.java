@@ -153,6 +153,7 @@ public class GoodsService {
 		}
 		Map<GoodsImageType, String> imageMap = goodsImageRepository.findByGoods(goods)
 			.stream()
+			.filter(img -> img.getImageKey() != null)
 			.collect(Collectors.toMap(GoodsImage::getImageType, GoodsImage::getImageKey));
 		String productUrl = imageMap.containsKey(GoodsImageType.PRODUCT)
 			? s3Service.generatePresignedGetUrl(imageMap.get(GoodsImageType.PRODUCT))
