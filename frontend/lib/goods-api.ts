@@ -51,6 +51,22 @@ export interface GoodsOrderItem {
   thumbnailImageUrl: string | null
 }
 
+export interface GoodsOrderSummaryItem {
+  goodsId: number
+  goodsName: string
+  quantity: number
+  itemAmount: number
+}
+
+export interface GoodsOrderDetailItem {
+  goodsId: number
+  goodsName: string
+  thumbnailImageUrl: string | null
+  quantity: number
+  unitPrice: number
+  itemAmount: number
+}
+
 export interface GoodsOrderCreateResponse {
   goodsOrderId: number
   storeName: string
@@ -66,22 +82,26 @@ export interface GoodsOrderCreateResponse {
 
 export interface GoodsOrderSummary {
   goodsOrderId: number
-  items: GoodsOrderItem[]
-  totalAmount: number
-  discountAmount: number
+  items: GoodsOrderSummaryItem[]
   finalAmount: number
   status: GoodsOrderStatus
-  createdAt: string
-  paidAt: string | null
+  orderedAt: string
 }
 
-export interface GoodsOrderDetail extends GoodsOrderSummary {
-  storeName: string
+export interface GoodsOrderDetail {
+  goodsOrderId: number
+  storeName?: string
+  items: GoodsOrderDetailItem[]
+  totalAmount: number
+  discountAmount: number | null
+  finalAmount: number
+  status: GoodsOrderStatus
+  orderedAt: string
   receiverName: string
   receiverPhone: string
   postalCode: string
   address: string
-  addressDetail: string
+  addressDetail: string | null
 }
 
 export const GOODS_STATUS_LABEL: Record<GoodsStatus, string> = {
@@ -93,7 +113,7 @@ export const ORDER_STATUS_LABEL: Record<GoodsOrderStatus, string> = {
   PENDING: '결제 대기',
   PAID: '결제 완료',
   REFUNDED: '환불 완료',
-  EXPIRED: '만료',
+  EXPIRED: '주문 만료',
 }
 
 export const goodsApi = {

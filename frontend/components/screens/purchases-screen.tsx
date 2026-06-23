@@ -66,7 +66,7 @@ export function PurchasesScreen({ onBack, onViewDetail }: PurchasesScreenProps) 
                         {orders.map((order) => {
                             const rep = order.items[0]
                             const extra = order.items.length - 1
-                            const dateStr = order.paidAt ?? order.createdAt
+                            const dateStr = order.orderedAt
                             return (
                                 <button
                                     key={order.goodsOrderId}
@@ -75,8 +75,8 @@ export function PurchasesScreen({ onBack, onViewDetail }: PurchasesScreenProps) 
                                 >
                                     <div className="flex items-start gap-3">
                                         <img
-                                            src={rep?.thumbnailImageUrl ?? '/placeholder.png'}
-                                            alt={rep?.name ?? ''}
+                                            src="/placeholder.png"
+                                            alt={rep?.goodsName ?? ''}
                                             className="w-14 h-14 rounded-lg object-cover shrink-0"
                                         />
                                         <div className="flex-1 min-w-0 space-y-0.5">
@@ -84,7 +84,7 @@ export function PurchasesScreen({ onBack, onViewDetail }: PurchasesScreenProps) 
                                                 #{order.goodsOrderId}
                                             </p>
                                             <p className="text-[13px] font-semibold text-foreground leading-snug line-clamp-1">
-                                                {rep?.name ?? ''}
+                                                {rep?.goodsName ?? ''}
                                                 {extra > 0 && (
                                                     <span className="text-muted-foreground font-normal"> 외 {extra}개</span>
                                                 )}

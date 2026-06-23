@@ -81,19 +81,19 @@ export function PurchaseDetailScreen({ orderId, onBack }: PurchaseDetailScreenPr
                                     <div key={item.goodsId} className="flex items-center gap-3 p-3 bg-card">
                                         <img
                                             src={item.thumbnailImageUrl ?? '/placeholder.png'}
-                                            alt={item.name}
+                                            alt={item.goodsName}
                                             className="w-14 h-14 rounded-lg object-cover shrink-0"
                                         />
                                         <div className="flex-1 min-w-0 space-y-0.5">
                                             <p className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2">
-                                                {item.name}
+                                                {item.goodsName}
                                             </p>
                                             <p className="text-[12px] text-muted-foreground">
-                                                {item.price.toLocaleString()}원 × {item.quantity}개
+                                                {item.unitPrice?.toLocaleString()}원 × {item.quantity}개
                                             </p>
                                         </div>
                                         <p className="text-[14px] font-black text-foreground shrink-0">
-                                            {(item.price * item.quantity).toLocaleString()}원
+                                            {item.itemAmount.toLocaleString()}원
                                         </p>
                                     </div>
                                 ))}
@@ -114,9 +114,9 @@ export function PurchaseDetailScreen({ orderId, onBack }: PurchaseDetailScreenPr
                                     <span className="text-[13px] text-muted-foreground">쿠폰 할인</span>
                                     <span className={cn(
                                         'text-[13px] font-semibold',
-                                        order.discountAmount > 0 ? 'text-[oklch(0.4_0.1_145)]' : 'text-muted-foreground',
+                                        (order.discountAmount ?? 0) > 0 ? 'text-[oklch(0.4_0.1_145)]' : 'text-muted-foreground',
                                     )}>
-                                        {order.discountAmount > 0 ? `-${order.discountAmount.toLocaleString()}원` : '0원'}
+                                        {(order.discountAmount ?? 0) > 0 ? `-${order.discountAmount!.toLocaleString()}원` : '0원'}
                                     </span>
                                 </div>
                                 <div className="border-t border-border pt-2.5 flex items-center justify-between">
@@ -161,7 +161,7 @@ export function PurchaseDetailScreen({ orderId, onBack }: PurchaseDetailScreenPr
                                 <div className="flex items-center justify-between">
                                     <span className="text-[13px] text-muted-foreground">결제 완료 시각</span>
                                     <span className="text-[13px] font-semibold text-foreground">
-                                        {order.paidAt ?? '-'}
+                                        {order.orderedAt ?? '-'}
                                     </span>
                                 </div>
                             </div>
