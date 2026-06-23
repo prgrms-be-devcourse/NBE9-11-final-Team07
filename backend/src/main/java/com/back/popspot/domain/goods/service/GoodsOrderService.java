@@ -40,6 +40,7 @@ import com.back.popspot.domain.user.repository.UserRepository;
 import com.back.popspot.global.dto.PageResponse;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
+import com.back.popspot.global.s3.S3Service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -57,6 +58,7 @@ public class GoodsOrderService {
 	private final PaymentRepository paymentRepository;
 	private final PaymentService paymentService;
 	private final TransactionTemplate transactionTemplate;
+	private final S3Service s3Service;
 
 	@Transactional
 	public GoodsOrderCreateResponse createOrder(Long userId, GoodsOrderCreateRequest request) {
@@ -217,7 +219,7 @@ public class GoodsOrderService {
 				.map(item -> item.getGoods().getId())
 				.toList();
 
-		Map<Long, String> thumbnailKeyMap = goodsIds.isEmpty()
+		Map<Long, String> thumbnailUrlMap = goodsIds.isEmpty()
 				? Map.of()
 				: goodsImageRepository
 				.findByGoods_IdInAndImageTypeOrderByIdAsc(goodsIds, GoodsImageType.PRODUCT)
@@ -225,12 +227,12 @@ public class GoodsOrderService {
 				.filter(img -> img.getImageKey() != null)
 				.collect(Collectors.toMap(
 						img -> img.getGoods().getId(),
-						GoodsImage::getImageKey,
+						img -> s3Service.generatePresignedGetUrl(img.getImageKey()),
 						(first, second) -> first
 				));
 
 		List<DetailItem> detailItems = items.stream()
-				.map(item -> DetailItem.from(item, thumbnailKeyMap.get(item.getGoods().getId())))
+				.map(item -> DetailItem.from(item, thumbnailUrlMap.get(item.getGoods().getId())))
 				.collect(Collectors.toList());
 
 		return GoodsOrderDetailResponse.from(order, detailItems);
