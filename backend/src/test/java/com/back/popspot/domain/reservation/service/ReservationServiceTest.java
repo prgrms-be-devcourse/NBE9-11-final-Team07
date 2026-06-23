@@ -29,7 +29,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations; // [추가]
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.payment.entity.PaymentType;
@@ -72,9 +72,8 @@ class ReservationServiceTest {
 	private ReservationExpirationService reservationExpirationService;
 
 	@Mock
-	private StringRedisTemplate stringRedisTemplate; // [추가]
+	private StringRedisTemplate stringRedisTemplate;
 
-	// [추가] ReservationService 생성 헬퍼 — 모든 테스트에서 재사용
 	private ReservationService reservationService() {
 		return new ReservationService(
 				reservationRepository,
@@ -201,11 +200,8 @@ class ReservationServiceTest {
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
 
-		// [추가] Redis mock 세팅 — Lua 성공(1 반환)
-		ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-		when(stringRedisTemplate.opsForValue()).thenReturn(valueOps);
-		when(valueOps.setIfAbsent(any(), any())).thenReturn(true);
-		when(stringRedisTemplate.execute(any(), any(), any())).thenReturn(1L);
+		// Lua 성공(1 반환) — ARGV[1](capacity), ARGV[2](reservedCount) 포함해 varargs
+		when(stringRedisTemplate.execute(any(), any(), any(String.class), any(String.class))).thenReturn(1L);
 
 		when(reservationSlotRepository.findById(1L)).thenReturn(Optional.of(slot));
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
@@ -306,11 +302,8 @@ class ReservationServiceTest {
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
 
-		// [추가] Redis mock 세팅 — Lua 실패(-1 반환 = 정원 초과)
-		ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-		when(stringRedisTemplate.opsForValue()).thenReturn(valueOps);
-		when(valueOps.setIfAbsent(any(), any())).thenReturn(true);
-		when(stringRedisTemplate.execute(any(), any(), any())).thenReturn(-1L);
+		// Lua 실패(-1 반환 = 정원 초과)
+		when(stringRedisTemplate.execute(any(), any(), any(String.class), any(String.class))).thenReturn(-1L);
 
 		when(reservationSlotRepository.findById(1L)).thenReturn(Optional.of(slot));
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
@@ -336,6 +329,9 @@ class ReservationServiceTest {
 		User user = createUser(2L);
 		Reservation reservation = createConfirmedReservation(100L, user, slot);
 
+		ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+		when(stringRedisTemplate.opsForValue()).thenReturn(valueOps);
+
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 				.thenReturn(false);
@@ -358,6 +354,7 @@ class ReservationServiceTest {
 				any(LocalDateTime.class)
 		);
 		verify(reservationSlotRepository).decreaseReservedCount(1L);
+		verify(valueOps).decrement(any(String.class));
 	}
 
 	@Test

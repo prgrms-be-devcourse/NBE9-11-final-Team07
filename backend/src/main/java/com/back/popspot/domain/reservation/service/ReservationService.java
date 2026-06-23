@@ -105,7 +105,6 @@ public class ReservationService {
 
 		// [추가] Redis 키가 없으면 현재 reservedCount로 초기화 (최초 1회만 세팅)
 		String redisKey = RedisKeys.reservationSlotReserved(slot.getId());
-		stringRedisTemplate.opsForValue().setIfAbsent(redisKey, String.valueOf(slot.getReservedCount()));
 
 		// [추가] Lua 스크립트로 GET+비교+INCR을 원자적으로 실행 → race condition 제거
 		// 기존: reservationSlotRepository.increaseReservedCountIfAvailable (DB 원자적 업데이트)
@@ -113,7 +112,8 @@ public class ReservationService {
 		Long result = stringRedisTemplate.execute(
 				reserveScript,
 				List.of(redisKey),
-				String.valueOf(slot.getCapacity())
+				String.valueOf(slot.getCapacity()),
+				String.valueOf(slot.getReservedCount())
 		);
 		if (result == null || result < 0) {
 			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
@@ -166,6 +166,10 @@ public class ReservationService {
 		if (updatedCount == 0) {
 			throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
 		}
+
+		// DB 성공 확인 후 Redis DECR
+		String redisKey = RedisKeys.reservationSlotReserved(reservation.getSlot().getId());
+		stringRedisTemplate.opsForValue().decrement(redisKey);
 	}
 
 	@Transactional(noRollbackFor = ReservationPaymentExpiredException.class)

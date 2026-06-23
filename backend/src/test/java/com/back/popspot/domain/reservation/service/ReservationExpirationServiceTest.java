@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -16,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
@@ -34,23 +37,30 @@ class ReservationExpirationServiceTest {
 	@Mock
 	private ReservationSlotRepository reservationSlotRepository;
 
+	@Mock
+	private StringRedisTemplate stringRedisTemplate;
+
 	@Test
 	@DisplayName("만료된 HELD 예약은 EXPIRED로 변경하고 슬롯 정원을 복구한다")
 	void expireExpiredReservations_success() {
 		// given
+		ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+		when(stringRedisTemplate.opsForValue()).thenReturn(valueOps);
+
 		ReservationExpirationService service = new ReservationExpirationService(
-			reservationRepository,
-			reservationSlotRepository
+				reservationRepository,
+				reservationSlotRepository,
+				stringRedisTemplate
 		);
 		Reservation reservation = createReservation(100L, 1L);
 
 		when(reservationRepository.findByStatusAndHeldUntilBefore(eq(ReservationStatus.HELD), any(LocalDateTime.class)))
-			.thenReturn(List.of(reservation));
+				.thenReturn(List.of(reservation));
 		when(reservationRepository.expireHeldReservation(
-			eq(100L),
-			eq(ReservationStatus.HELD),
-			eq(ReservationStatus.EXPIRED),
-			any(LocalDateTime.class)
+				eq(100L),
+				eq(ReservationStatus.HELD),
+				eq(ReservationStatus.EXPIRED),
+				any(LocalDateTime.class)
 		)).thenReturn(1);
 		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
 
@@ -60,12 +70,13 @@ class ReservationExpirationServiceTest {
 		// then
 		verify(reservationRepository).findByStatusAndHeldUntilBefore(eq(ReservationStatus.HELD), any(LocalDateTime.class));
 		verify(reservationRepository).expireHeldReservation(
-			eq(100L),
-			eq(ReservationStatus.HELD),
-			eq(ReservationStatus.EXPIRED),
-			any(LocalDateTime.class)
+				eq(100L),
+				eq(ReservationStatus.HELD),
+				eq(ReservationStatus.EXPIRED),
+				any(LocalDateTime.class)
 		);
 		verify(reservationSlotRepository).decreaseReservedCount(1L);
+		verify(valueOps).decrement(any(String.class));
 	}
 
 	@Test
@@ -73,17 +84,18 @@ class ReservationExpirationServiceTest {
 	void expireIfHeldAndExpired_skipWhenConditionalUpdateFails() {
 		// given
 		ReservationExpirationService service = new ReservationExpirationService(
-			reservationRepository,
-			reservationSlotRepository
+				reservationRepository,
+				reservationSlotRepository,
+				stringRedisTemplate
 		);
 		Reservation reservation = createReservation(100L, 1L);
 		LocalDateTime now = LocalDateTime.now();
 
 		when(reservationRepository.expireHeldReservation(
-			100L,
-			ReservationStatus.HELD,
-			ReservationStatus.EXPIRED,
-			now
+				100L,
+				ReservationStatus.HELD,
+				ReservationStatus.EXPIRED,
+				now
 		)).thenReturn(0);
 
 		// when
@@ -92,6 +104,7 @@ class ReservationExpirationServiceTest {
 		// then
 		assertFalse(expired);
 		verify(reservationSlotRepository, never()).decreaseReservedCount(any(Long.class));
+		verify(stringRedisTemplate, never()).opsForValue();
 	}
 
 	@Test
@@ -99,22 +112,24 @@ class ReservationExpirationServiceTest {
 	void expireIfHeldAndExpired_failWhenRestoreCapacityFails() {
 		// given
 		ReservationExpirationService service = new ReservationExpirationService(
-			reservationRepository,
-			reservationSlotRepository
+				reservationRepository,
+				reservationSlotRepository,
+				stringRedisTemplate
 		);
 		Reservation reservation = createReservation(100L, 1L);
 		LocalDateTime now = LocalDateTime.now();
 
 		when(reservationRepository.expireHeldReservation(
-			100L,
-			ReservationStatus.HELD,
-			ReservationStatus.EXPIRED,
-			now
+				100L,
+				ReservationStatus.HELD,
+				ReservationStatus.EXPIRED,
+				now
 		)).thenReturn(1);
 		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(0);
 
 		// when & then
 		assertThrows(BusinessException.class, () -> service.expireIfHeldAndExpired(reservation, now));
+		verify(stringRedisTemplate, never()).opsForValue();
 	}
 
 	private Reservation createReservation(Long reservationId, Long slotId) {
