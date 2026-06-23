@@ -46,12 +46,15 @@ public class CouponService {
 	}
 
 	// 호스트가 소유한 팝업스토어의 전체 쿠폰을 최신순으로 조회
+	@Transactional
 	public List<CouponResponse> getHostCoupons(Long hostUserId, Long popupStoreId) {
 		PopupStore popupStore = getPopupStore(popupStoreId);
 		validateHostOwner(hostUserId, popupStore);
+		LocalDateTime now = LocalDateTime.now();
 
 		return couponRepository.findByPopupStoreIdOrderByCreatedAtDesc(popupStoreId)
 			.stream()
+			.peek(coupon -> coupon.expireIfExpired(now))
 			.map(CouponResponse::from)
 			.toList();
 	}
@@ -104,7 +107,9 @@ public class CouponService {
 			throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
 		}
 
-		if (!coupon.isIssuable(LocalDateTime.now())) {
+		LocalDateTime now = LocalDateTime.now();
+		coupon.expireIfExpired(now);
+		if (!coupon.isIssuable(now)) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 
@@ -114,13 +119,19 @@ public class CouponService {
 	}
 
 	// 사용자가 발급받은 쿠폰을 최신순으로 조회
+	@Transactional
 	public List<UserCouponResponse> getMyCoupons(Long userId) {
 		if (!userRepository.existsById(userId)) {
 			throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
 		}
+		LocalDateTime now = LocalDateTime.now();
 
 		return userCouponRepository.findByUserIdOrderByCreatedAtDesc(userId)
 			.stream()
+			.peek(userCoupon -> {
+				userCoupon.getCoupon().expireIfExpired(now);
+				userCoupon.expireIfExpired(now);
+			})
 			.map(UserCouponResponse::from)
 			.toList();
 	}

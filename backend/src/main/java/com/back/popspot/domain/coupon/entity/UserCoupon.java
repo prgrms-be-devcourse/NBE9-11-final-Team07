@@ -53,4 +53,10 @@ public class UserCoupon extends BaseEntity {
 		userCoupon.status = UserCouponStatus.ISSUED;
 		return userCoupon;
 	}
+
+	public void expireIfExpired(LocalDateTime now) {
+		if (status == UserCouponStatus.ISSUED && !coupon.getExpiredAt().isAfter(now)) {
+			status = UserCouponStatus.EXPIRED;
+		}
+	}
 }

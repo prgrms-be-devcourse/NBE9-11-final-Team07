@@ -81,6 +81,12 @@ public class Coupon extends BaseEntity {
 			&& issuedQuantity < totalQuantity;
 	}
 
+	public void expireIfExpired(LocalDateTime now) {
+		if (!expiredAt.isAfter(now)) {
+			status = CouponStatus.EXPIRED;
+		}
+	}
+
 	public void issue() {
 		issuedQuantity++;
 		if (issuedQuantity >= totalQuantity) {
