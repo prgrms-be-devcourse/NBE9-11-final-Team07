@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Plus, Pencil, Trash2, ShoppingBag } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { hostGoodsApi } from '@/lib/goods-api'
+import { hostGoodsApi, deleteHostGoods } from '@/lib/goods-api'
 import type { HostGoodsListResponse } from '@/lib/goods-api'
 
 function goodsStatusFromStock(stock: number): 'ON_SALE' | 'SOLD_OUT' {
@@ -16,10 +16,14 @@ function DeleteGoodsModal({
   goods,
   onCancel,
   onConfirm,
+  isDeleting,
+  error,
 }: {
   goods: HostGoodsListResponse
   onCancel: () => void
   onConfirm: () => void
+  isDeleting: boolean
+  error: string | null
 }) {
   return (
     <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
@@ -42,18 +46,23 @@ function DeleteGoodsModal({
         <p className="text-[13px] text-muted-foreground leading-relaxed">
           삭제된 굿즈는 복구할 수 없습니다.
         </p>
+        {error && (
+          <p className="text-[12px] text-[oklch(0.62_0.24_25)] leading-snug">{error}</p>
+        )}
         <div className="flex gap-2 pt-1">
           <button
             onClick={onCancel}
-            className="flex-1 py-3.5 rounded-xl bg-secondary text-foreground font-semibold text-sm"
+            disabled={isDeleting}
+            className="flex-1 py-3.5 rounded-xl bg-secondary text-foreground font-semibold text-sm disabled:opacity-50"
           >
             취소
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 py-3.5 rounded-xl bg-[oklch(0.62_0.24_25)] text-white font-semibold text-sm"
+            disabled={isDeleting}
+            className="flex-1 py-3.5 rounded-xl bg-[oklch(0.62_0.24_25)] text-white font-semibold text-sm disabled:opacity-60"
           >
-            삭제
+            {isDeleting ? '삭제 중...' : '삭제'}
           </button>
         </div>
       </div>
@@ -141,6 +150,8 @@ export function GoodsListScreen({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deletingGoods, setDeletingGoods] = useState<HostGoodsListResponse | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -162,10 +173,18 @@ export function GoodsListScreen({
     return () => { cancelled = true }
   }, [storeId])
 
-  function handleDeleteConfirm() {
-    if (deletingGoods) {
+  async function handleDeleteConfirm() {
+    if (!deletingGoods) return
+    setIsDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteHostGoods(String(deletingGoods.id))
       setGoodsList((prev) => prev.filter((g) => g.id !== deletingGoods.id))
       setDeletingGoods(null)
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : '삭제에 실패했습니다. 다시 시도해 주세요.')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -237,8 +256,10 @@ export function GoodsListScreen({
       {deletingGoods && (
         <DeleteGoodsModal
           goods={deletingGoods}
-          onCancel={() => setDeletingGoods(null)}
+          onCancel={() => { setDeletingGoods(null); setDeleteError(null) }}
           onConfirm={handleDeleteConfirm}
+          isDeleting={isDeleting}
+          error={deleteError}
         />
       )}
     </div>
