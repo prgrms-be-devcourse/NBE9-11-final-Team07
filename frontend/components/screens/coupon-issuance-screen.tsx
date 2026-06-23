@@ -194,8 +194,10 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Tag size={13} className="text-muted-foreground shrink-0" />
-                  <span className="text-[12px] text-muted-foreground">사용 가능 장소</span>
-                  <span className="text-[12px] font-semibold text-foreground ml-auto">현장 결제 시</span>
+                  <span className="text-[12px] text-muted-foreground">대상 팝업</span>
+                  <span className="text-[12px] font-semibold text-foreground ml-auto truncate max-w-[160px]">
+                    {storeInfo?.name ?? coupon.popupStoreTitle}
+                  </span>
                 </div>
               </div>
             </div>
