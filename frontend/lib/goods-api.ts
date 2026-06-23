@@ -122,6 +122,44 @@ export const registerGoods = (popupStoreId: string, request: GoodsRegisterReques
     body: JSON.stringify(request),
   })
 
+export interface HostGoodsDetailResponse {
+  id: number
+  name: string
+  price: number
+  stock: number
+  description: string | null
+  productImageUrl: string | null
+  detailImageUrl: string | null
+}
+
+export interface GoodsUpdateRequest {
+  name?: string
+  price?: number
+  stock?: number
+  description?: string | null
+  imageKeys?: ImageKeyEntry[]
+}
+
+export interface GoodsUpdateResponse {
+  id: number
+  name: string
+  price: number
+  stock: number
+  description: string | null
+}
+
+export const getHostGoodsDetail = (goodsId: string) =>
+  apiRequest<HostGoodsDetailResponse>(`/api/v1/host/goods/${goodsId}`)
+
+export const updateHostGoods = (goodsId: string, request: GoodsUpdateRequest) =>
+  apiRequest<GoodsUpdateResponse>(`/api/v1/host/goods/${goodsId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(request),
+  })
+
+export const deleteHostGoods = (goodsId: string) =>
+  apiRequest<void>(`/api/v1/host/goods/${goodsId}`, { method: 'DELETE' })
+
 export const hostGoodsApi = {
   getGoods: (popupStoreId: string) =>
     apiRequest<HostGoodsListResponse[]>(`/api/v1/host/popups/${popupStoreId}/goods`),

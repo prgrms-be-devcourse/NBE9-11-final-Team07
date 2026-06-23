@@ -1,10 +1,9 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ImagePlus, Loader2, X, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { orgGoods } from '@/lib/data'
-import { uploadGoodsImage, registerGoods } from '@/lib/goods-api'
+import { uploadGoodsImage, registerGoods, getHostGoodsDetail, updateHostGoods, deleteHostGoods } from '@/lib/goods-api'
 import type { ImageKeyEntry } from '@/lib/goods-api'
 
 // ─── Delete Confirm Modal ─────────────────────────────────────────────────────
@@ -131,18 +130,12 @@ export function GoodsFormScreen({
   onSaved,
   onDeleted,
 }: GoodsFormScreenProps) {
-  const existing = goodsId ? orgGoods.find((g) => g.id === goodsId) : undefined
+  const [loading, setLoading] = useState(mode === 'edit')
+  const [name, setName] = useState('')
+  const [price, setPrice] = useState('')
+  const [stock, setStock] = useState('')
+  const [description, setDescription] = useState('')
 
-  const [name, setName] = useState(existing?.name ?? '')
-  const [price, setPrice] = useState(existing?.price ? String(existing.price) : '')
-  const [stock, setStock] = useState(existing?.stock !== undefined ? String(existing.stock) : '')
-  const [description, setDescription] = useState(existing?.description ?? '')
-
-  // edit 모드용 기존 상태 (수정 건드리지 않음)
-  const [thumbnail, setThumbnail] = useState<string | undefined>(existing?.thumbnail)
-  const [detailImages, setDetailImages] = useState<string[]>(existing?.detailImages ?? [])
-
-  // create 모드용 이미지 상태
   const [productPreview, setProductPreview] = useState<string | undefined>()
   const [productImageKey, setProductImageKey] = useState<string | null>(null)
   const [uploadingProduct, setUploadingProduct] = useState(false)
@@ -153,21 +146,35 @@ export function GoodsFormScreen({
   const [saving, setSaving] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
 
+  useEffect(() => {
+    if (mode !== 'edit' || !goodsId) return
+    getHostGoodsDetail(goodsId)
+      .then((data) => {
+        setName(data.name)
+        setPrice(String(data.price))
+        setStock(String(data.stock))
+        setDescription(data.description ?? '')
+        setProductPreview(data.productImageUrl ?? undefined)
+        setDetailPreview(data.detailImageUrl ?? undefined)
+      })
+      .catch((e) => alert(e instanceof Error ? e.message : '굿즈 정보를 불러오지 못했습니다.'))
+      .finally(() => setLoading(false))
+  }, [mode, goodsId])
+
   const productFileInputRef = useRef<HTMLInputElement>(null)
   const detailFileInputRef = useRef<HTMLInputElement>(null)
 
   const isEdit = mode === 'edit'
   const title = isEdit ? '굿즈 수정' : '굿즈 추가'
 
+  const hasImageChange = !!productImageKey || !!detailImageKey
   const canSave =
     name.trim().length > 0 &&
     Number(price) > 0 &&
     Number(stock) >= 0 &&
-    (isEdit || (!!productImageKey && !!detailImageKey))
-
-  function handleRemoveDetailImage(idx: number) {
-    setDetailImages((prev) => prev.filter((_, i) => i !== idx))
-  }
+    (!isEdit ? (!!productImageKey && !!detailImageKey) : true) &&
+    !uploadingProduct &&
+    !uploadingDetail
 
   async function handleProductImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -231,12 +238,56 @@ export function GoodsFormScreen({
         setSaving(false)
       }
     } else {
-      onSaved()
+      if (hasImageChange && !(productImageKey && detailImageKey)) {
+        alert('이미지를 변경하려면 대표 이미지와 상세 이미지를 모두 업로드해야 합니다.')
+        return
+      }
+      setSaving(true)
+      try {
+        const imageKeys: ImageKeyEntry[] | undefined =
+          productImageKey && detailImageKey
+            ? [
+                { imageKey: productImageKey, imageType: 'PRODUCT' },
+                { imageKey: detailImageKey, imageType: 'DETAIL' },
+              ]
+            : undefined
+        await updateHostGoods(goodsId!, {
+          name: name.trim(),
+          price: Number(price),
+          stock: Number(stock),
+          description: description.trim() || null,
+          imageKeys,
+        })
+        onSaved()
+      } catch (e) {
+        alert(e instanceof Error ? e.message : '저장에 실패했습니다.')
+      } finally {
+        setSaving(false)
+      }
     }
   }
 
   const inputClass =
     'w-full px-3.5 py-3 bg-[oklch(0.96_0_0)] dark:bg-secondary border border-transparent rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-foreground/30 transition-colors'
+
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <header className="flex items-center gap-3 px-4 py-3 bg-card border-b border-border shrink-0">
+          <button onClick={onBack} aria-label="뒤로 가기" className="flex items-center justify-center w-8 h-8 -ml-1 rounded-full hover:bg-secondary transition-colors">
+            <ArrowLeft size={20} strokeWidth={2} />
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-muted-foreground truncate">{storeName}</p>
+            <h1 className="text-[15px] font-bold text-foreground leading-tight">{title}</h1>
+          </div>
+        </header>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 size={28} className="animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="relative flex flex-col h-full overflow-hidden">
@@ -262,35 +313,29 @@ export function GoodsFormScreen({
         <div className="space-y-2">
           <p className="text-[12px] font-bold text-foreground">대표 이미지</p>
           <div className="flex items-center gap-3">
-            {mode === 'create' && (
-              <input
-                ref={productFileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleProductImageSelect}
-                className="hidden"
-              />
-            )}
+            <input
+              ref={productFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleProductImageSelect}
+              className="hidden"
+            />
             <ImagePickerSlot
-              src={mode === 'create' ? productPreview : thumbnail}
+              src={productPreview}
               label="대표 이미지"
               onRemove={
-                mode === 'create'
-                  ? productPreview
-                    ? () => { setProductPreview(undefined); setProductImageKey(null) }
-                    : undefined
-                  : thumbnail
-                  ? () => setThumbnail(undefined)
+                productPreview
+                  ? () => { setProductPreview(undefined); setProductImageKey(null) }
                   : undefined
               }
               onClick={
-                mode === 'create' && !productPreview
+                !productPreview
                   ? () => productFileInputRef.current?.click()
                   : undefined
               }
-              uploading={mode === 'create' && uploadingProduct}
+              uploading={uploadingProduct}
             />
-            {(mode === 'create' ? !productPreview && !uploadingProduct : !thumbnail) && (
+            {!productPreview && !uploadingProduct && (
               <p className="text-[12px] text-muted-foreground">대표 이미지를 업로드하세요.</p>
             )}
           </div>
@@ -300,41 +345,25 @@ export function GoodsFormScreen({
         <div className="space-y-2">
           <p className="text-[12px] font-bold text-foreground">상세 이미지</p>
           <div className="flex flex-wrap gap-2">
-            {mode === 'create' ? (
-              <>
-                <input
-                  ref={detailFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleDetailImageSelect}
-                  className="hidden"
-                />
-                {detailPreview ? (
-                  <ImagePickerSlot
-                    src={detailPreview}
-                    label="상세 이미지"
-                    onRemove={() => { setDetailPreview(undefined); setDetailImageKey(null) }}
-                  />
-                ) : (
-                  <ImagePickerSlot
-                    label="상세 이미지 추가"
-                    onClick={() => detailFileInputRef.current?.click()}
-                    uploading={uploadingDetail}
-                  />
-                )}
-              </>
+            <input
+              ref={detailFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleDetailImageSelect}
+              className="hidden"
+            />
+            {detailPreview ? (
+              <ImagePickerSlot
+                src={detailPreview}
+                label="상세 이미지"
+                onRemove={() => { setDetailPreview(undefined); setDetailImageKey(null) }}
+              />
             ) : (
-              <>
-                {detailImages.map((src, idx) => (
-                  <ImagePickerSlot
-                    key={idx}
-                    src={src}
-                    label={`상세 이미지 ${idx + 1}`}
-                    onRemove={() => handleRemoveDetailImage(idx)}
-                  />
-                ))}
-                <ImagePickerSlot label="상세 이미지 추가" />
-              </>
+              <ImagePickerSlot
+                label="상세 이미지 추가"
+                onClick={() => detailFileInputRef.current?.click()}
+                uploading={uploadingDetail}
+              />
             )}
           </div>
         </div>
@@ -429,9 +458,14 @@ export function GoodsFormScreen({
         <DeleteGoodsModal
           goodsName={name || '이 굿즈'}
           onCancel={() => setShowDeleteModal(false)}
-          onConfirm={() => {
+          onConfirm={async () => {
             setShowDeleteModal(false)
-            onDeleted?.()
+            try {
+              await deleteHostGoods(goodsId!)
+              onDeleted?.()
+            } catch (e) {
+              alert(e instanceof Error ? e.message : '삭제에 실패했습니다.')
+            }
           }}
         />
       )}
