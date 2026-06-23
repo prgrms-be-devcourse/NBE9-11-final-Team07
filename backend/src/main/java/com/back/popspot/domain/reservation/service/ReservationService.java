@@ -12,10 +12,12 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.back.popspot.domain.payment.dto.PaymentCancelRequest;
 import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
+import com.back.popspot.domain.payment.service.PaymentService;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
@@ -50,6 +52,7 @@ public class ReservationService {
 	private final ReservationRepository reservationRepository;
 	private final ReservationSlotRepository reservationSlotRepository;
 	private final PaymentRepository paymentRepository;
+	private final PaymentService paymentService;
 	private final UserRepository userRepository;
 	private final ReservationExpirationService reservationExpirationService;
 	private final ReservationCommandService reservationCommandService;
@@ -142,13 +145,15 @@ public class ReservationService {
 			throw new BusinessException(ErrorCode.RESERVATION_CANCEL_DEADLINE_PASSED);
 		}
 
-		if (paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(
+		paymentRepository.findByReservationIdAndPaymentTypeAndStatus(
 			reservationId,
 			PaymentType.POPUP,
 			PaymentStatus.PAID
-		)) {
-			// TODO: 결제 도메인 환불 요청 연동
-		}
+		).ifPresent(payment -> paymentService.cancel(
+			payment.getId(),
+			userId,
+			new PaymentCancelRequest("예약 취소", "refund-reservation-" + reservationId + "-" + userId)
+		));
 
 		int canceledCount = reservationRepository.cancelConfirmedReservation(
 			reservationId,
