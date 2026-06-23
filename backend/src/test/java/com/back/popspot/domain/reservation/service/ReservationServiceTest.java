@@ -35,6 +35,7 @@ import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
+import com.back.popspot.domain.payment.service.PaymentService;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
@@ -66,6 +67,9 @@ class ReservationServiceTest {
 	private PaymentRepository paymentRepository;
 
 	@Mock
+	private PaymentService paymentService;
+
+	@Mock
 	private UserRepository userRepository;
 
 	@Mock
@@ -88,6 +92,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -174,6 +179,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -209,6 +215,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -272,6 +279,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -304,6 +312,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -331,6 +340,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -363,6 +373,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -406,6 +417,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -442,13 +454,14 @@ class ReservationServiceTest {
 	}
 
 	@Test
-	@DisplayName("예약 취소 성공")
-	void cancelReservation_success() {
+	@DisplayName("무료 예약 취소 성공")
+	void cancelReservation_free_success() {
 		// given
 		ReservationService reservationService = new ReservationService(
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -460,8 +473,8 @@ class ReservationServiceTest {
 		Reservation reservation = createConfirmedReservation(100L, user, slot);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
-			.thenReturn(false);
+		when(paymentRepository.findByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
+			.thenReturn(Optional.empty());
 		when(reservationRepository.cancelConfirmedReservation(
 			eq(100L),
 			eq(ReservationStatus.CONFIRMED),
@@ -484,6 +497,103 @@ class ReservationServiceTest {
 		verify(reservationSlotRepository).decreaseReservedCount(1L);
 		// 취소로 자리가 비었으므로 remaining 복구
 		verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
+		verify(paymentService, never()).cancel(any(Long.class), any(Long.class), any());
+	}
+
+	@Test
+	@DisplayName("유료 예약 취소 성공 시 결제 환불 후 예약을 취소한다")
+	void cancelReservation_paid_success() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			paymentService,
+			userRepository,
+			reservationExpirationService,
+			reservationCommandService,
+			redisTemplate
+		);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		Reservation reservation = createConfirmedReservation(100L, user, slot);
+		Payment payment = createPaidReservationPayment(10L, user, reservation);
+
+		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+		when(paymentRepository.findByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
+			.thenReturn(Optional.of(payment));
+		when(reservationRepository.cancelConfirmedReservation(
+			eq(100L),
+			eq(ReservationStatus.CONFIRMED),
+			eq(ReservationStatus.CANCELED),
+			any(LocalDateTime.class)
+		)).thenReturn(1);
+		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
+		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+		// when
+		reservationService.cancelReservation(100L, 2L);
+
+		// then
+		verify(paymentService).cancel(
+			eq(10L),
+			eq(2L),
+			argThat(request -> "예약 취소".equals(request.cancelReason())
+				&& "refund-reservation-100-2".equals(request.idempotencyKey()))
+		);
+		verify(reservationRepository).cancelConfirmedReservation(
+			eq(100L),
+			eq(ReservationStatus.CONFIRMED),
+			eq(ReservationStatus.CANCELED),
+			any(LocalDateTime.class)
+		);
+		verify(reservationSlotRepository).decreaseReservedCount(1L);
+		verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
+	}
+
+	@Test
+	@DisplayName("유료 예약 환불 실패 시 예약 취소를 진행하지 않는다")
+	void cancelReservation_paid_fail_refund() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			paymentService,
+			userRepository,
+			reservationExpirationService,
+			reservationCommandService,
+			redisTemplate
+		);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		Reservation reservation = createConfirmedReservation(100L, user, slot);
+		Payment payment = createPaidReservationPayment(10L, user, reservation);
+
+		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+		when(paymentRepository.findByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
+			.thenReturn(Optional.of(payment));
+		when(paymentService.cancel(eq(10L), eq(2L), any()))
+			.thenThrow(new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED));
+
+		// when
+		BusinessException exception = assertThrows(
+			BusinessException.class,
+			() -> reservationService.cancelReservation(100L, 2L)
+		);
+
+		// then
+		assertEquals(ErrorCode.PAYMENT_CANCEL_FAILED, exception.getErrorCode());
+		verify(reservationRepository, never()).cancelConfirmedReservation(
+			any(Long.class),
+			any(ReservationStatus.class),
+			any(ReservationStatus.class),
+			any(LocalDateTime.class)
+		);
+		verify(reservationSlotRepository, never()).decreaseReservedCount(any(Long.class));
+		verify(redisTemplate, never()).opsForValue();
 	}
 
 	@Test
@@ -494,6 +604,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -544,6 +655,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -588,6 +700,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -632,6 +745,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -667,6 +781,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -697,6 +812,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -727,6 +843,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -758,6 +875,7 @@ class ReservationServiceTest {
 			reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
+			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
@@ -769,8 +887,8 @@ class ReservationServiceTest {
 		Reservation reservation = createConfirmedReservation(100L, user, slot);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
-			.thenReturn(false);
+		when(paymentRepository.findByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
+			.thenReturn(Optional.empty());
 		when(reservationRepository.cancelConfirmedReservation(
 			eq(100L),
 			eq(ReservationStatus.CONFIRMED),
@@ -828,6 +946,21 @@ class ReservationServiceTest {
 		Reservation reservation = createReservation(reservationId, user, slot, ReservationStatus.HELD);
 		ReflectionTestUtils.setField(reservation, "heldUntil", heldUntil);
 		return reservation;
+	}
+
+	private Payment createPaidReservationPayment(Long paymentId, User user, Reservation reservation) {
+		Payment payment = Payment.createReadyReservationPayment(
+			user,
+			reservation,
+			"order-id",
+			"예약 결제",
+			5000L,
+			"payment-idempotency-key"
+		);
+		ReflectionTestUtils.setField(payment, "id", paymentId);
+		ReflectionTestUtils.setField(payment, "status", PaymentStatus.PAID);
+		ReflectionTestUtils.setField(payment, "paymentKey", "payment-key");
+		return payment;
 	}
 
 	private Reservation createReservation(Long reservationId, User user, ReservationSlot slot, ReservationStatus status) {
