@@ -99,6 +99,29 @@ export interface GoodsOrderCreateResponse {
   amount: number
 }
 
+export interface GoodsRegisterRequest {
+  name: string
+  price: number
+  stock: number
+  description?: string
+  imageKeys: ImageKeyEntry[]
+}
+
+export interface GoodsRegisterResponse {
+  id: number
+  popupStoreId: number
+  name: string
+  price: number
+  stock: number
+  description: string | null
+}
+
+export const registerGoods = (popupStoreId: string, request: GoodsRegisterRequest) =>
+  apiRequest<GoodsRegisterResponse>(`/api/v1/host/popups/${popupStoreId}/goods`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+
 export const hostGoodsApi = {
   getGoods: (popupStoreId: string) =>
     apiRequest<HostGoodsListResponse[]>(`/api/v1/host/popups/${popupStoreId}/goods`),

@@ -1,16 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { ArrowLeft, ImagePlus, X, Trash2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { ArrowLeft, ImagePlus, Loader2, X, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { orgGoods } from '@/lib/data'
-import type { OrgGoods, GoodsSalesStatus } from '@/lib/data'
-
-const SALES_STATUSES: { value: GoodsSalesStatus; label: string }[] = [
-  { value: 'READY', label: '판매 준비' },
-  { value: 'ON_SALE', label: '판매중' },
-  { value: 'SOLD_OUT', label: '품절' },
-]
+import { uploadGoodsImage, registerGoods } from '@/lib/goods-api'
+import type { ImageKeyEntry } from '@/lib/goods-api'
 
 // ─── Delete Confirm Modal ─────────────────────────────────────────────────────
 
@@ -52,16 +47,20 @@ function DeleteGoodsModal({
   )
 }
 
-// ─── Image Picker Placeholder ─────────────────────────────────────────────────
+// ─── Image Picker Slot ────────────────────────────────────────────────────────
 
 function ImagePickerSlot({
   src,
   label,
   onRemove,
+  onClick,
+  uploading = false,
 }: {
   src?: string
   label: string
   onRemove?: () => void
+  onClick?: () => void
+  uploading?: boolean
 }) {
   if (src) {
     return (
@@ -83,12 +82,32 @@ function ImagePickerSlot({
       </div>
     )
   }
-  return (
-    <div className="w-[72px] h-[72px] shrink-0 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 bg-secondary">
+
+  const inner = uploading ? (
+    <Loader2 size={18} strokeWidth={1.8} className="text-muted-foreground animate-spin" />
+  ) : (
+    <>
       <ImagePlus size={18} strokeWidth={1.8} className="text-muted-foreground" />
       <span className="text-[9px] text-muted-foreground font-medium">추가</span>
-    </div>
+    </>
   )
+
+  const baseClass =
+    'w-[72px] h-[72px] shrink-0 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 bg-secondary'
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={uploading}
+        className={cn(baseClass, 'disabled:opacity-60')}
+      >
+        {inner}
+      </button>
+    )
+  }
+  return <div className={baseClass}>{inner}</div>
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -118,10 +137,24 @@ export function GoodsFormScreen({
   const [price, setPrice] = useState(existing?.price ? String(existing.price) : '')
   const [stock, setStock] = useState(existing?.stock !== undefined ? String(existing.stock) : '')
   const [description, setDescription] = useState(existing?.description ?? '')
-  const [status, setStatus] = useState<GoodsSalesStatus>(existing?.status ?? 'READY')
+
+  // edit 모드용 기존 상태 (수정 건드리지 않음)
   const [thumbnail, setThumbnail] = useState<string | undefined>(existing?.thumbnail)
   const [detailImages, setDetailImages] = useState<string[]>(existing?.detailImages ?? [])
+
+  // create 모드용 이미지 상태
+  const [productPreview, setProductPreview] = useState<string | undefined>()
+  const [productImageKey, setProductImageKey] = useState<string | null>(null)
+  const [uploadingProduct, setUploadingProduct] = useState(false)
+  const [detailPreview, setDetailPreview] = useState<string | undefined>()
+  const [detailImageKey, setDetailImageKey] = useState<string | null>(null)
+  const [uploadingDetail, setUploadingDetail] = useState(false)
+
+  const [saving, setSaving] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+
+  const productFileInputRef = useRef<HTMLInputElement>(null)
+  const detailFileInputRef = useRef<HTMLInputElement>(null)
 
   const isEdit = mode === 'edit'
   const title = isEdit ? '굿즈 수정' : '굿즈 추가'
@@ -129,10 +162,77 @@ export function GoodsFormScreen({
   const canSave =
     name.trim().length > 0 &&
     Number(price) > 0 &&
-    Number(stock) >= 0
+    Number(stock) >= 0 &&
+    (isEdit || (!!productImageKey && !!detailImageKey))
 
   function handleRemoveDetailImage(idx: number) {
     setDetailImages((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  async function handleProductImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || uploadingProduct) return
+    setProductPreview(URL.createObjectURL(file))
+    setUploadingProduct(true)
+    try {
+      const key = await uploadGoodsImage('PRODUCT', file)
+      setProductImageKey(key)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '이미지 업로드에 실패했습니다.')
+      setProductPreview(undefined)
+    } finally {
+      setUploadingProduct(false)
+    }
+  }
+
+  async function handleDetailImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || uploadingDetail) return
+    setDetailPreview(URL.createObjectURL(file))
+    setUploadingDetail(true)
+    try {
+      const key = await uploadGoodsImage('DETAIL', file)
+      setDetailImageKey(key)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '이미지 업로드에 실패했습니다.')
+      setDetailPreview(undefined)
+    } finally {
+      setUploadingDetail(false)
+    }
+  }
+
+  async function handleSave() {
+    if (!canSave || saving) return
+
+    if (mode === 'create') {
+      if (!productImageKey || !detailImageKey) {
+        alert('대표 이미지와 상세 이미지를 모두 등록해주세요.')
+        return
+      }
+      setSaving(true)
+      try {
+        const imageKeys: ImageKeyEntry[] = [
+          { imageKey: productImageKey, imageType: 'PRODUCT' },
+          { imageKey: detailImageKey, imageType: 'DETAIL' },
+        ]
+        await registerGoods(storeId, {
+          name: name.trim(),
+          price: Number(price),
+          stock: Number(stock),
+          description: description.trim() || undefined,
+          imageKeys,
+        })
+        onSaved()
+      } catch (e) {
+        alert(e instanceof Error ? e.message : '저장에 실패했습니다.')
+      } finally {
+        setSaving(false)
+      }
+    } else {
+      onSaved()
+    }
   }
 
   const inputClass =
@@ -158,37 +258,84 @@ export function GoodsFormScreen({
       {/* Form */}
       <div className="flex-1 overflow-y-auto scrollbar-hide px-4 py-5 space-y-5">
 
-        {/* Thumbnail */}
+        {/* 대표 이미지 (PRODUCT) */}
         <div className="space-y-2">
           <p className="text-[12px] font-bold text-foreground">대표 이미지</p>
           <div className="flex items-center gap-3">
+            {mode === 'create' && (
+              <input
+                ref={productFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleProductImageSelect}
+                className="hidden"
+              />
+            )}
             <ImagePickerSlot
-              src={thumbnail}
+              src={mode === 'create' ? productPreview : thumbnail}
               label="대표 이미지"
-              onRemove={thumbnail ? () => setThumbnail(undefined) : undefined}
+              onRemove={
+                mode === 'create'
+                  ? productPreview
+                    ? () => { setProductPreview(undefined); setProductImageKey(null) }
+                    : undefined
+                  : thumbnail
+                  ? () => setThumbnail(undefined)
+                  : undefined
+              }
+              onClick={
+                mode === 'create' && !productPreview
+                  ? () => productFileInputRef.current?.click()
+                  : undefined
+              }
+              uploading={mode === 'create' && uploadingProduct}
             />
-            {!thumbnail && (
-              <p className="text-[12px] text-muted-foreground">
-                대표 이미지를 업로드하세요.
-              </p>
+            {(mode === 'create' ? !productPreview && !uploadingProduct : !thumbnail) && (
+              <p className="text-[12px] text-muted-foreground">대표 이미지를 업로드하세요.</p>
             )}
           </div>
         </div>
 
-        {/* Detail images */}
+        {/* 상세 이미지 (DETAIL) */}
         <div className="space-y-2">
           <p className="text-[12px] font-bold text-foreground">상세 이미지</p>
           <div className="flex flex-wrap gap-2">
-            {detailImages.map((src, idx) => (
-              <ImagePickerSlot
-                key={idx}
-                src={src}
-                label={`상세 이미지 ${idx + 1}`}
-                onRemove={() => handleRemoveDetailImage(idx)}
-              />
-            ))}
-            {/* Add slot */}
-            <ImagePickerSlot label="상세 이미지 추가" />
+            {mode === 'create' ? (
+              <>
+                <input
+                  ref={detailFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleDetailImageSelect}
+                  className="hidden"
+                />
+                {detailPreview ? (
+                  <ImagePickerSlot
+                    src={detailPreview}
+                    label="상세 이미지"
+                    onRemove={() => { setDetailPreview(undefined); setDetailImageKey(null) }}
+                  />
+                ) : (
+                  <ImagePickerSlot
+                    label="상세 이미지 추가"
+                    onClick={() => detailFileInputRef.current?.click()}
+                    uploading={uploadingDetail}
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                {detailImages.map((src, idx) => (
+                  <ImagePickerSlot
+                    key={idx}
+                    src={src}
+                    label={`상세 이미지 ${idx + 1}`}
+                    onRemove={() => handleRemoveDetailImage(idx)}
+                  />
+                ))}
+                <ImagePickerSlot label="상세 이미지 추가" />
+              </>
+            )}
           </div>
         </div>
 
@@ -241,27 +388,6 @@ export function GoodsFormScreen({
           />
         </div>
 
-        {/* Sales status */}
-        <div className="space-y-1.5">
-          <p className="text-[12px] font-bold text-foreground">판매 상태</p>
-          <div className="flex gap-2">
-            {SALES_STATUSES.map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setStatus(value)}
-                className={cn(
-                  'flex-1 py-2.5 rounded-xl text-[12px] font-bold border-2 transition-colors',
-                  status === value
-                    ? 'bg-foreground text-background border-foreground'
-                    : 'bg-card text-foreground border-border',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Edit-only: delete section */}
         {isEdit && (
           <div className="pt-2 border-t border-border">
@@ -285,16 +411,16 @@ export function GoodsFormScreen({
           취소
         </button>
         <button
-          disabled={!canSave}
-          onClick={onSaved}
+          disabled={!canSave || saving || uploadingProduct || uploadingDetail}
+          onClick={handleSave}
           className={cn(
             'flex-1 py-3.5 rounded-xl font-semibold text-sm transition-colors',
-            canSave
+            canSave && !saving && !uploadingProduct && !uploadingDetail
               ? 'bg-foreground text-background'
               : 'bg-secondary text-muted-foreground cursor-not-allowed',
           )}
         >
-          저장
+          {saving ? '저장 중...' : '저장'}
         </button>
       </div>
 
