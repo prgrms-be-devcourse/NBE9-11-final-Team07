@@ -225,11 +225,6 @@ export default function Page() {
     setCurrentView('org-goods-edit')
   }
 
-  function handleViewAllCoupons() {
-    setActiveTab('coupons')
-    setCurrentView('coupons')
-  }
-
   // Bottom nav is hidden for transient screens
   const showBottomNav = (
     currentView !== 'detail' &&
@@ -312,7 +307,6 @@ export default function Page() {
               onViewAllReservations={handleGoReservations}
               onViewAllPurchases={handleViewAllPurchases}
               onViewPurchaseDetail={handleViewPurchaseDetail}
-              onViewAllCoupons={handleViewAllCoupons}
               onGoPopupStoreManagement={handleGoPopupStoreManagement}
             />
           )}
