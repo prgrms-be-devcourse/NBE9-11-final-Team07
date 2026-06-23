@@ -46,6 +46,13 @@ dependencies {
     implementation("software.amazon.awssdk:s3")
     implementation("software.amazon.awssdk:url-connection-client")
 
+    // Redis
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+
+    // ShedLock — distributed scheduler lock (Redis provider)
+    implementation("net.javacrumbs.shedlock:shedlock-spring:7.7.0")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-redis-spring:7.7.0")
+
     // JWT
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")

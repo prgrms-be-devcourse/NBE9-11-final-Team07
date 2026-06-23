@@ -21,6 +21,11 @@ spring:
     ansi:
       enabled: always
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
 aws:
   s3:
     region: ${AWS_REGION}
@@ -41,6 +46,14 @@ jwt:
 toss-payments:
   client-key: ${TOSS_PAYMENTS_CLIENT_KEY}
   secret-key: ${TOSS_PAYMENTS_SECRET_KEY}
+
+waiting-queue:
+  batch-size: 10
+  scheduler-fixed-rate-ms: 500
+  proceed-ttl-seconds: 180
+  poll-interval-seconds: 5
+  last-seen-ttl-seconds: 20
+  sweeper-fixed-rate-ms: 15000
 
 management:
   endpoints:
