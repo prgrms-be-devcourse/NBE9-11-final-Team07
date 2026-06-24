@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -21,6 +22,7 @@ import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
+import com.back.popspot.global.redis.RedisKeys;
 import com.back.popspot.global.s3.S3Service;
 
 import jakarta.persistence.EntityManager;
@@ -39,6 +41,7 @@ public class PopupStoreHostService {
 	private final PopupStoreRepository popupStoreRepository;
 	private final ReservationSlotRepository reservationSlotRepository;
 	private final S3Service s3Service;
+	private final RedisTemplate<String, Long> redisTemplate;
 
 	@PersistenceContext
 	private EntityManager entityManager;
@@ -146,7 +149,7 @@ public class PopupStoreHostService {
 		}
 
 		// 운영이 이미 시작됐으면(now >= openDate) 삭제 불가
-		if (!LocalDateTime.now().isBefore(popupStore.getOpenDate())) {
+		if (!LocalDateTime.now().isBefore(popupStore.getReservationStartAt())) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 
@@ -181,6 +184,11 @@ public class PopupStoreHostService {
 
 		ReservationSlot slot = ReservationSlot.of(popupStore, request);
 		reservationSlotRepository.save(slot);
+
+		// 재고 카운터(remaining=capacity) 초기화는 DB 커밋 성공 후 실행한다.
+		// 트랜잭션이 롤백되면 슬롯이 존재하지 않으므로 Redis 카운터도 만들지 않는다.
+		registerAfterCommitSlotCounterInit(slot.getId(), slot.getCapacity());
+
 		return slot.getId();
 	}
 
@@ -254,11 +262,30 @@ public class PopupStoreHostService {
 		}
 
 		reservationSlotRepository.delete(slot);
+
+		// 슬롯 삭제 시 재고 카운터 키도 함께 정리 (고아 키 방지)
+		redisTemplate.delete(RedisKeys.reservationSlotRemaining(slotId));
 	}
 
 	// 임시 키(temp/...)의 파일명을 팝업 정식 경로(popup/{id}/{fileName})로 변환
 	private String buildPopupImageKey(Long popupStoreId, String tempKey) {
 		return "popup/" + popupStoreId + "/" + s3Service.extractFileName(tempKey);
+	}
+
+	// 트랜잭션 커밋 성공 후에 슬롯 재고 카운터를 초기화한다. (remaining=capacity)
+	// 동기화가 비활성(트랜잭션 밖)이면 즉시 실행한다.
+	private void registerAfterCommitSlotCounterInit(Long slotId, int capacity) {
+		Runnable init = () -> redisTemplate.opsForValue().set(RedisKeys.reservationSlotRemaining(slotId), (long)capacity);
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			init.run();
+			return;
+		}
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCommit() {
+				init.run();
+			}
+		});
 	}
 
 	// 트랜잭션 커밋 성공 후에 S3 이미지를 삭제한다. (롤백 시 파일이 사라지는 것을 방지)

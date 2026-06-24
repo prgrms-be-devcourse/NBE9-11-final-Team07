@@ -21,6 +21,7 @@ import com.back.popspot.domain.goods.dto.GoodsRegisterResponse;
 import com.back.popspot.domain.goods.dto.GoodsSummaryResponse;
 import com.back.popspot.domain.goods.dto.GoodsUpdateRequest;
 import com.back.popspot.domain.goods.dto.GoodsUpdateResponse;
+import com.back.popspot.domain.goods.dto.HostGoodsDetailResponse;
 import com.back.popspot.domain.goods.dto.HostGoodsListResponse;
 import com.back.popspot.domain.goods.entity.GoodsImageType;
 import com.back.popspot.domain.goods.entity.GoodsStatus;
@@ -120,6 +121,57 @@ class GoodsControllerTest extends IntegrationTestSupport {
     }
 
     // ── 호스트 관리 테스트 (/host) ───────────────────────────────────────────
+
+    @Test
+    @DisplayName("호스트 굿즈 단건 조회 시 200과 상세 정보를 반환한다")
+    void getHostGoodsDetail_returnsOkWithDetail() throws Exception {
+        Long goodsId = 1L;
+        HostGoodsDetailResponse response = new HostGoodsDetailResponse(
+            goodsId, "한정판 포스터", 15000, 30, "고화질 한정판 포스터입니다.",
+            "https://s3.example.com/product.jpg", "https://s3.example.com/detail.jpg"
+        );
+        given(goodsService.getHostGoodsDetail(any(), eq(goodsId))).willReturn(response);
+
+        mockMvc.perform(get("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(1L)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("SUCCESS"))
+            .andExpect(jsonPath("$.data.id").value(goodsId))
+            .andExpect(jsonPath("$.data.name").value("한정판 포스터"))
+            .andExpect(jsonPath("$.data.price").value(15000))
+            .andExpect(jsonPath("$.data.stock").value(30))
+            .andExpect(jsonPath("$.data.description").value("고화질 한정판 포스터입니다."))
+            .andExpect(jsonPath("$.data.productImageUrl").value("https://s3.example.com/product.jpg"))
+            .andExpect(jsonPath("$.data.detailImageUrl").value("https://s3.example.com/detail.jpg"));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 goodsId로 호스트 굿즈 단건 조회 시 404를 반환한다")
+    void getHostGoodsDetail_goodsNotFound_returns404() throws Exception {
+        Long nonExistentId = 999L;
+        given(goodsService.getHostGoodsDetail(any(), eq(nonExistentId)))
+            .willThrow(new BusinessException(ErrorCode.GOODS_NOT_FOUND));
+
+        mockMvc.perform(get("/api/v1/host/goods/{goodsId}", nonExistentId)
+                .with(hostAuth(1L)))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("GOODS_NOT_FOUND"))
+            .andExpect(jsonPath("$.message").value("굿즈를 찾을 수 없습니다."));
+    }
+
+    @Test
+    @DisplayName("다른 주최자의 굿즈를 단건 조회하면 403을 반환한다")
+    void getHostGoodsDetail_forbidden_returns403() throws Exception {
+        Long goodsId = 1L;
+        given(goodsService.getHostGoodsDetail(any(), eq(goodsId)))
+            .willThrow(new BusinessException(ErrorCode.FORBIDDEN));
+
+        mockMvc.perform(get("/api/v1/host/goods/{goodsId}", goodsId)
+                .with(hostAuth(99L)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+            .andExpect(jsonPath("$.message").value("접근 권한이 없습니다."));
+    }
 
     @Test
     @DisplayName("굿즈를 등록하면 201과 등록된 굿즈 정보를 반환한다")
@@ -269,9 +321,9 @@ class GoodsControllerTest extends IntegrationTestSupport {
         Long popupStoreId = 1L;
         List<HostGoodsListResponse> response = List.of(
             new HostGoodsListResponse(1L, "한정판 포스터", 15000, 30,
-                "https://s3.example.com/product1.jpg", "https://s3.example.com/detail1.jpg"),
+                "https://s3.example.com/product1.jpg"),
             new HostGoodsListResponse(2L, "에코백", 25000, 50,
-                "https://s3.example.com/product2.jpg", null)
+                "https://s3.example.com/product2.jpg")
         );
 
         given(goodsService.getHostGoodsList(any(), eq(popupStoreId))).willReturn(response);
@@ -285,8 +337,7 @@ class GoodsControllerTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.data[0].name").value("한정판 포스터"))
             .andExpect(jsonPath("$.data[0].price").value(15000))
             .andExpect(jsonPath("$.data[0].stock").value(30))
-            .andExpect(jsonPath("$.data[0].productImageUrl").value("https://s3.example.com/product1.jpg"))
-            .andExpect(jsonPath("$.data[0].detailImageUrl").value("https://s3.example.com/detail1.jpg"));
+            .andExpect(jsonPath("$.data[0].productImageUrl").value("https://s3.example.com/product1.jpg"));
     }
 
     @Test

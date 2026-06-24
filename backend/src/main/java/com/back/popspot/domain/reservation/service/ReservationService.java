@@ -8,13 +8,16 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.back.popspot.domain.payment.dto.PaymentCancelRequest;
 import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
+import com.back.popspot.domain.payment.service.PaymentService;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
@@ -32,6 +35,7 @@ import com.back.popspot.domain.user.repository.UserRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 import com.back.popspot.global.exception.ReservationPaymentExpiredException;
+import com.back.popspot.global.redis.RedisKeys;
 
 import lombok.RequiredArgsConstructor;
 
@@ -48,8 +52,11 @@ public class ReservationService {
 	private final ReservationRepository reservationRepository;
 	private final ReservationSlotRepository reservationSlotRepository;
 	private final PaymentRepository paymentRepository;
+	private final PaymentService paymentService;
 	private final UserRepository userRepository;
 	private final ReservationExpirationService reservationExpirationService;
+	private final ReservationCommandService reservationCommandService;
+	private final RedisTemplate<String, Long> redisTemplate;
 
 	@Transactional(readOnly = true)
 	public Page<MyReservationResponse> getMyReservations(Long userId, Pageable pageable) {
@@ -67,9 +74,12 @@ public class ReservationService {
 		).map(MyReservationResponse::from);
 	}
 
-	@Transactional
+	// @Transactional 을 두지 않는다. Redis 차감/롤백을 트랜잭션 밖에서 수행해 커넥션 점유를 막고,
+	// DB 저장은 별도 빈(ReservationCommandService)의 트랜잭션에 위임한다.
 	public ReservationCreateResponse createReservation(ReservationCreateRequest request, Long userId) {
-		ReservationSlot slot = reservationSlotRepository.findById(request.slotId())
+		// 1. 검증용 DB 읽기는 Redis 차감 전에 끝낸다. (popupStore 까지 join fetch 로 함께 로딩)
+		//    각 조회는 짧은 단일 트랜잭션으로 즉시 커넥션을 반납한다.
+		ReservationSlot slot = reservationSlotRepository.findByIdWithPopupStore(request.slotId())
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_SLOT_NOT_FOUND));
 
 		LocalDateTime now = LocalDateTime.now();
@@ -89,20 +99,32 @@ public class ReservationService {
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		// 중복 예약 방지
-		if (reservationRepository.existsByUserIdAndSlotId(user.getId(), slot.getId())) {
+		if (reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(user.getId(), slot.getId())) {
 			throw new BusinessException(ErrorCode.RESERVATION_ALREADY_EXISTS);
 		}
 
-		int updatedCount = reservationSlotRepository.increaseReservedCountIfAvailable(slot.getId());
-		if (updatedCount == 0) {
+		Long slotId = slot.getId();
+		String remainingKey = RedisKeys.reservationSlotRemaining(slotId);
+
+		// 2. 모든 검증 통과 후 단일 카운터(remaining) 선차감. DECR 반환값만으로 동시성 제어가 완결된다.
+		Long after = redisTemplate.opsForValue().decrement(remainingKey);
+		if (after == null || after < 0) {
+			// 남은 자리 없음/미초기화 → remaining 롤백
+			redisTemplate.opsForValue().increment(remainingKey);
 			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
 		}
 
-		LocalDateTime heldUntil = now.plusMinutes(HOLD_MINUTES);
-		Reservation reservation = Reservation.createHeld(user, slot, now, heldUntil);
-		reservationRepository.save(reservation);
+		// 3. DB 저장은 별도 빈의 @Transactional 메서드에 위임한다.
+		//    커밋 단계 실패까지 여기 try-catch 가 잡아 remaining 을 롤백한다.
+		try {
+			LocalDateTime heldUntil = now.plusMinutes(HOLD_MINUTES);
+			Reservation reservation = reservationCommandService.save(user, slot, now, heldUntil);
 
-		return ReservationCreateResponse.from(reservation);
+			return ReservationCreateResponse.from(reservation);
+		} catch (RuntimeException e) {
+			redisTemplate.opsForValue().increment(remainingKey);
+			throw e;
+		}
 	}
 
 	@Transactional
@@ -123,13 +145,15 @@ public class ReservationService {
 			throw new BusinessException(ErrorCode.RESERVATION_CANCEL_DEADLINE_PASSED);
 		}
 
-		if (paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(
+		paymentRepository.findByReservationIdAndPaymentTypeAndStatus(
 			reservationId,
 			PaymentType.POPUP,
 			PaymentStatus.PAID
-		)) {
-			// TODO: 결제 도메인 환불 요청 연동
-		}
+		).ifPresent(payment -> paymentService.cancel(
+			payment.getId(),
+			userId,
+			new PaymentCancelRequest("예약 취소", "refund-reservation-" + reservationId + "-" + userId)
+		));
 
 		int canceledCount = reservationRepository.cancelConfirmedReservation(
 			reservationId,
@@ -145,6 +169,9 @@ public class ReservationService {
 		if (updatedCount == 0) {
 			throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
 		}
+
+		// 취소로 자리가 비었으므로 재고 카운터 복구
+		redisTemplate.opsForValue().increment(RedisKeys.reservationSlotRemaining(reservation.getSlot().getId()));
 	}
 
 	@Transactional(noRollbackFor = ReservationPaymentExpiredException.class)

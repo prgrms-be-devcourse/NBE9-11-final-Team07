@@ -66,26 +66,26 @@ public class GoodsOrderDetailResponse {
 
 		private final Long goodsId;
 		private final String goodsName;
-		private final String thumbnailImageKey;
+		private final String thumbnailImageUrl;
 		private final int quantity;
 		private final int unitPrice;
 		private final int itemAmount;
 
-		private DetailItem(Long goodsId, String goodsName, String thumbnailImageKey,
+		private DetailItem(Long goodsId, String goodsName, String thumbnailImageUrl,
 				int quantity, int unitPrice, int itemAmount) {
 			this.goodsId = goodsId;
 			this.goodsName = goodsName;
-			this.thumbnailImageKey = thumbnailImageKey;
+			this.thumbnailImageUrl = thumbnailImageUrl;
 			this.quantity = quantity;
 			this.unitPrice = unitPrice;
 			this.itemAmount = itemAmount;
 		}
 
-		public static DetailItem from(GoodsOrderItem item, String thumbnailImageKey) {
+		public static DetailItem from(GoodsOrderItem item, String thumbnailImageUrl) {
 			return new DetailItem(
 					item.getGoods().getId(),
 					item.getGoods().getName(),
-					thumbnailImageKey,
+					thumbnailImageUrl,
 					item.getQuantity(),
 					item.getUnitPrice(),
 					item.getItemAmount()

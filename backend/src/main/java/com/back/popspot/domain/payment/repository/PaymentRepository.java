@@ -20,6 +20,12 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 		PaymentStatus status
 	);
 
+	Optional<Payment> findByReservationIdAndPaymentTypeAndStatus(
+		Long reservationId,
+		PaymentType paymentType,
+		PaymentStatus status
+	);
+
 	// 같은 멱등성 키로 생성된 기존 결제 조회
 	Optional<Payment> findByIdempotencyKey(String idempotencyKey);
 

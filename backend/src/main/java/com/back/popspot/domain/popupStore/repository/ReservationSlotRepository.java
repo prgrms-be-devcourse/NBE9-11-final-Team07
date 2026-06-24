@@ -3,6 +3,7 @@ package com.back.popspot.domain.popupStore.repository;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -15,6 +16,11 @@ public interface ReservationSlotRepository extends JpaRepository<ReservationSlot
 
 	// 특정 팝업스토어의 특정 날짜 예약 슬롯 목록
 	List<ReservationSlot> findByPopupStoreIdAndSlotDate(Long popupStoreId, LocalDate slotDate);
+
+	// 예약 검증 시 lazy 연관관계(popupStore)까지 한 번에 로딩한다.
+	// createReservation 은 트랜잭션 밖에서 검증하므로 popupStore 가 초기화된 상태여야 한다.
+	@Query("select slot from ReservationSlot slot join fetch slot.popupStore where slot.id = :slotId")
+	Optional<ReservationSlot> findByIdWithPopupStore(@Param("slotId") Long slotId);
 
 	void deleteByPopupStoreId(Long popupStoreId);
 

@@ -1,67 +1,25 @@
 'use client'
 
-import { useState } from 'react'
-import { ArrowLeft, ImagePlus, X, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowLeft, ImagePlus, Loader2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { orgGoods } from '@/lib/data'
-import type { OrgGoods, GoodsSalesStatus } from '@/lib/data'
+import { uploadGoodsImage, registerGoods, getHostGoodsDetail, updateHostGoods } from '@/lib/goods-api'
+import type { ImageKeyEntry } from '@/lib/goods-api'
 
-const SALES_STATUSES: { value: GoodsSalesStatus; label: string }[] = [
-  { value: 'READY', label: '판매 준비' },
-  { value: 'ON_SALE', label: '판매중' },
-  { value: 'SOLD_OUT', label: '품절' },
-]
-
-// ─── Delete Confirm Modal ─────────────────────────────────────────────────────
-
-function DeleteGoodsModal({
-  goodsName,
-  onCancel,
-  onConfirm,
-}: {
-  goodsName: string
-  onCancel: () => void
-  onConfirm: () => void
-}) {
-  return (
-    <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full bg-card rounded-t-3xl p-6 pb-8 space-y-4">
-        <h3 className="text-base font-bold text-foreground">굿즈를 삭제하시겠습니까?</h3>
-        <p className="text-[13px] font-semibold text-foreground bg-secondary rounded-xl px-4 py-3">
-          {goodsName}
-        </p>
-        <p className="text-[13px] text-muted-foreground leading-relaxed">
-          삭제된 굿즈는 복구할 수 없습니다.
-        </p>
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-3.5 rounded-xl bg-secondary text-foreground font-semibold text-sm"
-          >
-            취소
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 py-3.5 rounded-xl bg-[oklch(0.62_0.24_25)] text-white font-semibold text-sm"
-          >
-            삭제
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Image Picker Placeholder ─────────────────────────────────────────────────
+// ─── Image Picker Slot ────────────────────────────────────────────────────────
 
 function ImagePickerSlot({
   src,
   label,
   onRemove,
+  onClick,
+  uploading = false,
 }: {
   src?: string
   label: string
   onRemove?: () => void
+  onClick?: () => void
+  uploading?: boolean
 }) {
   if (src) {
     return (
@@ -83,12 +41,32 @@ function ImagePickerSlot({
       </div>
     )
   }
-  return (
-    <div className="w-[72px] h-[72px] shrink-0 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 bg-secondary">
+
+  const inner = uploading ? (
+    <Loader2 size={18} strokeWidth={1.8} className="text-muted-foreground animate-spin" />
+  ) : (
+    <>
       <ImagePlus size={18} strokeWidth={1.8} className="text-muted-foreground" />
       <span className="text-[9px] text-muted-foreground font-medium">추가</span>
-    </div>
+    </>
   )
+
+  const baseClass =
+    'w-[72px] h-[72px] shrink-0 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 bg-secondary'
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={uploading}
+        className={cn(baseClass, 'disabled:opacity-60')}
+      >
+        {inner}
+      </button>
+    )
+  }
+  return <div className={baseClass}>{inner}</div>
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -100,7 +78,6 @@ interface GoodsFormScreenProps {
   goodsId?: string
   onBack: () => void
   onSaved: () => void
-  onDeleted?: () => void
 }
 
 export function GoodsFormScreen({
@@ -110,33 +87,164 @@ export function GoodsFormScreen({
   goodsId,
   onBack,
   onSaved,
-  onDeleted,
 }: GoodsFormScreenProps) {
-  const existing = goodsId ? orgGoods.find((g) => g.id === goodsId) : undefined
+  const [loading, setLoading] = useState(mode === 'edit')
+  const [name, setName] = useState('')
+  const [price, setPrice] = useState('')
+  const [stock, setStock] = useState('')
+  const [description, setDescription] = useState('')
 
-  const [name, setName] = useState(existing?.name ?? '')
-  const [price, setPrice] = useState(existing?.price ? String(existing.price) : '')
-  const [stock, setStock] = useState(existing?.stock !== undefined ? String(existing.stock) : '')
-  const [description, setDescription] = useState(existing?.description ?? '')
-  const [status, setStatus] = useState<GoodsSalesStatus>(existing?.status ?? 'READY')
-  const [thumbnail, setThumbnail] = useState<string | undefined>(existing?.thumbnail)
-  const [detailImages, setDetailImages] = useState<string[]>(existing?.detailImages ?? [])
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [productPreview, setProductPreview] = useState<string | undefined>()
+  const [productImageKey, setProductImageKey] = useState<string | null>(null)
+  const [uploadingProduct, setUploadingProduct] = useState(false)
+  const [detailPreview, setDetailPreview] = useState<string | undefined>()
+  const [detailImageKey, setDetailImageKey] = useState<string | null>(null)
+  const [uploadingDetail, setUploadingDetail] = useState(false)
+
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (mode !== 'edit' || !goodsId) return
+    getHostGoodsDetail(goodsId)
+      .then((data) => {
+        setName(data.name)
+        setPrice(String(data.price))
+        setStock(String(data.stock))
+        setDescription(data.description ?? '')
+        setProductPreview(data.productImageUrl ?? undefined)
+        setDetailPreview(data.detailImageUrl ?? undefined)
+      })
+      .catch((e) => alert(e instanceof Error ? e.message : '굿즈 정보를 불러오지 못했습니다.'))
+      .finally(() => setLoading(false))
+  }, [mode, goodsId])
+
+  const productFileInputRef = useRef<HTMLInputElement>(null)
+  const detailFileInputRef = useRef<HTMLInputElement>(null)
 
   const isEdit = mode === 'edit'
   const title = isEdit ? '굿즈 수정' : '굿즈 추가'
 
+  const hasImageChange = !!productImageKey || !!detailImageKey
   const canSave =
     name.trim().length > 0 &&
     Number(price) > 0 &&
-    Number(stock) >= 0
+    Number(stock) >= 0 &&
+    (!isEdit ? (!!productImageKey && !!detailImageKey) : true) &&
+    !uploadingProduct &&
+    !uploadingDetail
 
-  function handleRemoveDetailImage(idx: number) {
-    setDetailImages((prev) => prev.filter((_, i) => i !== idx))
+  async function handleProductImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || uploadingProduct) return
+    setProductPreview(URL.createObjectURL(file))
+    setUploadingProduct(true)
+    try {
+      const key = await uploadGoodsImage('PRODUCT', file)
+      setProductImageKey(key)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '이미지 업로드에 실패했습니다.')
+      setProductPreview(undefined)
+    } finally {
+      setUploadingProduct(false)
+    }
+  }
+
+  async function handleDetailImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || uploadingDetail) return
+    setDetailPreview(URL.createObjectURL(file))
+    setUploadingDetail(true)
+    try {
+      const key = await uploadGoodsImage('DETAIL', file)
+      setDetailImageKey(key)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '이미지 업로드에 실패했습니다.')
+      setDetailPreview(undefined)
+    } finally {
+      setUploadingDetail(false)
+    }
+  }
+
+  async function handleSave() {
+    if (!canSave || saving) return
+
+    if (mode === 'create') {
+      if (!productImageKey || !detailImageKey) {
+        alert('대표 이미지와 상세 이미지를 모두 등록해주세요.')
+        return
+      }
+      setSaving(true)
+      try {
+        const imageKeys: ImageKeyEntry[] = [
+          { imageKey: productImageKey, imageType: 'PRODUCT' },
+          { imageKey: detailImageKey, imageType: 'DETAIL' },
+        ]
+        await registerGoods(storeId, {
+          name: name.trim(),
+          price: Number(price),
+          stock: Number(stock),
+          description: description.trim() || undefined,
+          imageKeys,
+        })
+        onSaved()
+      } catch (e) {
+        alert(e instanceof Error ? e.message : '저장에 실패했습니다.')
+      } finally {
+        setSaving(false)
+      }
+    } else {
+      if (hasImageChange && !(productImageKey && detailImageKey)) {
+        alert('이미지를 변경하려면 대표 이미지와 상세 이미지를 모두 업로드해야 합니다.')
+        return
+      }
+      setSaving(true)
+      try {
+        const imageKeys: ImageKeyEntry[] | undefined =
+          productImageKey && detailImageKey
+            ? [
+                { imageKey: productImageKey, imageType: 'PRODUCT' },
+                { imageKey: detailImageKey, imageType: 'DETAIL' },
+              ]
+            : undefined
+        await updateHostGoods(goodsId!, {
+          name: name.trim(),
+          price: Number(price),
+          stock: Number(stock),
+          description: description.trim() || null,
+          imageKeys,
+        })
+        onSaved()
+      } catch (e) {
+        alert(e instanceof Error ? e.message : '저장에 실패했습니다.')
+      } finally {
+        setSaving(false)
+      }
+    }
   }
 
   const inputClass =
     'w-full px-3.5 py-3 bg-[oklch(0.96_0_0)] dark:bg-secondary border border-transparent rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-foreground/30 transition-colors'
+
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <header className="flex items-center gap-3 px-4 py-3 bg-card border-b border-border shrink-0">
+          <button onClick={onBack} aria-label="뒤로 가기" className="flex items-center justify-center w-8 h-8 -ml-1 rounded-full hover:bg-secondary transition-colors">
+            <ArrowLeft size={20} strokeWidth={2} />
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-muted-foreground truncate">{storeName}</p>
+            <h1 className="text-[15px] font-bold text-foreground leading-tight">{title}</h1>
+          </div>
+        </header>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 size={28} className="animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="relative flex flex-col h-full overflow-hidden">
@@ -158,37 +266,62 @@ export function GoodsFormScreen({
       {/* Form */}
       <div className="flex-1 overflow-y-auto scrollbar-hide px-4 py-5 space-y-5">
 
-        {/* Thumbnail */}
+        {/* 대표 이미지 (PRODUCT) */}
         <div className="space-y-2">
           <p className="text-[12px] font-bold text-foreground">대표 이미지</p>
           <div className="flex items-center gap-3">
-            <ImagePickerSlot
-              src={thumbnail}
-              label="대표 이미지"
-              onRemove={thumbnail ? () => setThumbnail(undefined) : undefined}
+            <input
+              ref={productFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleProductImageSelect}
+              className="hidden"
             />
-            {!thumbnail && (
-              <p className="text-[12px] text-muted-foreground">
-                대표 이미지를 업로드하세요.
-              </p>
+            <ImagePickerSlot
+              src={productPreview}
+              label="대표 이미지"
+              onRemove={
+                productPreview
+                  ? () => { setProductPreview(undefined); setProductImageKey(null) }
+                  : undefined
+              }
+              onClick={
+                !productPreview
+                  ? () => productFileInputRef.current?.click()
+                  : undefined
+              }
+              uploading={uploadingProduct}
+            />
+            {!productPreview && !uploadingProduct && (
+              <p className="text-[12px] text-muted-foreground">대표 이미지를 업로드하세요.</p>
             )}
           </div>
         </div>
 
-        {/* Detail images */}
+        {/* 상세 이미지 (DETAIL) */}
         <div className="space-y-2">
           <p className="text-[12px] font-bold text-foreground">상세 이미지</p>
           <div className="flex flex-wrap gap-2">
-            {detailImages.map((src, idx) => (
+            <input
+              ref={detailFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleDetailImageSelect}
+              className="hidden"
+            />
+            {detailPreview ? (
               <ImagePickerSlot
-                key={idx}
-                src={src}
-                label={`상세 이미지 ${idx + 1}`}
-                onRemove={() => handleRemoveDetailImage(idx)}
+                src={detailPreview}
+                label="상세 이미지"
+                onRemove={() => { setDetailPreview(undefined); setDetailImageKey(null) }}
               />
-            ))}
-            {/* Add slot */}
-            <ImagePickerSlot label="상세 이미지 추가" />
+            ) : (
+              <ImagePickerSlot
+                label="상세 이미지 추가"
+                onClick={() => detailFileInputRef.current?.click()}
+                uploading={uploadingDetail}
+              />
+            )}
           </div>
         </div>
 
@@ -241,39 +374,6 @@ export function GoodsFormScreen({
           />
         </div>
 
-        {/* Sales status */}
-        <div className="space-y-1.5">
-          <p className="text-[12px] font-bold text-foreground">판매 상태</p>
-          <div className="flex gap-2">
-            {SALES_STATUSES.map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setStatus(value)}
-                className={cn(
-                  'flex-1 py-2.5 rounded-xl text-[12px] font-bold border-2 transition-colors',
-                  status === value
-                    ? 'bg-foreground text-background border-foreground'
-                    : 'bg-card text-foreground border-border',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Edit-only: delete section */}
-        {isEdit && (
-          <div className="pt-2 border-t border-border">
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[13px] font-semibold text-[oklch(0.62_0.24_25)] bg-[oklch(0.97_0.06_25)] active:opacity-80 transition-opacity"
-            >
-              <Trash2 size={14} strokeWidth={2} />
-              이 굿즈 삭제
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Bottom actions */}
@@ -285,30 +385,19 @@ export function GoodsFormScreen({
           취소
         </button>
         <button
-          disabled={!canSave}
-          onClick={onSaved}
+          disabled={!canSave || saving || uploadingProduct || uploadingDetail}
+          onClick={handleSave}
           className={cn(
             'flex-1 py-3.5 rounded-xl font-semibold text-sm transition-colors',
-            canSave
+            canSave && !saving && !uploadingProduct && !uploadingDetail
               ? 'bg-foreground text-background'
               : 'bg-secondary text-muted-foreground cursor-not-allowed',
           )}
         >
-          저장
+          {saving ? '저장 중...' : '저장'}
         </button>
       </div>
 
-      {/* Delete modal */}
-      {showDeleteModal && (
-        <DeleteGoodsModal
-          goodsName={name || '이 굿즈'}
-          onCancel={() => setShowDeleteModal(false)}
-          onConfirm={() => {
-            setShowDeleteModal(false)
-            onDeleted?.()
-          }}
-        />
-      )}
     </div>
   )
 }

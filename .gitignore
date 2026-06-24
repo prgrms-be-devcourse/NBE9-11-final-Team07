@@ -52,3 +52,7 @@ backend/.env
 
 ### Terraform ###
 .terraform/
+.env
+backend/src/main/java/com/back/popspot/loadtest/tokens.json
+
+k6/tokens.json
