@@ -118,7 +118,7 @@ class CouponServiceTest {
 		User user = createUser(userId);
 		Coupon coupon = createCoupon(couponId, 10L, 2);
 		given(userRepository.findById(userId)).willReturn(Optional.of(user));
-		given(couponRepository.findWithPopupStoreById(couponId)).willReturn(Optional.of(coupon));
+		given(couponRepository.findWithPopupStoreByIdForUpdate(couponId)).willReturn(Optional.of(coupon));
 		given(userCouponRepository.existsByUserIdAndCouponId(userId, couponId)).willReturn(true);
 
 		assertThatThrownBy(() -> couponService.issueCoupon(userId, couponId))
@@ -135,7 +135,7 @@ class CouponServiceTest {
 		User user = createUser(userId);
 		Coupon coupon = createCoupon(couponId, 10L, 2);
 		given(userRepository.findById(userId)).willReturn(Optional.of(user));
-		given(couponRepository.findWithPopupStoreById(couponId)).willReturn(Optional.of(coupon));
+		given(couponRepository.findWithPopupStoreByIdForUpdate(couponId)).willReturn(Optional.of(coupon));
 		given(userCouponRepository.existsByUserIdAndCouponId(userId, couponId)).willReturn(false);
 		given(userCouponRepository.save(org.mockito.ArgumentMatchers.any(UserCoupon.class)))
 			.willAnswer(invocation -> {
@@ -161,7 +161,7 @@ class CouponServiceTest {
 		User user = createUser(userId);
 		Coupon coupon = createCoupon(couponId, 10L, 1);
 		given(userRepository.findById(userId)).willReturn(Optional.of(user));
-		given(couponRepository.findWithPopupStoreById(couponId)).willReturn(Optional.of(coupon));
+		given(couponRepository.findWithPopupStoreByIdForUpdate(couponId)).willReturn(Optional.of(coupon));
 		given(userCouponRepository.existsByUserIdAndCouponId(userId, couponId)).willReturn(false);
 		given(userCouponRepository.save(org.mockito.ArgumentMatchers.any(UserCoupon.class)))
 			.willAnswer(invocation -> invocation.getArgument(0));
