@@ -19,3 +19,10 @@ jobs:
         run: chmod +x backend/gradlew
       - name: Run tests
         run: ./backend/gradlew -p backend test --info -Dspring.profiles.active=test
+      - name: Test Report
+        uses: dorny/test-reporter@v3
+        if: always()
+        with:
+          name: JUnit Tests
+          path: backend/build/test-results/test/*.xml
+          reporter: java-junit
