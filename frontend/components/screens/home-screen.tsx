@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { AppHeader } from '@/components/app-header'
 import { PopupStoreCard } from '@/components/popup-store-card'
 import { promoBanners } from '@/lib/data'
-import type { PopupStore, CouponIssuancePayload } from '@/lib/data'
+import type { PopupStore } from '@/lib/data'
 import { getPopups, toPopupStoreFromList } from '@/lib/popup-api'
 
 const categories = ['전체', '진행중', '오픈예정', '마감임박', '굿즈판매'] as const
@@ -19,7 +19,7 @@ function filterStores(stores: PopupStore[], category: Category): PopupStore[] {
 
 interface HomeScreenProps {
   onStoreSelect: (storeId: string) => void
-  onCouponBannerSelect: (payload: CouponIssuancePayload) => void
+  onCouponBannerSelect: (storeId: string) => void
 }
 
 export function HomeScreen({ onStoreSelect, onCouponBannerSelect }: HomeScreenProps) {
@@ -95,7 +95,7 @@ export function HomeScreen({ onStoreSelect, onCouponBannerSelect }: HomeScreenPr
             {promoBanners.map((banner, idx) => (
               <button
                 key={banner.id}
-                onClick={() => onCouponBannerSelect({ storeId: banner.storeId, couponId: banner.couponId })}
+                onClick={() => onCouponBannerSelect(banner.storeId)}
                 className={cn(
                   'absolute inset-0 w-full h-full text-left transition-opacity duration-500',
                   idx === currentSlide ? 'opacity-100 z-10' : 'opacity-0 z-0',

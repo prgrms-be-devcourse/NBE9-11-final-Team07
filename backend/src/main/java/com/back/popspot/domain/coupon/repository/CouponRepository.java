@@ -7,6 +7,8 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.back.popspot.domain.coupon.entity.Coupon;
 import com.back.popspot.domain.coupon.entity.CouponStatus;
@@ -31,4 +33,16 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
 	// 이후 필요한 시점에 Lazy Loading으로 팝업스토어 정보를 가져옴
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<Coupon> findWithPopupStoreById(Long id);
+
+	// 락 전용 조회 메서드
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("""
+        select c
+        from Coupon c
+        join fetch c.popupStore
+        where c.id = :couponId
+        """)
+	Optional<Coupon> findWithPopupStoreByIdForUpdate(
+		@Param("couponId") Long couponId
+	);
 }

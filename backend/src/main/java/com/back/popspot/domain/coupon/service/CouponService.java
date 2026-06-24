@@ -46,12 +46,17 @@ public class CouponService {
 	}
 
 	// 호스트가 소유한 팝업스토어의 전체 쿠폰을 최신순으로 조회
+	@Transactional
 	public List<CouponResponse> getHostCoupons(Long hostUserId, Long popupStoreId) {
 		PopupStore popupStore = getPopupStore(popupStoreId);
 		validateHostOwner(hostUserId, popupStore);
+		LocalDateTime now = LocalDateTime.now();
 
-		return couponRepository.findByPopupStoreIdOrderByCreatedAtDesc(popupStoreId)
-			.stream()
+		// 데이터를 먼저 조회한 뒤 반복문을 통해 상태 변경 후 DTO로 변환
+		List<Coupon> coupons = couponRepository.findByPopupStoreIdOrderByCreatedAtDesc(popupStoreId);
+		coupons.forEach(coupon -> coupon.expireIfExpired((now)));
+
+		return coupons.stream()
 			.map(CouponResponse::from)
 			.toList();
 	}
@@ -97,30 +102,46 @@ public class CouponService {
 	@Transactional
 	public UserCouponResponse issueCoupon(Long userId, Long couponId) {
 		User user = getUser(userId);
-		Coupon coupon = couponRepository.findWithPopupStoreById(couponId)
+
+		Coupon coupon = couponRepository.findWithPopupStoreByIdForUpdate(couponId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		if (userCouponRepository.existsByUserIdAndCouponId(userId, couponId)) {
 			throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
 		}
 
-		if (!coupon.isIssuable(LocalDateTime.now())) {
+		LocalDateTime now = LocalDateTime.now();
+		coupon.expireIfExpired(now);
+
+		if (!coupon.isIssuable(now)) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 
 		coupon.issue();
-		UserCoupon userCoupon = userCouponRepository.save(UserCoupon.issue(user, coupon));
+
+		UserCoupon userCoupon =
+			userCouponRepository.save(UserCoupon.issue(user, coupon));
+
 		return UserCouponResponse.from(userCoupon);
 	}
 
 	// 사용자가 발급받은 쿠폰을 최신순으로 조회
+	@Transactional
 	public List<UserCouponResponse> getMyCoupons(Long userId) {
 		if (!userRepository.existsById(userId)) {
 			throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
 		}
+		LocalDateTime now = LocalDateTime.now();
 
-		return userCouponRepository.findByUserIdOrderByCreatedAtDesc(userId)
-			.stream()
+		// 만료여부 확인 시 UserCoupon, Coupon이 LAZY이므로 루프를 돌 때마다 N+1 문제 발생
+		// Coupon 엔터티를 FETCH JOIN하여 한번에 가져오도록 개선
+		List<UserCoupon> userCoupons = userCouponRepository.findByUserIdOrderByCreatedAtDesc(userId);
+		userCoupons.forEach(userCoupon -> {
+			userCoupon.getCoupon().expireIfExpired(now);
+			userCoupon.expireIfExpired(now);
+		});
+
+		return userCoupons.stream()
 			.map(UserCouponResponse::from)
 			.toList();
 	}
