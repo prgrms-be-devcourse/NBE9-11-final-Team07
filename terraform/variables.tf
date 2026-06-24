@@ -68,12 +68,6 @@ variable "ssh_allowed_cidr" {
   default     = "0.0.0.0/0"
 }
 
-variable "ec2_app_ports" {
-  description = "Nginx + 블루/그린 컨테이너용 인바운드 포트 목록"
-  type        = list(number)
-  default     = [80, 443, 8080, 8081]
-}
-
 ##############################################
 # RDS
 ##############################################

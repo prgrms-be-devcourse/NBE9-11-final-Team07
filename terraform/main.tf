@@ -95,14 +95,28 @@ resource "aws_security_group" "ec2" {
     cidr_blocks = [var.ssh_allowed_cidr]
   }
 
-  dynamic "ingress" {
-    for_each = var.ec2_app_ports
-    content {
-      from_port   = ingress.value
-      to_port     = ingress.value
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
+  # HTTP — 외부 공개 (Nginx, HTTPS 리다이렉트용)
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # HTTPS — 외부 공개 (Nginx)
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Spring Boot Blue/Green — VPC 내부만 (HAProxy가 내부에서 프록시)
+  ingress {
+    from_port   = 8080
+    to_port     = 8081
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
   }
 
   egress {
@@ -185,7 +199,7 @@ resource "aws_db_instance" "main" {
   password               = var.db_password
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.rds.id]
-  publicly_accessible    = true
+  publicly_accessible    = false
   multi_az               = false
   skip_final_snapshot    = true
 
