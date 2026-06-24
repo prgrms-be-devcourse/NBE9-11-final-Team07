@@ -21,7 +21,7 @@ import { getOperatingDates, formatDateKorean } from '@/lib/data'
 import type { PopupStore, TimeSlot, GoodsItem, CouponItem, ReservationPayload, GoodsOrderPayload, CouponIssuancePayload } from '@/lib/data'
 import { getPopupDetail, getPopupSlots, toPopupStoreFromDetail, toTimeSlot } from '@/lib/popup-api'
 import { couponApi, formatDiscount } from '@/lib/coupon-api'
-import { goodsApi } from '@/lib/goods-api'
+import { goodsApi, toGoodsItem } from '@/lib/goods-api'
 
 type ReservationSlotView = TimeSlot & { slotId: number }
 
@@ -431,14 +431,7 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
     goodsApi.getByPopup(storeId)
       .then((response) => {
         if (!active) return
-        setGoods(response.content.map((item) => ({
-          id: String(item.goodsId),
-          name: item.name,
-          price: item.price,
-          status: item.status === 'ON_SALE' && item.stock > 0 ? '판매중' : '품절',
-          image: item.thumbnailImageUrl ?? '/placeholder.jpg',
-          stock: item.stock,
-        })))
+        setGoods(response.content.map(toGoodsItem))
       })
       .catch(() => {
         if (active) setGoods([])
