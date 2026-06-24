@@ -19,6 +19,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -67,9 +68,13 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 	@Autowired
 	private RedisTemplate<String, Long> redisTemplate;
 
+	@Autowired
+	private StringRedisTemplate stringRedisTemplate;
+
 	// 테스트에서 초기화한 재고 카운터 키를 추적해 @AfterEach 에서 정리한다.
 	// (Redis 는 JPA 트랜잭션 롤백 대상이 아니라 키가 남기 때문에 직접 지워야 한다.)
 	private final List<Long> persistedSlotIds = new ArrayList<>();
+	private final List<String> proceedFlagKeys = new ArrayList<>();
 
 	@AfterEach
 	void cleanUpRedisCounters() {
@@ -77,13 +82,20 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 			redisTemplate.delete(RedisKeys.reservationSlotRemaining(slotId));
 		}
 		persistedSlotIds.clear();
+
+		for (String key : proceedFlagKeys) {
+			stringRedisTemplate.delete(key);
+		}
+		proceedFlagKeys.clear();
 	}
 
 	@Test
 	@DisplayName("예약 선점에 성공하면 HELD 예약을 저장하고 남은 재고(remaining)를 차감한다")
 	void createReservation_success() throws Exception {
 		User user = persistUser("user@test.com");
-		ReservationSlot slot = persistSlot(persistPopup(user, PopupFeeType.FREE, null, "무료 팝업"), 10, 0);
+		PopupStore popup = persistPopup(user, PopupFeeType.FREE, null, "무료 팝업");
+		ReservationSlot slot = persistSlot(popup, 10, 0);
+		grantProceedPermission(popup.getId(), user.getId());
 
 		mockMvc.perform(post("/reservations")
 				.with(authentication(auth(user.getId())))
@@ -116,7 +128,9 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 	@DisplayName("취소 또는 만료 이력만 있으면 같은 슬롯을 다시 예약할 수 있다")
 	void createReservation_success_whenOnlyInactiveReservationsExist() throws Exception {
 		User user = persistUser("inactive-history@test.com");
-		ReservationSlot slot = persistSlot(persistPopup(user, PopupFeeType.FREE, null, "재예약 팝업"), 10, 0);
+		PopupStore popup = persistPopup(user, PopupFeeType.FREE, null, "재예약 팝업");
+		ReservationSlot slot = persistSlot(popup, 10, 0);
+		grantProceedPermission(popup.getId(), user.getId());
 		Reservation canceled = persistReservation(user, slot, ReservationStatus.CANCELED);
 		Reservation expired = persistReservation(user, slot, ReservationStatus.EXPIRED);
 
@@ -335,6 +349,12 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 			reservation.expire();
 		}
 		return reservationRepository.save(reservation);
+	}
+
+	private void grantProceedPermission(Long popupId, Long userId) {
+		String key = RedisKeys.popupProceedFlag(popupId, userId.toString());
+		stringRedisTemplate.opsForValue().set(key, "1");
+		proceedFlagKeys.add(key);
 	}
 
 	private void flushAndClear() {
