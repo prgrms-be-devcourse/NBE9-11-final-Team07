@@ -41,6 +41,8 @@ out/
 ### env ###
 backend/.env
 .env.*
+.env.local
+.env.*.local
 !.env.example
 
 ### OS ###
