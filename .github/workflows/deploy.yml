@@ -48,29 +48,21 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # GHCR 로그인
             echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u jonguk-jeong --password-stdin
-
-            # 새 이미지 pull
             docker pull ghcr.io/jonguk-jeong/popspot:latest
 
-            # Blue/Green 전환 로직
             BLUE_RUNNING=$(docker ps -q --filter "name=popspot-blue")
-            GREEN_RUNNING=$(docker ps -q --filter "name=popspot-green")
 
             if [ -n "$BLUE_RUNNING" ]; then
-              # Blue가 떠 있으면 Green으로 배포
-              TARGET=green
+              TARGET=popspot-green
               TARGET_PORT=8081
               OLD=popspot-blue
             else
-              # Green이 떠 있거나 처음이면 Blue로 배포
               TARGET=popspot-blue
               TARGET_PORT=8080
               OLD=popspot-green
             fi
 
-            # 새 컨테이너 실행
             docker run -d \
               --name $TARGET \
               --restart unless-stopped \
@@ -79,7 +71,6 @@ jobs:
               --env-file ~/popspot/backend.env \
               ghcr.io/jonguk-jeong/popspot:latest
 
-            # 헬스체크 (최대 60초 대기)
             for i in $(seq 1 12); do
               STATUS=$(curl -s http://localhost:$TARGET_PORT/actuator/health | grep -o '"status":"UP"')
               if [ "$STATUS" = '"status":"UP"' ]; then
@@ -91,15 +82,13 @@ jobs:
             done
 
             if [ "$STATUS" != '"status":"UP"' ]; then
-              echo "헬스체크 실패 — 롤백"
+              echo "헬스체크 실패 - 롤백"
               docker rm -f $TARGET
               exit 1
             fi
 
-            # 기존 컨테이너 제거
             if [ -n "$(docker ps -q --filter name=$OLD)" ]; then
               docker rm -f $OLD
             fi
 
             echo "배포 완료: $TARGET ($TARGET_PORT)"
-  EOF
