@@ -57,6 +57,7 @@ public class SecurityConfig {
 					"/swagger-ui/**",
 					"/v3/api-docs/**"
 				).permitAll()
+				.requestMatchers(HttpMethod.GET, "/popups/*/waiting-status").authenticated()
 				.requestMatchers(HttpMethod.GET, "/popups/**").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/v1/goods/**").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/v1/popups/*/goods").permitAll()

@@ -404,7 +404,6 @@ export default function Page() {
               goodsId={orgEditGoodsId}
               onBack={handleBack}
               onSaved={handleBack}
-              onDeleted={handleBack}
             />
           )}
 
