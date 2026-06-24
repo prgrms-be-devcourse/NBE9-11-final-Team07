@@ -1,12 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronRight, CalendarCheck, ShoppingBag, Settings, Store } from 'lucide-react'
+import { ChevronRight, CalendarCheck, ShoppingBag, Store } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { userProfile, purchasedGoods } from '@/lib/data'
 import { reservationApi } from '@/lib/reservation-api'
+import { goodsApi, ORDER_STATUS_LABEL } from '@/lib/goods-api'
 import type { MyReservationResponse } from '@/lib/reservation-api'
+import type { GoodsOrderSummary } from '@/lib/goods-api'
 import type { ReservationHistoryStatus } from '@/lib/data'
 
 interface MyPageScreenProps {
@@ -31,8 +32,8 @@ function formatTime(time: string) {
   return time.slice(0, 5)
 }
 
-function reservationNumber(reservationId: number) {
-  return `RSV-${reservationId}`
+function formatOrderedAt(dateTime: string) {
+  return dateTime.replace('T', ' ').slice(0, 16)
 }
 
 function SectionHeader({
@@ -63,7 +64,9 @@ export function MyPageScreen({
 }: MyPageScreenProps) {
   const [reservations, setReservations] = useState<MyReservationResponse[]>([])
   const [reservationsError, setReservationsError] = useState<string | null>(null)
-  const recentPurchases = purchasedGoods.slice(0, 2)
+  const [purchases, setPurchases] = useState<GoodsOrderSummary[]>([])
+  const [purchaseTotal, setPurchaseTotal] = useState(0)
+  const [purchasesError, setPurchasesError] = useState<string | null>(null)
 
   const loadReservations = useCallback(async () => {
     try {
@@ -76,41 +79,47 @@ export function MyPageScreen({
     }
   }, [])
 
+  const loadPurchases = useCallback(async () => {
+    try {
+      const response = await goodsApi.getMyGoodsOrders()
+      setPurchases(response.content ?? [])
+      setPurchaseTotal(response.totalElements ?? response.content?.length ?? 0)
+      setPurchasesError(null)
+    } catch (e) {
+      setPurchases([])
+      setPurchaseTotal(0)
+      setPurchasesError(e instanceof Error ? e.message : '구매 내역을 불러오지 못했습니다.')
+    }
+  }, [])
+
   useEffect(() => {
     void loadReservations()
-  }, [loadReservations])
+    void loadPurchases()
+  }, [loadPurchases, loadReservations])
 
   const recentReservations = reservations.slice(0, 3)
+  const recentPurchases = purchases.slice(0, 2)
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex-1 overflow-y-auto scrollbar-hide pb-6">
 
-        {/* Profile Header */}
-        <div className="bg-card px-4 pt-6 pb-5 border-b border-border">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-foreground flex items-center justify-center text-background text-xl font-black shrink-0">
-              {userProfile.avatarInitials}
-            </div>
-            <div className="flex-1">
-              <p className="text-base font-bold text-foreground">{userProfile.name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{userProfile.handle}</p>
-            </div>
-            <button className="flex items-center justify-center w-9 h-9 rounded-full bg-secondary">
-              <Settings size={16} strokeWidth={1.8} className="text-muted-foreground" />
-            </button>
+        <div className="bg-card px-4 pt-5 pb-5 border-b border-border">
+          <div>
+            <h1 className="text-base font-black text-foreground">마이페이지</h1>
+            <p className="text-[12px] text-muted-foreground mt-1">내 예약과 구매 내역을 확인하세요</p>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-0 mt-5 border border-border rounded-xl overflow-hidden">
+          <div className="grid grid-cols-2 gap-0 mt-4 border border-border rounded-xl overflow-hidden">
             {[
               { label: '예약', value: reservations.length, Icon: CalendarCheck },
-              { label: '구매', value: userProfile.purchases, Icon: ShoppingBag },
+              { label: '구매', value: purchaseTotal, Icon: ShoppingBag },
             ].map(({ label, value, Icon }, i) => (
               <div
                 key={label}
-                className={cn('flex flex-col items-center py-3.5 gap-0.5', i === 0 && 'border-r border-border')}
+                className={cn('flex flex-col items-center py-3.5 gap-1', i === 0 && 'border-r border-border')}
               >
+                <Icon size={16} strokeWidth={1.8} className="text-muted-foreground" />
                 <span className="text-lg font-black text-foreground">{value}</span>
                 <span className="text-[10px] text-muted-foreground font-medium">{label}</span>
               </div>
@@ -158,31 +167,41 @@ export function MyPageScreen({
         {/* Recent Purchases */}
         <SectionHeader title="최근 구매" onViewAll={onViewAllPurchases} />
         <div className="space-y-2 px-4">
+          {purchasesError && (
+            <div className="flex items-center justify-center py-6 bg-secondary rounded-xl">
+              <p className="text-[13px] text-muted-foreground">{purchasesError}</p>
+            </div>
+          )}
+          {!purchasesError && recentPurchases.length === 0 && (
+            <div className="flex items-center justify-center py-6 bg-secondary rounded-xl">
+              <p className="text-[13px] text-muted-foreground">구매 내역이 없습니다.</p>
+            </div>
+          )}
           {recentPurchases.map((order) => {
             const rep = order.items[0]
             const extra = order.items.length - 1
             return (
               <button
-                key={order.id}
-                onClick={() => onViewPurchaseDetail(order.id)}
+                key={order.goodsOrderId}
+                onClick={() => onViewPurchaseDetail(String(order.goodsOrderId))}
                 className="w-full flex items-center gap-3 bg-card rounded-xl border border-border p-3 text-left active:opacity-70 transition-opacity"
               >
                 <img
-                  src={rep.image}
-                  alt={rep.name}
+                  src="/placeholder.png"
+                  alt={rep?.goodsName ?? '구매 상품'}
                   className="w-12 h-12 rounded-lg object-cover shrink-0"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] text-muted-foreground">{order.orderNumber}</p>
+                  <p className="text-[11px] text-muted-foreground">#{order.goodsOrderId}</p>
                   <p className="text-[12px] font-semibold text-foreground line-clamp-1 mt-0.5">
-                    {rep.name}{extra > 0 && <span className="text-muted-foreground font-normal"> 외 {extra}개</span>}
+                    {rep?.goodsName ?? '굿즈 주문'}{extra > 0 && <span className="text-muted-foreground font-normal"> 외 {extra}개</span>}
                   </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{order.paidAt}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{formatOrderedAt(order.orderedAt)}</p>
                 </div>
                 <div className="text-right shrink-0 space-y-1">
                   <p className="text-[12px] font-black text-foreground">{order.finalAmount.toLocaleString()}원</p>
                   <span className="inline-flex text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">
-                    {order.orderStatus}
+                    {ORDER_STATUS_LABEL[order.status]}
                   </span>
                 </div>
               </button>
