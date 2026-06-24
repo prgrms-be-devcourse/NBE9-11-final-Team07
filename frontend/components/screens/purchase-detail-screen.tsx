@@ -28,15 +28,35 @@ function OrderStatusBadge({ status }: { status: GoodsOrderStatus }) {
 export function PurchaseDetailScreen({ orderId, onBack }: PurchaseDetailScreenProps) {
     const [order, setOrder] = useState<GoodsOrderDetail | null>(null)
     const [loading, setLoading] = useState(true)
+    const [isRefunding, setIsRefunding] = useState(false)
 
-    useEffect(() => {
-        let active = true
-        goodsApi.getGoodsOrderDetail(parseInt(orderId))
+    function loadOrder(active = true) {
+        return goodsApi.getGoodsOrderDetail(parseInt(orderId))
             .then((data) => { if (active) setOrder(data) })
             .catch(() => { if (active) setOrder(null) })
             .finally(() => { if (active) setLoading(false) })
+    }
+
+    useEffect(() => {
+        let active = true
+        loadOrder(active)
         return () => { active = false }
     }, [orderId])
+
+    async function handleRefund() {
+        if (!order || isRefunding) return
+        if (!window.confirm('환불을 신청하시겠습니까?')) return
+        setIsRefunding(true)
+        try {
+            await goodsApi.requestRefund(order.goodsOrderId)
+            await loadOrder()
+            alert('환불이 완료되었습니다.')
+        } catch (e) {
+            alert(e instanceof Error ? e.message : '환불 신청에 실패했습니다.')
+        } finally {
+            setIsRefunding(false)
+        }
+    }
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
@@ -165,12 +185,17 @@ export function PurchaseDetailScreen({ orderId, onBack }: PurchaseDetailScreenPr
                                     </span>
                                 </div>
                             </div>
-                            {/* TODO: 환불 백엔드 완성 후 활성화 */}
                             <button
-                                disabled
-                                className="w-full py-3 rounded-xl bg-secondary text-muted-foreground font-semibold text-sm cursor-not-allowed mt-2"
+                                onClick={handleRefund}
+                                disabled={order.status !== 'PAID' || isRefunding}
+                                className={cn(
+                                    'w-full py-3 rounded-xl font-semibold text-sm mt-2',
+                                    order.status === 'PAID' && !isRefunding
+                                        ? 'bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity'
+                                        : 'bg-secondary text-muted-foreground cursor-not-allowed',
+                                )}
                             >
-                                환불 신청
+                                {isRefunding ? '환불 처리 중...' : '환불 신청'}
                             </button>
                         </section>
 
