@@ -1,4 +1,4 @@
-package com.back.global.config; // 패키지 경로는 프로젝트에 맞게 수정
+package com.back.popspot.global.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Components;
