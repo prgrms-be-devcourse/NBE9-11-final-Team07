@@ -127,7 +127,7 @@ public class ReservationService {
 		}
 	}
 
-	@Transactional
+	// @Transactional 제거 <- 검증+환불은 트랜잭션 밖, DB취소는 cancelIntx에 위임, 그 뒤 Redis INCR
 	public void cancelReservation(Long reservationId, Long userId) {
 		Reservation reservation = reservationRepository.findById(reservationId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
@@ -145,6 +145,7 @@ public class ReservationService {
 			throw new BusinessException(ErrorCode.RESERVATION_CANCEL_DEADLINE_PASSED);
 		}
 
+		// TODO: 환불-취소 정합성은 결제 도메인 정책 확정 후 재설계 필요. 현재는 호출 위치만 유지.
 		paymentRepository.findByReservationIdAndPaymentTypeAndStatus(
 			reservationId,
 			PaymentType.POPUP,
@@ -155,23 +156,13 @@ public class ReservationService {
 			new PaymentCancelRequest("예약 취소", "refund-reservation-" + reservationId + "-" + userId)
 		));
 
-		int canceledCount = reservationRepository.cancelConfirmedReservation(
-			reservationId,
-			ReservationStatus.CONFIRMED,
-			ReservationStatus.CANCELED,
-			now
-		);
-		if (canceledCount == 0) {
-			throw new BusinessException(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS);
-		}
+		Long slotId = reservation.getSlot().getId();
 
-		int updatedCount = reservationSlotRepository.decreaseReservedCount(reservation.getSlot().getId());
-		if (updatedCount == 0) {
-			throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
-		}
+		// DB 취소는 별도 트랜잭션 빈에 위임 (리턴 = 커밋 완료)
+		reservationCommandService.cancelInTx(reservationId, slotId, now);
 
-		// 취소로 자리가 비었으므로 재고 카운터 복구
-		redisTemplate.opsForValue().increment(RedisKeys.reservationSlotRemaining(reservation.getSlot().getId()));
+		// 커밋 성공 후에만 Redis 복구
+		redisTemplate.opsForValue().increment(RedisKeys.reservationSlotRemaining(slotId));
 	}
 
 	@Transactional(noRollbackFor = ReservationPaymentExpiredException.class)
@@ -200,7 +191,7 @@ public class ReservationService {
 		}
 
 		if (!reservation.getHeldUntil().isAfter(now)) {
-			reservationExpirationService.expireIfHeldAndExpired(reservation, now);
+			reservationExpirationService.expireOne(reservation, now);
 			throw new ReservationPaymentExpiredException(ErrorCode.RESERVATION_PAYMENT_EXPIRED);
 		}
 
