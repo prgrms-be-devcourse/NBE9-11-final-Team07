@@ -8,7 +8,3 @@ spring:
         registration:
           google:
             redirect-uri: https://popspot-team07.duckdns.org/oauth2/callback/google
-
-cors:
-  allowed-origin-patterns:
-    - "https://nbe-9-11-final-team07.vercel.app"
