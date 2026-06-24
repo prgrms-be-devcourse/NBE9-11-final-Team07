@@ -26,6 +26,7 @@ public enum ErrorCode {
 	PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "결제 정보를 찾을 수 없습니다."),
 
 	POPUP_RESERVATION_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "현재 예약 가능한 팝업이 아닙니다."),
+	RESERVATION_ADMISSION_REQUIRED(HttpStatus.FORBIDDEN, "입장 허가 없이 예약할 수 없습니다."),
 	RESERVATION_SLOT_ALREADY_STARTED(HttpStatus.BAD_REQUEST, "이미 시작한 슬롯은 예약할 수 없습니다."),
 	RESERVATION_CANCEL_NOT_ALLOWED_STATUS(HttpStatus.BAD_REQUEST, "취소할 수 없는 예약 상태입니다."),
 	RESERVATION_CANCEL_DEADLINE_PASSED(HttpStatus.BAD_REQUEST, "예약 취소 가능 기한이 지났습니다."),

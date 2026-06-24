@@ -54,6 +54,10 @@ public class WaitingQueueRedisService {
 		}
 	}
 
+	public void revokeProceedPermission(long popupId, String userId) {
+		redisTemplate.delete(RedisKeys.popupProceedFlag(popupId, userId));
+	}
+
 	public Long getQueueRank(long popupId, String userId) {
 		return redisTemplate.opsForZSet().rank(RedisKeys.popupWaitingQueue(popupId), userId);
 	}

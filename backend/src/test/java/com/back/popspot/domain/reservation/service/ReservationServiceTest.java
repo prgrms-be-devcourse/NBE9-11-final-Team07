@@ -52,6 +52,7 @@ import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
+import com.back.popspot.global.queue.service.WaitingQueueRedisService;
 import com.back.popspot.global.redis.RedisKeys;
 
 @ExtendWith(MockitoExtension.class)
@@ -84,6 +85,9 @@ class ReservationServiceTest {
 	@Mock
 	private ValueOperations<String, Long> valueOperations;
 
+	@Mock
+	private WaitingQueueRedisService waitingQueueRedisService;
+
 	@Test
 	@DisplayName("내 예약 내역 조회 성공")
 	void getMyReservations_success() {
@@ -96,7 +100,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore freePopupStore = createPopupStore();
 		PopupStore paidPopupStore = createPopupStore();
@@ -183,7 +188,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		Pageable pageable = PageRequest.of(0, 10);
 		Page<Reservation> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
@@ -219,7 +225,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -231,6 +238,7 @@ class ReservationServiceTest {
 		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
 		// DB 저장은 별도 빈에 위임된다. createHeld 결과에 id 만 채워 반환하도록 흉내낸다.
@@ -283,7 +291,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -291,6 +300,7 @@ class ReservationServiceTest {
 		User user = createUser(2L);
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(true);
 
@@ -316,7 +326,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 
@@ -344,7 +355,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -354,6 +366,7 @@ class ReservationServiceTest {
 		ReflectionTestUtils.setField(popupStore, "reservationEndAt", LocalDateTime.now().plusDays(2));
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 
 		// when
 		BusinessException exception = assertThrows(
@@ -377,7 +390,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -389,6 +403,7 @@ class ReservationServiceTest {
 		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
 		when(reservationCommandService.save(
@@ -421,7 +436,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -429,6 +445,7 @@ class ReservationServiceTest {
 		User user = createUser(2L);
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
 		// remaining -1 결과가 -1 → 재고 없음
@@ -465,7 +482,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -512,7 +530,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -564,7 +583,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -608,7 +628,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -659,7 +680,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -704,7 +726,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -749,7 +772,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -785,7 +809,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -816,7 +841,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -847,7 +873,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -879,7 +906,8 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate
+			redisTemplate,
+			waitingQueueRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -907,10 +935,186 @@ class ReservationServiceTest {
 		verify(reservationSlotRepository, never()).decreaseReservedCount(any(Long.class));
 	}
 
+	// ────────── admission 검증 관련 신규 케이스 ──────────
+
+	@Test
+	@DisplayName("입장 허가 후 예약 성공 시 proceed flag를 정확히 1번 소각한다")
+	void createReservation_success_revokesAdmissionFlagOnHold() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			paymentService,
+			userRepository,
+			reservationExpirationService,
+			reservationCommandService,
+			redisTemplate,
+			waitingQueueRedisService
+		);
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+
+		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
+		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationCommandService.save(
+			any(User.class),
+			any(ReservationSlot.class),
+			any(LocalDateTime.class),
+			any(LocalDateTime.class)
+		)).thenAnswer(invocation -> {
+			Reservation reservation = Reservation.createHeld(
+				invocation.getArgument(0),
+				invocation.getArgument(1),
+				invocation.getArgument(2),
+				invocation.getArgument(3)
+			);
+			ReflectionTestUtils.setField(reservation, "id", 100L);
+			return reservation;
+		});
+
+		// when
+		reservationService.createReservation(request, 2L);
+
+		// then: flag는 정확히 1회 소각되어야 한다
+		verify(waitingQueueRedisService).revokeProceedPermission(1L, "2");
+	}
+
+	@Test
+	@DisplayName("proceed flag 없으면 RESERVATION_ADMISSION_REQUIRED, remaining 차감 없음")
+	void createReservation_fail_admissionRequired() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			paymentService,
+			userRepository,
+			reservationExpirationService,
+			reservationCommandService,
+			redisTemplate,
+			waitingQueueRedisService
+		);
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+
+		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(false);
+
+		// when
+		BusinessException exception = assertThrows(
+			BusinessException.class,
+			() -> reservationService.createReservation(request, 2L)
+		);
+
+		// then
+		assertEquals(ErrorCode.RESERVATION_ADMISSION_REQUIRED, exception.getErrorCode());
+		// remaining 카운터에 전혀 손대지 않았는지 확인
+		verify(redisTemplate, never()).opsForValue();
+	}
+
+	@Test
+	@DisplayName("admission 통과 후 capacity 초과 시 proceed flag를 소각하지 않는다 (재시도 가능)")
+	void createReservation_fail_capacityExceeded_doesNotRevokeFlag() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			paymentService,
+			userRepository,
+			reservationExpirationService,
+			reservationCommandService,
+			redisTemplate,
+			waitingQueueRedisService
+		);
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+
+		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
+		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);
+
+		// when
+		BusinessException exception = assertThrows(
+			BusinessException.class,
+			() -> reservationService.createReservation(request, 2L)
+		);
+
+		// then
+		assertEquals(ErrorCode.RESERVATION_CAPACITY_EXCEEDED, exception.getErrorCode());
+		// decrement 실패 분기에서는 flag를 소각하지 않아 동일 TTL 내 재시도가 가능해야 한다
+		verify(waitingQueueRedisService, never()).revokeProceedPermission(1L, "2");
+	}
+
+	@Test
+	@DisplayName("remaining 차감 성공 후 DB save 실패 시 proceed flag는 이미 소각된 상태다 (characterization)")
+	void createReservation_fail_dbSave_proceedFlagAlreadyRevoked() {
+		// given
+		ReservationService reservationService = new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			paymentService,
+			userRepository,
+			reservationExpirationService,
+			reservationCommandService,
+			redisTemplate,
+			waitingQueueRedisService
+		);
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+
+		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
+		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationCommandService.save(
+			any(User.class),
+			any(ReservationSlot.class),
+			any(LocalDateTime.class),
+			any(LocalDateTime.class)
+		)).thenThrow(new RuntimeException("DB error"));
+
+		// when
+		assertThrows(
+			RuntimeException.class,
+			() -> reservationService.createReservation(request, 2L)
+		);
+
+		// then: flag는 decrement 직후에 이미 소각됐다 — 재진입하려면 대기열 재진입이 필요하다
+		verify(waitingQueueRedisService).revokeProceedPermission(1L, "2");
+		// remaining은 DB 실패 catch 블록에서 롤백된다
+		verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
+	}
+
+	// TODO(이번 PR 범위 외 누락 테스트):
+	//  1. createReservation_fail_slotAlreadyStarted — RESERVATION_SLOT_ALREADY_STARTED
+	//     slotDate/startTime 이 현재 시각보다 과거인 케이스가 단위·통합 어디에도 없다.
+	//  2. createReservation_fail_userNotFound — RESOURCE_NOT_FOUND
+	//     userRepository.findById 가 empty 를 반환하는 케이스가 단위·통합 어디에도 없다.
+
 	private PopupStore createPopupStore() {
 		PopupStore popupStore = new PopupStore();
 		LocalDateTime now = LocalDateTime.now();
 
+		ReflectionTestUtils.setField(popupStore, "id", 1L);
 		ReflectionTestUtils.setField(popupStore, "reservationStartAt", now.minusDays(1));
 		ReflectionTestUtils.setField(popupStore, "reservationEndAt", now.plusDays(1));
 		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.FREE);
