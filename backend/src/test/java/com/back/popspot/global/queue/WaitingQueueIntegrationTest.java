@@ -32,6 +32,7 @@ import com.back.popspot.domain.user.repository.UserRepository;
 import com.back.popspot.global.queue.config.WaitingQueueProperties;
 import com.back.popspot.global.queue.scheduler.WaitingQueueScheduler;
 import com.back.popspot.global.queue.service.WaitingQueueRedisService;
+import com.back.popspot.global.redis.RedisKeys;
 import com.back.popspot.support.IntegrationTestSupport;
 
 @DisplayName("대기열 엔진 통합 테스트")
@@ -96,7 +97,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 		latch.await();
 		executor.shutdown();
 
-		String waitingKey = "waiting:popup:" + TEST_POPUP_ID;
+		String waitingKey = RedisKeys.popupWaitingQueue(TEST_POPUP_ID);
 		assertThat(redisTemplate.opsForZSet().size(waitingKey)).isEqualTo(threadCount);
 
 		Set<ZSetOperations.TypedTuple<String>> tuples =
@@ -121,12 +122,12 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 			queueService.enqueue(TEST_POPUP_ID, String.valueOf(i));
 		}
 
-		assertThat(redisTemplate.opsForZSet().size("waiting:popup:" + TEST_POPUP_ID)).isEqualTo(total);
+		assertThat(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(TEST_POPUP_ID))).isEqualTo(total);
 
 		scheduler.admitWaiting();
 
-		assertThat(redisTemplate.opsForZSet().size("waiting:popup:" + TEST_POPUP_ID)).isEqualTo(5);
-		assertThat(redisTemplate.keys("proceed:popup:" + TEST_POPUP_ID + ":*")).hasSize(batchSize);
+		assertThat(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(TEST_POPUP_ID))).isEqualTo(5);
+		assertThat(redisTemplate.keys(RedisKeys.popupProceedFlagPattern(TEST_POPUP_ID))).hasSize(batchSize);
 	}
 
 	// ── 검증 3: 중복 진입 차단 (NX) ───────────────────────────────────────
@@ -137,12 +138,12 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 		String userId = "42";
 		queueService.enqueue(TEST_POPUP_ID, userId);
 		Double scoreAfterFirst = redisTemplate.opsForZSet()
-			.score("waiting:popup:" + TEST_POPUP_ID, userId);
+			.score(RedisKeys.popupWaitingQueue(TEST_POPUP_ID), userId);
 
 		queueService.enqueue(TEST_POPUP_ID, userId);
 
-		assertThat(redisTemplate.opsForZSet().size("waiting:popup:" + TEST_POPUP_ID)).isEqualTo(1);
-		assertThat(redisTemplate.opsForZSet().score("waiting:popup:" + TEST_POPUP_ID, userId))
+		assertThat(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(TEST_POPUP_ID))).isEqualTo(1);
+		assertThat(redisTemplate.opsForZSet().score(RedisKeys.popupWaitingQueue(TEST_POPUP_ID), userId))
 			.isEqualTo(scoreAfterFirst);
 	}
 
@@ -158,7 +159,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.code").value("SUCCESS"));
 
-		assertThat(redisTemplate.opsForZSet().size("waiting:popup:" + popup.getId())).isZero();
+		assertThat(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(popup.getId()))).isZero();
 	}
 
 	@Test
@@ -172,7 +173,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 			.andExpect(jsonPath("$.code").value("WAITING"));
 
 		assertThat(redisTemplate.opsForZSet()
-			.score("waiting:popup:" + TEST_POPUP_ID, String.valueOf(userId))).isNotNull();
+			.score(RedisKeys.popupWaitingQueue(TEST_POPUP_ID), String.valueOf(userId))).isNotNull();
 	}
 
 	@Test
@@ -181,7 +182,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 		User user = persistUser();
 		PopupStore popup = persistPopup(user);
 		redisTemplate.opsForValue().set(
-			"proceed:popup:" + popup.getId() + ":" + user.getId(), "1");
+			RedisKeys.popupProceedFlag(popup.getId(), String.valueOf(user.getId())), "1");
 
 		mockMvc.perform(get("/popups/" + popup.getId())
 				.with(authentication(auth(user.getId()))))
@@ -198,7 +199,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 		queueService.enqueue(TEST_POPUP_ID, userId);
 		queueService.admitBatch(TEST_POPUP_ID, 1);
 
-		String proceedKey = "proceed:popup:" + TEST_POPUP_ID + ":" + userId;
+		String proceedKey = RedisKeys.popupProceedFlag(TEST_POPUP_ID, userId);
 		assertThat(redisTemplate.hasKey(proceedKey)).isTrue();
 
 		// test 프로파일: proceed-ttl-seconds=1
@@ -241,7 +242,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 	void 상태_3분기() throws Exception {
 		// (a) ADMITTED
 		long admittedId = 11L;
-		redisTemplate.opsForValue().set("proceed:popup:" + TEST_POPUP_ID + ":" + admittedId, "1");
+		redisTemplate.opsForValue().set(RedisKeys.popupProceedFlag(TEST_POPUP_ID, String.valueOf(admittedId)), "1");
 
 		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
 				.with(authentication(auth(admittedId))))
@@ -276,7 +277,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 	void lastSeen_폴링시_TTL_갱신() throws Exception {
 		long userId = 55L;
 		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId));
-		String lastSeenKey = "lastSeen:popup:" + TEST_POPUP_ID + ":" + userId;
+		String lastSeenKey = RedisKeys.popupLastSeen(TEST_POPUP_ID, String.valueOf(userId));
 
 		// 첫 번째 폴링 → lastSeen 키 생성 (TTL=3s)
 		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")

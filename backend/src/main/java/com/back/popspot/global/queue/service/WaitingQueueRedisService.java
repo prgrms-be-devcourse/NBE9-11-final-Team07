@@ -15,6 +15,7 @@ import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.stereotype.Service;
 
 import com.back.popspot.global.queue.config.WaitingQueueProperties;
+import com.back.popspot.global.redis.RedisKeys;
 
 import lombok.RequiredArgsConstructor;
 
@@ -22,26 +23,21 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class WaitingQueueRedisService {
 
-	private static final String SEQ_KEY = "seq:popup:%d";
-	private static final String WAITING_KEY = "waiting:popup:%d";
-	private static final String PROCEED_KEY = "proceed:popup:%d:%s";
-	private static final String LAST_SEEN_KEY = "lastSeen:popup:%d:%s";
-
 	private final StringRedisTemplate redisTemplate;
 	private final WaitingQueueProperties properties;
 
 	public void enqueue(long popupId, String userId) {
-		Long seq = redisTemplate.opsForValue().increment(String.format(SEQ_KEY, popupId));
-		redisTemplate.opsForZSet().addIfAbsent(String.format(WAITING_KEY, popupId), userId, seq);
+		Long seq = redisTemplate.opsForValue().increment(RedisKeys.popupQueueSeq(popupId));
+		redisTemplate.opsForZSet().addIfAbsent(RedisKeys.popupWaitingQueue(popupId), userId, seq);
 	}
 
 	public boolean hasProceedPermission(long popupId, String userId) {
-		return Boolean.TRUE.equals(redisTemplate.hasKey(String.format(PROCEED_KEY, popupId, userId)));
+		return Boolean.TRUE.equals(redisTemplate.hasKey(RedisKeys.popupProceedFlag(popupId, userId)));
 	}
 
 	public void admitBatch(long popupId, int n) {
 		Set<TypedTuple<String>> tuples =
-			redisTemplate.opsForZSet().popMin(String.format(WAITING_KEY, popupId), n);
+			redisTemplate.opsForZSet().popMin(RedisKeys.popupWaitingQueue(popupId), n);
 		if (tuples == null || tuples.isEmpty()) {
 			return;
 		}
@@ -51,7 +47,7 @@ public class WaitingQueueRedisService {
 				continue;
 			}
 			redisTemplate.opsForValue().set(
-				String.format(PROCEED_KEY, popupId, userId),
+				RedisKeys.popupProceedFlag(popupId, userId),
 				"1",
 				Duration.ofSeconds(properties.proceedTtlSeconds())
 			);
@@ -59,19 +55,19 @@ public class WaitingQueueRedisService {
 	}
 
 	public Long getQueueRank(long popupId, String userId) {
-		return redisTemplate.opsForZSet().rank(String.format(WAITING_KEY, popupId), userId);
+		return redisTemplate.opsForZSet().rank(RedisKeys.popupWaitingQueue(popupId), userId);
 	}
 
 	public void setLastSeen(long popupId, String userId) {
 		redisTemplate.opsForValue().set(
-			String.format(LAST_SEEN_KEY, popupId, userId),
+			RedisKeys.popupLastSeen(popupId, userId),
 			String.valueOf(System.currentTimeMillis()),
 			Duration.ofSeconds(properties.lastSeenTtlSeconds())
 		);
 	}
 
 	public Set<Long> getActivePopupIds() {
-		Set<String> keys = redisTemplate.keys("waiting:popup:*");
+		Set<String> keys = redisTemplate.keys(RedisKeys.popupWaitingQueuePattern());
 		if (keys == null || keys.isEmpty()) {
 			return Collections.emptySet();
 		}
@@ -87,7 +83,7 @@ public class WaitingQueueRedisService {
 	 * TODO: 멀티 인스턴스 전환 시 이 메서드와 admitBatch는 분산락 대상이 됨.
 	 */
 	public void sweepAbsentMembers(long popupId) {
-		String waitingKey = String.format(WAITING_KEY, popupId);
+		String waitingKey = RedisKeys.popupWaitingQueue(popupId);
 		Set<String> members = redisTemplate.opsForZSet().range(waitingKey, 0, -1);
 		if (members == null || members.isEmpty()) {
 			return;
@@ -98,7 +94,7 @@ public class WaitingQueueRedisService {
 		// Pipeline: 전체 멤버의 lastSeen 키 존재 여부를 RTT 1회에 일괄 확인
 		List<Object> results = redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
 			for (String userId : memberList) {
-				byte[] key = String.format(LAST_SEEN_KEY, popupId, userId)
+				byte[] key = RedisKeys.popupLastSeen(popupId, userId)
 					.getBytes(StandardCharsets.UTF_8);
 				connection.keyCommands().exists(key);
 			}
