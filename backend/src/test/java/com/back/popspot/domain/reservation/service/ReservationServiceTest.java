@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -20,6 +22,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -493,28 +496,16 @@ class ReservationServiceTest {
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.findByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 			.thenReturn(Optional.empty());
-		when(reservationRepository.cancelConfirmedReservation(
-			eq(100L),
-			eq(ReservationStatus.CONFIRMED),
-			eq(ReservationStatus.CANCELED),
-			any(LocalDateTime.class)
-		)).thenReturn(1);
-		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
+		// DB 취소는 별도 빈에 위임된다. 목은 기본적으로 아무 일도 하지 않으므로 = 커밋 성공.
 		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
 		// when
 		reservationService.cancelReservation(100L, 2L);
 
-		// then
-		verify(reservationRepository).cancelConfirmedReservation(
-			eq(100L),
-			eq(ReservationStatus.CONFIRMED),
-			eq(ReservationStatus.CANCELED),
-			any(LocalDateTime.class)
-		);
-		verify(reservationSlotRepository).decreaseReservedCount(1L);
-		// 취소로 자리가 비었으므로 remaining 복구
-		verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
+		// then: DB 커밋(cancelInTx) 후에 Redis 복구(increment) 가 일어나야 한다
+		InOrder inOrder = inOrder(reservationCommandService, valueOperations);
+		inOrder.verify(reservationCommandService).cancelInTx(eq(100L), eq(1L), any(LocalDateTime.class));
+		inOrder.verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
 		verify(paymentService, never()).cancel(any(Long.class), any(Long.class), any());
 	}
 
@@ -542,33 +533,22 @@ class ReservationServiceTest {
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.findByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 			.thenReturn(Optional.of(payment));
-		when(reservationRepository.cancelConfirmedReservation(
-			eq(100L),
-			eq(ReservationStatus.CONFIRMED),
-			eq(ReservationStatus.CANCELED),
-			any(LocalDateTime.class)
-		)).thenReturn(1);
-		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
+		// DB 취소는 별도 빈(cancelInTx)에 위임 → 목이 정상 리턴 = 커밋 성공
 		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
 		// when
 		reservationService.cancelReservation(100L, 2L);
 
-		// then
+		// then: 환불 → DB 취소 커밋 → Redis 복구 순서
 		verify(paymentService).cancel(
 			eq(10L),
 			eq(2L),
 			argThat(request -> "예약 취소".equals(request.cancelReason())
 				&& "refund-reservation-100-2".equals(request.idempotencyKey()))
 		);
-		verify(reservationRepository).cancelConfirmedReservation(
-			eq(100L),
-			eq(ReservationStatus.CONFIRMED),
-			eq(ReservationStatus.CANCELED),
-			any(LocalDateTime.class)
-		);
-		verify(reservationSlotRepository).decreaseReservedCount(1L);
-		verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
+		InOrder inOrder = inOrder(reservationCommandService, valueOperations);
+		inOrder.verify(reservationCommandService).cancelInTx(eq(100L), eq(1L), any(LocalDateTime.class));
+		inOrder.verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
 	}
 
 	@Test
@@ -782,8 +762,7 @@ class ReservationServiceTest {
 		ReservationPaymentRequest request = new ReservationPaymentRequest("홍길동", "010-1234-5678", "idem-expired-1");
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
-		when(reservationExpirationService.expireIfHeldAndExpired(eq(reservation), any(LocalDateTime.class)))
-			.thenReturn(true);
+		// expireOne 은 void → 목은 기본적으로 아무 일도 하지 않는다(만료 처리 위임).
 
 		// when
 		BusinessException exception = assertThrows(
@@ -793,7 +772,7 @@ class ReservationServiceTest {
 
 		// then
 		assertEquals(ErrorCode.RESERVATION_PAYMENT_EXPIRED, exception.getErrorCode());
-		verify(reservationExpirationService).expireIfHeldAndExpired(eq(reservation), any(LocalDateTime.class));
+		verify(reservationExpirationService).expireOne(eq(reservation), any(LocalDateTime.class));
 		verify(paymentRepository, never()).save(any(Payment.class));
 	}
 
@@ -917,12 +896,9 @@ class ReservationServiceTest {
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.findByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 			.thenReturn(Optional.empty());
-		when(reservationRepository.cancelConfirmedReservation(
-			eq(100L),
-			eq(ReservationStatus.CONFIRMED),
-			eq(ReservationStatus.CANCELED),
-			any(LocalDateTime.class)
-		)).thenReturn(0);
+		// DB 취소 트랜잭션이 조건부 업데이트 실패로 롤백(예외) 된 상황을 흉내낸다.
+		doThrow(new BusinessException(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS))
+			.when(reservationCommandService).cancelInTx(eq(100L), eq(1L), any(LocalDateTime.class));
 
 		// when
 		BusinessException exception = assertThrows(
@@ -932,7 +908,8 @@ class ReservationServiceTest {
 
 		// then
 		assertEquals(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS, exception.getErrorCode());
-		verify(reservationSlotRepository, never()).decreaseReservedCount(any(Long.class));
+		// 커밋 실패 → Redis 복구(INCR) 없음
+		verify(redisTemplate, never()).opsForValue();
 	}
 
 	// ────────── admission 검증 관련 신규 케이스 ──────────
