@@ -52,6 +52,11 @@ public class SecurityConfig {
 				.requestMatchers("/h2-console/**").permitAll()
 				.requestMatchers("/api/payments/confirm").permitAll()
 				.requestMatchers("/actuator/prometheus", "/actuator/health").permitAll()
+				.requestMatchers(
+					"/swagger-ui.html",
+					"/swagger-ui/**",
+					"/v3/api-docs/**"
+				).permitAll()
 				.requestMatchers(HttpMethod.GET, "/popups/*/waiting-status").authenticated()
 				.requestMatchers(HttpMethod.GET, "/popups/**").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/v1/goods/**").permitAll()

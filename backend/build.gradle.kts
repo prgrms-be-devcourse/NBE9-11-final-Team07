@@ -25,6 +25,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
     compileOnly("org.projectlombok:lombok")
@@ -64,4 +65,7 @@ tasks.withType<Test> {
 }
 tasks.jar {
     enabled = false
+}
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("-parameters")
 }

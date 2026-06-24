@@ -167,10 +167,9 @@ export default function Page() {
     setCurrentView('purchase-detail')
   }
 
-  function handleCouponBannerSelect(payload: CouponIssuancePayload) {
-    setCouponIssuancePayload(payload)
-    setCouponIssuancePrevView(currentView)
-    setCurrentView('coupon-issuance')
+  function handleCouponBannerSelect(storeId: string) {
+    setSelectedStoreId(storeId)
+    setCurrentView('detail')
   }
 
   function handleIssueCoupon(payload: CouponIssuancePayload) {
@@ -224,11 +223,6 @@ export default function Page() {
   function handleOrgEditGoods(goodsId: string) {
     setOrgEditGoodsId(goodsId)
     setCurrentView('org-goods-edit')
-  }
-
-  function handleViewAllCoupons() {
-    setActiveTab('coupons')
-    setCurrentView('coupons')
   }
 
   // Bottom nav is hidden for transient screens
@@ -313,7 +307,6 @@ export default function Page() {
               onViewAllReservations={handleGoReservations}
               onViewAllPurchases={handleViewAllPurchases}
               onViewPurchaseDetail={handleViewPurchaseDetail}
-              onViewAllCoupons={handleViewAllCoupons}
               onGoPopupStoreManagement={handleGoPopupStoreManagement}
             />
           )}

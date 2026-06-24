@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, TicketIcon, CheckCircle, Loader2, Tag, Clock, ShoppingCart } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { popupStores } from '@/lib/data'
 import type { CouponIssuancePayload } from '@/lib/data'
 import { ApiError } from '@/lib/api'
 import { couponApi, formatDiscount } from '@/lib/coupon-api'
 import type { CouponResponse } from '@/lib/coupon-api'
+import { getPopupDetail } from '@/lib/popup-api'
 
 type IssuanceState = 'loading' | 'available' | 'issuing' | 'issued' | 'already-issued' | 'sold-out'
 
@@ -18,8 +18,8 @@ interface CouponIssuanceScreenProps {
 }
 
 export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponIssuanceScreenProps) {
-  const store = popupStores.find((s) => s.id === payload.storeId)
   const [coupon, setCoupon] = useState<CouponResponse | null>(null)
+  const [storeInfo, setStoreInfo] = useState<{ name: string; image: string } | null>(null)
   const [state, setState] = useState<IssuanceState>('loading')
   const [error, setError] = useState<string | null>(null)
 
@@ -31,6 +31,20 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
         const coupons = await couponApi.getPublicCoupons(payload.storeId)
         const current = coupons.find((item) => String(item.id) === payload.couponId)
         if (!current) throw new Error('발급 가능한 쿠폰을 찾을 수 없습니다.')
+
+        let nextStoreInfo = {
+          name: current.popupStoreTitle,
+          image: '/placeholder.jpg',
+        }
+        try {
+          const popup = await getPopupDetail(payload.storeId)
+          nextStoreInfo = {
+            name: popup.title,
+            image: popup.imageUrl ?? '/placeholder.jpg',
+          }
+        } catch {
+          // Coupon data still has the popup title, so the issuance flow can continue.
+        }
 
         let alreadyIssued = false
         try {
@@ -44,6 +58,7 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
 
         if (!cancelled) {
           setCoupon(current)
+          setStoreInfo(nextStoreInfo)
           setState(alreadyIssued ? 'already-issued' : 'available')
         }
       } catch (loadError) {
@@ -82,8 +97,6 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
     }
   }
 
-  if (!store) return null
-
   if (!coupon) {
     return (
       <div className="flex flex-col h-full">
@@ -118,9 +131,15 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
           {/* Store name */}
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg overflow-hidden bg-secondary shrink-0">
-              <img src={store.image} alt={store.name} className="w-full h-full object-cover" />
+              <img
+                src={storeInfo?.image ?? '/placeholder.jpg'}
+                alt={storeInfo?.name ?? coupon.popupStoreTitle}
+                className="w-full h-full object-cover"
+              />
             </div>
-            <p className="text-sm font-semibold text-muted-foreground truncate">{store.name}</p>
+            <p className="text-sm font-semibold text-muted-foreground truncate">
+              {storeInfo?.name ?? coupon.popupStoreTitle}
+            </p>
           </div>
 
           {/* Coupon Card */}
@@ -175,8 +194,10 @@ export function CouponIssuanceScreen({ payload, onBack, onGoMyCoupons }: CouponI
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Tag size={13} className="text-muted-foreground shrink-0" />
-                  <span className="text-[12px] text-muted-foreground">사용 가능 장소</span>
-                  <span className="text-[12px] font-semibold text-foreground ml-auto">현장 결제 시</span>
+                  <span className="text-[12px] text-muted-foreground">대상 팝업</span>
+                  <span className="text-[12px] font-semibold text-foreground ml-auto truncate max-w-[160px]">
+                    {storeInfo?.name ?? coupon.popupStoreTitle}
+                  </span>
                 </div>
               </div>
             </div>
