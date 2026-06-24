@@ -35,6 +35,7 @@ import com.back.popspot.domain.user.repository.UserRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 import com.back.popspot.global.exception.ReservationPaymentExpiredException;
+import com.back.popspot.global.queue.service.WaitingQueueRedisService;
 import com.back.popspot.global.redis.RedisKeys;
 
 import lombok.RequiredArgsConstructor;
@@ -57,6 +58,7 @@ public class ReservationService {
 	private final ReservationExpirationService reservationExpirationService;
 	private final ReservationCommandService reservationCommandService;
 	private final RedisTemplate<String, Long> redisTemplate;
+	private final WaitingQueueRedisService waitingQueueRedisService;
 
 	@Transactional(readOnly = true)
 	public Page<MyReservationResponse> getMyReservations(Long userId, Pageable pageable) {
@@ -81,6 +83,11 @@ public class ReservationService {
 		//    각 조회는 짧은 단일 트랜잭션으로 즉시 커넥션을 반납한다.
 		ReservationSlot slot = reservationSlotRepository.findByIdWithPopupStore(request.slotId())
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_SLOT_NOT_FOUND));
+
+		long popupId = slot.getPopupStore().getId();
+		if (!waitingQueueRedisService.hasProceedPermission(popupId, userId.toString())) {
+			throw new BusinessException(ErrorCode.RESERVATION_ADMISSION_REQUIRED);
+		}
 
 		LocalDateTime now = LocalDateTime.now();
 		LocalDateTime slotDateTime = LocalDateTime.of(slot.getSlotDate(), slot.getStartTime());
@@ -113,6 +120,9 @@ public class ReservationService {
 			redisTemplate.opsForValue().increment(remainingKey);
 			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
 		}
+
+		// 차감 성공 = 예약 확정. proceed flag를 즉시 소각해 동일 팝업 재사용을 막는다.
+		waitingQueueRedisService.revokeProceedPermission(popupId, userId.toString());
 
 		// 3. DB 저장은 별도 빈의 @Transactional 메서드에 위임한다.
 		//    커밋 단계 실패까지 여기 try-catch 가 잡아 remaining 을 롤백한다.
