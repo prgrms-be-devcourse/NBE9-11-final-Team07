@@ -52,9 +52,11 @@ public class CouponService {
 		validateHostOwner(hostUserId, popupStore);
 		LocalDateTime now = LocalDateTime.now();
 
-		return couponRepository.findByPopupStoreIdOrderByCreatedAtDesc(popupStoreId)
-			.stream()
-			.peek(coupon -> coupon.expireIfExpired(now))
+		// 데이터를 먼저 조회한 뒤 반복문을 통해 상태 변경 후 DTO로 변환
+		List<Coupon> coupons = couponRepository.findByPopupStoreIdOrderByCreatedAtDesc(popupStoreId);
+		coupons.forEach(coupon -> coupon.expireIfExpired((now)));
+
+		return coupons.stream()
 			.map(CouponResponse::from)
 			.toList();
 	}
@@ -100,7 +102,8 @@ public class CouponService {
 	@Transactional
 	public UserCouponResponse issueCoupon(Long userId, Long couponId) {
 		User user = getUser(userId);
-		Coupon coupon = couponRepository.findWithPopupStoreById(couponId)
+
+		Coupon coupon = couponRepository.findWithPopupStoreByIdForUpdate(couponId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		if (userCouponRepository.existsByUserIdAndCouponId(userId, couponId)) {
@@ -109,12 +112,16 @@ public class CouponService {
 
 		LocalDateTime now = LocalDateTime.now();
 		coupon.expireIfExpired(now);
+
 		if (!coupon.isIssuable(now)) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 
 		coupon.issue();
-		UserCoupon userCoupon = userCouponRepository.save(UserCoupon.issue(user, coupon));
+
+		UserCoupon userCoupon =
+			userCouponRepository.save(UserCoupon.issue(user, coupon));
+
 		return UserCouponResponse.from(userCoupon);
 	}
 
@@ -126,12 +133,15 @@ public class CouponService {
 		}
 		LocalDateTime now = LocalDateTime.now();
 
-		return userCouponRepository.findByUserIdOrderByCreatedAtDesc(userId)
-			.stream()
-			.peek(userCoupon -> {
-				userCoupon.getCoupon().expireIfExpired(now);
-				userCoupon.expireIfExpired(now);
-			})
+		// 만료여부 확인 시 UserCoupon, Coupon이 LAZY이므로 루프를 돌 때마다 N+1 문제 발생
+		// Coupon 엔터티를 FETCH JOIN하여 한번에 가져오도록 개선
+		List<UserCoupon> userCoupons = userCouponRepository.findByUserIdOrderByCreatedAtDesc(userId);
+		userCoupons.forEach(userCoupon -> {
+			userCoupon.getCoupon().expireIfExpired(now);
+			userCoupon.expireIfExpired(now);
+		});
+
+		return userCoupons.stream()
 			.map(UserCouponResponse::from)
 			.toList();
 	}
