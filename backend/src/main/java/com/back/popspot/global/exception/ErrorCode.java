@@ -34,6 +34,7 @@ public enum ErrorCode {
 
 	COUPON_ALREADY_ISSUED(HttpStatus.CONFLICT, "이미 발급받은 쿠폰입니다."),
 	RESERVATION_CAPACITY_EXCEEDED(HttpStatus.CONFLICT, "예약 가능한 인원이 가득 찼습니다."),
+	RESERVATION_CAPACITY_OVERBOOKING_SUSPECTED(HttpStatus.CONFLICT, "DB 기준 활성 예약 수가 슬롯 정원을 초과했습니다."),
 	RESERVATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 예약한 슬롯입니다."),
 	RESERVATION_PAYMENT_ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 승인 완료된 예약 결제입니다."),
 
