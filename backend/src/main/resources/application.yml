@@ -63,3 +63,9 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+cors:
+  allowed-origin-patterns:
+    - "http://localhost:3000"   # 로컬 개발
+    - "https://nbe-9-11-final-team07.vercel.app"    # 운영 도메인
+    - "https://nbe-9-11-final-team07-*.vercel.app"  # Preview 배포들

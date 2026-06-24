@@ -2,6 +2,7 @@ package com.back.popspot.global.security;
 
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -33,6 +34,9 @@ public class SecurityConfig {
 	private final OAuth2SuccessHandler oAuth2SuccessHandler;
 	private final OAuth2FailureHandler oAuth2FailureHandler;
 	private final HttpCookieOAuth2AuthorizationRequestRepository authorizationRequestRepository;
+
+	@Value("${cors.allowed-origin-patterns}")
+	private List<String> allowedOriginPatterns;
 
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -91,11 +95,7 @@ public class SecurityConfig {
 	@Bean
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
-		config.setAllowedOriginPatterns(List.of(
-				"http://localhost:3000",	// 로컬 개발
-				"https://nbe-9-11-final-team07.vercel.app",		// 운영 도메인
-				"https://nbe-9-11-final-team07-*.vercel.app"	// Preview 배포들
-		));
+		config.setAllowedOriginPatterns(allowedOriginPatterns);
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 		config.setAllowedHeaders(List.of("*"));
 		// 쿠키(access_token) 전송을 위해 필수
