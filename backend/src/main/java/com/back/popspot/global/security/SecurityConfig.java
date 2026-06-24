@@ -92,9 +92,9 @@ public class SecurityConfig {
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
 		config.setAllowedOriginPatterns(List.of(
-				"http://localhost:3000",
-				"https://nbe-9-11-final-team07.vercel.app",
-				"https://nbe-9-11-final-team07-*.vercel.app"
+				"http://localhost:3000",	// 로컬 개발
+				"https://nbe-9-11-final-team07.vercel.app",		// 운영 도메인
+				"https://nbe-9-11-final-team07-*.vercel.app"	// Preview 배포들
 		));
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 		config.setAllowedHeaders(List.of("*"));
