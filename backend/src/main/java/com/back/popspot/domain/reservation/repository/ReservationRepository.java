@@ -24,8 +24,18 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
 	long countBySlotIdAndStatusIn(Long slotId, Collection<ReservationStatus> statuses);
 
-	// 만료 시간이 지난 선점 예약 조회
-	List<Reservation> findByStatusAndHeldUntilBefore(ReservationStatus status, LocalDateTime now);
+	// 만료 시간이 지난 선점 예약 조회 (slot 함께 로딩 — 트랜잭션 밖 접근 대비)
+	@Query("""
+   select reservation
+   from Reservation reservation
+   join fetch reservation.slot
+   where reservation.status = :status
+   and reservation.heldUntil < :now
+   """)
+	List<Reservation> findByStatusAndHeldUntilBefore(
+		@Param("status") ReservationStatus status,
+		@Param("now") LocalDateTime now
+	);
 
 	// 확정 예약만 취소 상태로 변경
 	@Modifying
