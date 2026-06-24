@@ -22,6 +22,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 	// 사용자의 확정/취소 예약 목록 조회
 	Page<Reservation> findByUserIdAndStatusIn(Long userId, Collection<ReservationStatus> statuses, Pageable pageable);
 
+	long countBySlotIdAndStatusIn(Long slotId, Collection<ReservationStatus> statuses);
+
 	// 만료 시간이 지난 선점 예약 조회
 	List<Reservation> findByStatusAndHeldUntilBefore(ReservationStatus status, LocalDateTime now);
 
