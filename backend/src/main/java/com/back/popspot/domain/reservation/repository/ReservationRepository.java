@@ -17,7 +17,7 @@ import com.back.popspot.domain.reservation.entity.ReservationStatus;
 public interface ReservationRepository extends JpaRepository<Reservation, Long> {
 
 	// 같은 유저의 같은 슬롯 예약 존재 여부 확인
-	boolean existsByUserIdAndSlotId(Long userId, Long slotId);
+	boolean existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(Long userId, Long slotId);
 
 	// 사용자의 확정/취소 예약 목록 조회
 	Page<Reservation> findByUserIdAndStatusIn(Long userId, Collection<ReservationStatus> statuses, Pageable pageable);
@@ -30,7 +30,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 	@Query("""
 		update Reservation reservation
 		set reservation.status = :canceledStatus,
-			reservation.canceledAt = :canceledAt
+			reservation.canceledAt = :canceledAt,
+			reservation.activeUniqueKey = null
 		where reservation.id = :reservationId
 		and reservation.status = :confirmedStatus
 		""")
@@ -45,7 +46,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 	@Modifying(flushAutomatically = true)
 	@Query("""
 		update Reservation reservation
-		set reservation.status = :expiredStatus
+		set reservation.status = :expiredStatus,
+			reservation.activeUniqueKey = null
 		where reservation.id = :reservationId
 		and reservation.status = :heldStatus
 		and reservation.heldUntil < :now

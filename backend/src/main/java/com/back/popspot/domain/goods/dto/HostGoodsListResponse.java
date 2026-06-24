@@ -7,17 +7,15 @@ public record HostGoodsListResponse(
     String name,
     int price,
     int stock,
-    String productImageUrl,
-    String detailImageUrl
+    String productImageUrl
 ) {
-    public static HostGoodsListResponse from(Goods goods, String productImageUrl, String detailImageUrl) {
+    public static HostGoodsListResponse from(Goods goods, String productImageUrl) {
         return new HostGoodsListResponse(
             goods.getId(),
             goods.getName(),
             goods.getPrice(),
             goods.getStock(),
-            productImageUrl,
-            detailImageUrl
+            productImageUrl
         );
     }
 }

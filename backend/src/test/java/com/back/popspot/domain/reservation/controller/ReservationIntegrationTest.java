@@ -11,11 +11,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -35,6 +38,7 @@ import com.back.popspot.domain.reservation.entity.ReservationStatus;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
+import com.back.popspot.global.redis.RedisKeys;
 import com.back.popspot.support.IntegrationTestSupport;
 
 import jakarta.persistence.EntityManager;
@@ -60,8 +64,23 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 	@Autowired
 	private PaymentRepository paymentRepository;
 
+	@Autowired
+	private RedisTemplate<String, Long> redisTemplate;
+
+	// 테스트에서 초기화한 재고 카운터 키를 추적해 @AfterEach 에서 정리한다.
+	// (Redis 는 JPA 트랜잭션 롤백 대상이 아니라 키가 남기 때문에 직접 지워야 한다.)
+	private final List<Long> persistedSlotIds = new ArrayList<>();
+
+	@AfterEach
+	void cleanUpRedisCounters() {
+		for (Long slotId : persistedSlotIds) {
+			redisTemplate.delete(RedisKeys.reservationSlotRemaining(slotId));
+		}
+		persistedSlotIds.clear();
+	}
+
 	@Test
-	@DisplayName("예약 선점에 성공하면 HELD 예약을 저장하고 슬롯 예약 수를 증가시킨다")
+	@DisplayName("예약 선점에 성공하면 HELD 예약을 저장하고 남은 재고(remaining)를 차감한다")
 	void createReservation_success() throws Exception {
 		User user = persistUser("user@test.com");
 		ReservationSlot slot = persistSlot(persistPopup(user, PopupFeeType.FREE, null, "무료 팝업"), 10, 0);
@@ -83,12 +102,54 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 
 		List<Reservation> reservations = reservationRepository.findAll();
 		Reservation savedReservation = reservations.get(0);
-		ReservationSlot savedSlot = reservationSlotRepository.findById(slot.getId()).orElseThrow();
 
 		assertThat(reservations).hasSize(1);
 		assertThat(savedReservation.getUser().getId()).isEqualTo(user.getId());
 		assertThat(savedReservation.getStatus()).isEqualTo(ReservationStatus.HELD);
-		assertThat(savedSlot.getReservedCount()).isEqualTo(1);
+		// 단일 카운터: 재고의 source of truth 는 Redis remaining (10 → 9 차감)
+		Long remaining = redisTemplate.opsForValue().get(RedisKeys.reservationSlotRemaining(slot.getId()));
+		assertThat(remaining).isEqualTo(9L);
+		assertThat(savedReservation.getActiveUniqueKey()).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("취소 또는 만료 이력만 있으면 같은 슬롯을 다시 예약할 수 있다")
+	void createReservation_success_whenOnlyInactiveReservationsExist() throws Exception {
+		User user = persistUser("inactive-history@test.com");
+		ReservationSlot slot = persistSlot(persistPopup(user, PopupFeeType.FREE, null, "재예약 팝업"), 10, 0);
+		Reservation canceled = persistReservation(user, slot, ReservationStatus.CANCELED);
+		Reservation expired = persistReservation(user, slot, ReservationStatus.EXPIRED);
+
+		flushAndClear();
+
+		mockMvc.perform(post("/reservations")
+				.with(authentication(auth(user.getId())))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "slotId": %d
+					}
+					""".formatted(slot.getId())))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.code").value("SUCCESS"))
+			.andExpect(jsonPath("$.data.status").value("HELD"))
+			.andExpect(jsonPath("$.data.slotId").value(slot.getId()));
+
+		flushAndClear();
+
+		List<Reservation> reservations = reservationRepository.findAll();
+		Reservation savedCanceled = reservationRepository.findById(canceled.getId()).orElseThrow();
+		Reservation savedExpired = reservationRepository.findById(expired.getId()).orElseThrow();
+
+		assertThat(reservations).hasSize(3);
+		assertThat(savedCanceled.getActiveUniqueKey()).isNull();
+		assertThat(savedExpired.getActiveUniqueKey()).isNull();
+		assertThat(reservations)
+			.filteredOn(reservation -> reservation.getStatus() == ReservationStatus.HELD)
+			.hasSize(1)
+			.allSatisfy(reservation -> assertThat(reservation.getActiveUniqueKey()).isEqualTo(1));
+		Long remaining = redisTemplate.opsForValue().get(RedisKeys.reservationSlotRemaining(slot.getId()));
+		assertThat(remaining).isEqualTo(9L);
 	}
 
 	@Test
@@ -246,7 +307,15 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 		);
 		ReservationSlot slot = ReservationSlot.of(popupStore, request);
 		ReflectionTestUtils.setField(slot, "reservedCount", reservedCount);
-		return reservationSlotRepository.save(slot);
+		ReservationSlot saved = reservationSlotRepository.save(slot);
+
+		// 운영에선 슬롯 생성 커밋 후 카운터가 초기화되지만, 통합 테스트는 @Transactional 이라
+		// afterCommit 이 돌지 않는다. 이미 잡힌 reservedCount 와 정합하도록 직접 초기화한다.
+		// (remaining = 남은 자리)
+		redisTemplate.opsForValue().set(RedisKeys.reservationSlotRemaining(saved.getId()), (long) (capacity - reservedCount));
+		persistedSlotIds.add(saved.getId());
+
+		return saved;
 	}
 
 	private Reservation persistReservation(User user, ReservationSlot slot, ReservationStatus status) {

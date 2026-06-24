@@ -120,7 +120,6 @@ export default function OrganizerPage() {
           {view === 'goods-list' && (
             <GoodsListScreen
               storeId={goodsStoreId}
-              storeName={goodsStoreName}
               onBack={handleBack}
               onAdd={handleAddGoods}
               onEdit={handleEditGoods}
@@ -145,7 +144,6 @@ export default function OrganizerPage() {
               goodsId={editGoodsId}
               onBack={handleBack}
               onSaved={handleBack}
-              onDeleted={handleBack}
             />
           )}
 

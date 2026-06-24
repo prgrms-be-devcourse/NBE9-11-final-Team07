@@ -4,6 +4,58 @@ import type { GoodsItem } from '@/lib/data'
 export type GoodsStatus = 'ON_SALE' | 'ENDED'
 export type GoodsOrderStatus = 'PENDING' | 'PAID' | 'REFUNDED' | 'EXPIRED'
 
+export type GoodsImageType = 'PRODUCT' | 'DETAIL'
+
+export interface GoodsImagePresignRequest {
+  imageType: GoodsImageType
+  fileNames: string[]
+}
+
+export interface GoodsImagePresignResponse {
+  imageKey: string
+  presignedUrl: string
+}
+
+export interface ImageKeyEntry {
+  imageKey: string
+  imageType: GoodsImageType
+}
+
+export async function presignGoodsImage(
+  imageType: GoodsImageType,
+  fileName: string,
+): Promise<GoodsImagePresignResponse> {
+  const results = await apiRequest<GoodsImagePresignResponse[]>('/api/v1/host/goods/images', {
+    method: 'POST',
+    body: JSON.stringify({ imageType, fileNames: [fileName] } satisfies GoodsImagePresignRequest),
+  })
+  return results[0]
+}
+
+export async function uploadGoodsImageToS3(presignedUrl: string, file: File): Promise<void> {
+  const res = await fetch(presignedUrl, { method: 'PUT', body: file })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    const code = body.match(/<Code>(.*?)<\/Code>/)?.[1]
+    throw new Error(`이미지 업로드 실패 (${res.status}${code ? `: ${code}` : ''})`)
+  }
+}
+
+export async function uploadGoodsImage(imageType: GoodsImageType, file: File): Promise<string> {
+  const { imageKey, presignedUrl } = await presignGoodsImage(imageType, file.name)
+  await uploadGoodsImageToS3(presignedUrl, file)
+  return imageKey
+}
+
+export interface HostGoodsListResponse {
+  id: number
+  name: string
+  price: number
+  stock: number
+  productImageUrl: string | null
+  detailImageUrl: string | null
+}
+
 export interface PageResponse<T> {
   content: T[]
   page: number
@@ -114,6 +166,72 @@ export const ORDER_STATUS_LABEL: Record<GoodsOrderStatus, string> = {
   PAID: '결제 완료',
   REFUNDED: '환불 완료',
   EXPIRED: '주문 만료',
+}
+
+export interface GoodsRegisterRequest {
+  name: string
+  price: number
+  stock: number
+  description?: string
+  imageKeys: ImageKeyEntry[]
+}
+
+export interface GoodsRegisterResponse {
+  id: number
+  popupStoreId: number
+  name: string
+  price: number
+  stock: number
+  description: string | null
+}
+
+export const registerGoods = (popupStoreId: string, request: GoodsRegisterRequest) =>
+  apiRequest<GoodsRegisterResponse>(`/api/v1/host/popups/${popupStoreId}/goods`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+
+export interface HostGoodsDetailResponse {
+  id: number
+  name: string
+  price: number
+  stock: number
+  description: string | null
+  productImageUrl: string | null
+  detailImageUrl: string | null
+}
+
+export interface GoodsUpdateRequest {
+  name?: string
+  price?: number
+  stock?: number
+  description?: string | null
+  imageKeys?: ImageKeyEntry[]
+}
+
+export interface GoodsUpdateResponse {
+  id: number
+  name: string
+  price: number
+  stock: number
+  description: string | null
+}
+
+export const getHostGoodsDetail = (goodsId: string) =>
+  apiRequest<HostGoodsDetailResponse>(`/api/v1/host/goods/${goodsId}`)
+
+export const updateHostGoods = (goodsId: string, request: GoodsUpdateRequest) =>
+  apiRequest<GoodsUpdateResponse>(`/api/v1/host/goods/${goodsId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(request),
+  })
+
+export const deleteHostGoods = (goodsId: string) =>
+  apiRequest<void>(`/api/v1/host/goods/${goodsId}`, { method: 'DELETE' })
+
+export const hostGoodsApi = {
+  getGoods: (popupStoreId: string) =>
+    apiRequest<HostGoodsListResponse[]>(`/api/v1/host/popups/${popupStoreId}/goods`),
 }
 
 export const goodsApi = {

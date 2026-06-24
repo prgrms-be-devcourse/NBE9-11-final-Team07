@@ -21,9 +21,11 @@ repositories {
 dependencies {
     implementation("org.springframework.boot:spring-boot-h2console")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
     compileOnly("org.projectlombok:lombok")
@@ -45,6 +47,13 @@ dependencies {
     implementation("software.amazon.awssdk:s3")
     implementation("software.amazon.awssdk:url-connection-client")
 
+    // Redis
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+
+    // ShedLock — distributed scheduler lock (Redis provider)
+    implementation("net.javacrumbs.shedlock:shedlock-spring:7.7.0")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-redis-spring:7.7.0")
+
     // JWT
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
@@ -56,4 +65,7 @@ tasks.withType<Test> {
 }
 tasks.jar {
     enabled = false
+}
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("-parameters")
 }

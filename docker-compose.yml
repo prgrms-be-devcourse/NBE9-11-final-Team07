@@ -35,6 +35,7 @@ services:
       - backend/.env
     environment:
       - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/popspot_db?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
     depends_on:
       db:

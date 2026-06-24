@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
@@ -24,6 +26,7 @@ import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
 import com.back.popspot.global.exception.BusinessException;
+import com.back.popspot.global.redis.RedisKeys;
 
 @ExtendWith(MockitoExtension.class)
 class ReservationExpirationServiceTest {
@@ -34,13 +37,20 @@ class ReservationExpirationServiceTest {
 	@Mock
 	private ReservationSlotRepository reservationSlotRepository;
 
+	@Mock
+	private RedisTemplate<String, Long> redisTemplate;
+
+	@Mock
+	private ValueOperations<String, Long> valueOperations;
+
 	@Test
 	@DisplayName("만료된 HELD 예약은 EXPIRED로 변경하고 슬롯 정원을 복구한다")
 	void expireExpiredReservations_success() {
 		// given
 		ReservationExpirationService service = new ReservationExpirationService(
 			reservationRepository,
-			reservationSlotRepository
+			reservationSlotRepository,
+			redisTemplate
 		);
 		Reservation reservation = createReservation(100L, 1L);
 
@@ -53,6 +63,7 @@ class ReservationExpirationServiceTest {
 			any(LocalDateTime.class)
 		)).thenReturn(1);
 		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
+		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
 		// when
 		service.expireExpiredReservations();
@@ -66,6 +77,8 @@ class ReservationExpirationServiceTest {
 			any(LocalDateTime.class)
 		);
 		verify(reservationSlotRepository).decreaseReservedCount(1L);
+		// HELD 만료로 점유가 풀렸으므로 remaining 복구
+		verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
 	}
 
 	@Test
@@ -74,7 +87,8 @@ class ReservationExpirationServiceTest {
 		// given
 		ReservationExpirationService service = new ReservationExpirationService(
 			reservationRepository,
-			reservationSlotRepository
+			reservationSlotRepository,
+			redisTemplate
 		);
 		Reservation reservation = createReservation(100L, 1L);
 		LocalDateTime now = LocalDateTime.now();
@@ -100,7 +114,8 @@ class ReservationExpirationServiceTest {
 		// given
 		ReservationExpirationService service = new ReservationExpirationService(
 			reservationRepository,
-			reservationSlotRepository
+			reservationSlotRepository,
+			redisTemplate
 		);
 		Reservation reservation = createReservation(100L, 1L);
 		LocalDateTime now = LocalDateTime.now();

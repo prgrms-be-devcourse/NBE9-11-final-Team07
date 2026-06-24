@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.BDDMockito.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +22,7 @@ import com.back.popspot.domain.coupon.entity.Coupon;
 import com.back.popspot.domain.coupon.entity.CouponDiscountType;
 import com.back.popspot.domain.coupon.entity.CouponStatus;
 import com.back.popspot.domain.coupon.entity.UserCoupon;
+import com.back.popspot.domain.coupon.entity.UserCouponStatus;
 import com.back.popspot.domain.coupon.repository.CouponRepository;
 import com.back.popspot.domain.coupon.repository.UserCouponRepository;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
@@ -116,7 +118,7 @@ class CouponServiceTest {
 		User user = createUser(userId);
 		Coupon coupon = createCoupon(couponId, 10L, 2);
 		given(userRepository.findById(userId)).willReturn(Optional.of(user));
-		given(couponRepository.findWithPopupStoreById(couponId)).willReturn(Optional.of(coupon));
+		given(couponRepository.findWithPopupStoreByIdForUpdate(couponId)).willReturn(Optional.of(coupon));
 		given(userCouponRepository.existsByUserIdAndCouponId(userId, couponId)).willReturn(true);
 
 		assertThatThrownBy(() -> couponService.issueCoupon(userId, couponId))
@@ -133,7 +135,7 @@ class CouponServiceTest {
 		User user = createUser(userId);
 		Coupon coupon = createCoupon(couponId, 10L, 2);
 		given(userRepository.findById(userId)).willReturn(Optional.of(user));
-		given(couponRepository.findWithPopupStoreById(couponId)).willReturn(Optional.of(coupon));
+		given(couponRepository.findWithPopupStoreByIdForUpdate(couponId)).willReturn(Optional.of(coupon));
 		given(userCouponRepository.existsByUserIdAndCouponId(userId, couponId)).willReturn(false);
 		given(userCouponRepository.save(org.mockito.ArgumentMatchers.any(UserCoupon.class)))
 			.willAnswer(invocation -> {
@@ -159,7 +161,7 @@ class CouponServiceTest {
 		User user = createUser(userId);
 		Coupon coupon = createCoupon(couponId, 10L, 1);
 		given(userRepository.findById(userId)).willReturn(Optional.of(user));
-		given(couponRepository.findWithPopupStoreById(couponId)).willReturn(Optional.of(coupon));
+		given(couponRepository.findWithPopupStoreByIdForUpdate(couponId)).willReturn(Optional.of(coupon));
 		given(userCouponRepository.existsByUserIdAndCouponId(userId, couponId)).willReturn(false);
 		given(userCouponRepository.save(org.mockito.ArgumentMatchers.any(UserCoupon.class)))
 			.willAnswer(invocation -> invocation.getArgument(0));
@@ -168,6 +170,26 @@ class CouponServiceTest {
 
 		assertThat(coupon.getIssuedQuantity()).isEqualTo(1);
 		assertThat(coupon.getStatus()).isEqualTo(CouponStatus.SOLDOUT);
+	}
+
+	@Test
+	@DisplayName("내 쿠폰 조회 시 만료된 발급 쿠폰은 EXPIRED 상태로 반환")
+	void getMyCoupons_expireIssuedCoupon() {
+		Long userId = 1L;
+		User user = createUser(userId);
+		Coupon coupon = createExpiredCoupon(100L, 10L, 10);
+		UserCoupon userCoupon = UserCoupon.issue(user, coupon);
+		ReflectionTestUtils.setField(userCoupon, "id", 200L);
+		ReflectionTestUtils.setField(userCoupon, "createdAt", LocalDateTime.now().minusDays(2));
+
+		given(userRepository.existsById(userId)).willReturn(true);
+		given(userCouponRepository.findByUserIdOrderByCreatedAtDesc(userId)).willReturn(List.of(userCoupon));
+
+		List<UserCouponResponse> response = couponService.getMyCoupons(userId);
+
+		assertThat(response).hasSize(1);
+		assertThat(response.getFirst().status()).isEqualTo(UserCouponStatus.EXPIRED);
+		assertThat(coupon.getStatus()).isEqualTo(CouponStatus.EXPIRED);
 	}
 
 	private CouponCreateRequest createRequest(LocalDateTime startedAt, LocalDateTime expiredAt, int totalQuantity) {
@@ -191,6 +213,17 @@ class CouponServiceTest {
 		);
 		ReflectionTestUtils.setField(coupon, "id", couponId);
 		ReflectionTestUtils.setField(coupon, "createdAt", LocalDateTime.now());
+		return coupon;
+	}
+
+	private Coupon createExpiredCoupon(Long couponId, Long popupStoreId, int totalQuantity) {
+		PopupStore popupStore = createPopupStore(popupStoreId, 2L);
+		Coupon coupon = Coupon.create(
+			popupStore,
+			createRequest(LocalDateTime.now().minusDays(10), LocalDateTime.now().minusDays(1), totalQuantity)
+		);
+		ReflectionTestUtils.setField(coupon, "id", couponId);
+		ReflectionTestUtils.setField(coupon, "createdAt", LocalDateTime.now().minusDays(10));
 		return coupon;
 	}
 
