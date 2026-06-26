@@ -18,4 +18,9 @@ public class PaymentCompensationScheduler {
 	public void retryFailedCompensations() {
 		paymentService.retryFailedCompensations();
 	}
+
+	@Scheduled(fixedDelay = RETRY_DELAY_MILLIS)
+	public void retryFailedCancels() {
+		paymentService.retryFailedCancels();
+	}
 }

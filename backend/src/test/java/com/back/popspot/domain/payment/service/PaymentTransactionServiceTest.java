@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
@@ -195,12 +196,14 @@ class PaymentTransactionServiceTest {
 		assertThat(preparation.isCompleted()).isFalse();
 		assertThat(preparation.command().paymentKey()).isEqualTo("payment-key");
 		assertThat(preparation.command().amount()).isEqualTo(1000L);
+		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELING);
 	}
 
 	@Test
 	@DisplayName("실패한 환불 기록이 있으면 새로운 멱등키로 취소를 재시도한다")
 	void retryFailedPaymentCancelWithNewIdempotencyKey() {
 		Payment payment = paidPayment();
+		payment.failCancel();
 		PaymentRefund failedRefund = refund(payment, PaymentRefundStatus.FAILED);
 		PaymentCancelRequest request = new PaymentCancelRequest("재시도", "new-cancel-key");
 		given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
@@ -213,12 +216,14 @@ class PaymentTransactionServiceTest {
 		assertThat(preparation.isCompleted()).isFalse();
 		assertThat(preparation.command().idempotencyKey()).isEqualTo("new-cancel-key");
 		assertThat(preparation.command().cancelReason()).isEqualTo("재시도");
+		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELING);
 	}
 
 	@Test
 	@DisplayName("진행 중인 환불 기록이 있으면 새로운 멱등키 취소를 거부한다")
 	void rejectNewCancelWhileRefundIsRequested() {
 		Payment payment = paidPayment();
+		payment.beginCancel();
 		PaymentRefund requestedRefund = refund(payment, PaymentRefundStatus.REQUESTED);
 		PaymentCancelRequest request = new PaymentCancelRequest("중복 요청", "new-cancel-key");
 		given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
@@ -236,6 +241,7 @@ class PaymentTransactionServiceTest {
 	@DisplayName("토스 취소 완료 후 결제와 환불 상태를 변경한다")
 	void completePaymentCancel() {
 		Payment payment = paidPayment();
+		payment.beginCancel();
 		PaymentRefund refund = refund(payment, PaymentRefundStatus.REQUESTED);
 		PaymentCancelCommand command = cancelCommand();
 		LocalDateTime canceledAt = LocalDateTime.of(2026, 6, 16, 11, 0);
@@ -248,6 +254,37 @@ class PaymentTransactionServiceTest {
 		assertThat(refund.getStatus()).isEqualTo(PaymentRefundStatus.DONE);
 		assertThat(refund.getTransactionKey()).isEqualTo("transaction-key");
 		assertThat(refund.getCompletedAt()).isEqualTo(canceledAt);
+	}
+
+	@Test
+	@DisplayName("토스 취소 실패 시 결제와 환불을 재처리 대상 상태로 남긴다")
+	void failPaymentCancel() {
+		Payment payment = paidPayment();
+		payment.beginCancel();
+		PaymentRefund refund = refund(payment, PaymentRefundStatus.REQUESTED);
+		given(paymentRefundRepository.findByIdempotencyKey("cancel-key")).willReturn(Optional.of(refund));
+
+		paymentTransactionService.failCancel("cancel-key");
+
+		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCEL_FAILED);
+		assertThat(refund.getStatus()).isEqualTo(PaymentRefundStatus.FAILED);
+	}
+
+	@Test
+	@DisplayName("실패한 일반 환불을 스케줄러 재시도 명령으로 준비한다")
+	void prepareFailedCancels() {
+		Payment payment = paidPayment();
+		payment.failCancel();
+		PaymentRefund failedRefund = refund(payment, PaymentRefundStatus.FAILED);
+		given(paymentRefundRepository.findTop20ByStatusOrderByIdAsc(PaymentRefundStatus.FAILED))
+			.willReturn(List.of(failedRefund));
+
+		List<PaymentCancelCommand> commands = paymentTransactionService.prepareFailedCancels();
+
+		assertThat(commands).hasSize(1);
+		assertThat(commands.get(0).idempotencyKey()).isEqualTo("cancel-key");
+		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELING);
+		assertThat(failedRefund.getStatus()).isEqualTo(PaymentRefundStatus.REQUESTED);
 	}
 
 	@Test

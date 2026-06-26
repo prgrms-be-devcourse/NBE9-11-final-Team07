@@ -149,7 +149,8 @@ public class PaymentTransactionService {
 			if (refund.getStatus() == PaymentRefundStatus.DONE) {
 				return PaymentCancelPreparation.completed(PaymentCancelResponse.from(refund));
 			}
-			validateCancelable(payment);
+			validateRetryableCancel(payment);
+			payment.retryCancel();
 			refund.retry();
 			return PaymentCancelPreparation.required(toCommand(payment, request));
 		}
@@ -161,12 +162,12 @@ public class PaymentTransactionService {
 			return PaymentCancelPreparation.completed(PaymentCancelResponse.from(refund));
 		}
 
-		validateCancelable(payment);
 		paymentRefundRepository.findFirstByPaymentIdOrderByIdDesc(paymentId)
 			.filter(refund -> refund.getStatus() == PaymentRefundStatus.REQUESTED)
 			.ifPresent(refund -> {
 				throw new BusinessException(ErrorCode.PAYMENT_CANCEL_ALREADY_REQUESTED);
 			});
+		validateCancelable(payment);
 
 		PaymentRefund refund = PaymentRefund.request(
 			payment,
@@ -176,6 +177,7 @@ public class PaymentTransactionService {
 			request.idempotencyKey()
 		);
 		paymentRefundRepository.save(refund);
+		payment.beginCancel();
 
 		return PaymentCancelPreparation.required(toCommand(payment, request));
 	}
@@ -192,7 +194,7 @@ public class PaymentTransactionService {
 		}
 
 		Payment payment = getPayment(command.paymentId());
-		if (!payment.isPaid()) {
+		if (!payment.isPaid() && !payment.isCanceling() && !payment.isCancelFailed()) {
 			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_NOT_ALLOWED_STATUS);
 		}
 
@@ -205,8 +207,30 @@ public class PaymentTransactionService {
 	public void failCancel(String idempotencyKey) {
 		PaymentRefund refund = getRefund(idempotencyKey);
 		if (refund.getStatus() == PaymentRefundStatus.REQUESTED) {
+			refund.getPayment().failCancel();
 			refund.fail();
 		}
+	}
+
+	@Transactional
+	public List<PaymentCancelCommand> prepareFailedCancels() {
+		return paymentRefundRepository.findTop20ByStatusOrderByIdAsc(PaymentRefundStatus.FAILED)
+			.stream()
+			.filter(refund -> refund.getPayment().getStatus() == PaymentStatus.CANCEL_FAILED)
+			.map(refund -> {
+				Payment payment = refund.getPayment();
+				payment.retryCancel();
+				refund.retry();
+				return new PaymentCancelCommand(
+					payment.getId(),
+					payment.getPaymentKey(),
+					payment.getOrderId(),
+					payment.getAmount(),
+					refund.getReason(),
+					refund.getIdempotencyKey()
+				);
+			})
+			.toList();
 	}
 
 	private Payment getPayment(Long paymentId) {
@@ -226,7 +250,14 @@ public class PaymentTransactionService {
 	}
 
 	private void validateCancelable(Payment payment) {
-		if (!payment.isPaid() || payment.getPaymentKey() == null) {
+		if ((!payment.isPaid() && !payment.isCancelFailed()) || payment.getPaymentKey() == null) {
+			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_NOT_ALLOWED_STATUS);
+		}
+	}
+
+	private void validateRetryableCancel(Payment payment) {
+		if ((!payment.isPaid() && !payment.isCanceling() && !payment.isCancelFailed())
+			|| payment.getPaymentKey() == null) {
 			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_NOT_ALLOWED_STATUS);
 		}
 	}
