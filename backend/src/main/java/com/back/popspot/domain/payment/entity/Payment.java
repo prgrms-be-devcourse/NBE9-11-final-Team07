@@ -163,6 +163,14 @@ public class Payment extends BaseEntity {
 		return status == PaymentStatus.CANCELED;
 	}
 
+	public boolean isCanceling() {
+		return status == PaymentStatus.CANCELING;
+	}
+
+	public boolean isCancelFailed() {
+		return status == PaymentStatus.CANCEL_FAILED;
+	}
+
 	public void beginConfirmation() {
 		this.status = PaymentStatus.CONFIRMING;
 	}
@@ -183,6 +191,18 @@ public class Payment extends BaseEntity {
 
 	public void cancel() {
 		this.status = PaymentStatus.CANCELED;
+	}
+
+	public void beginCancel() {
+		this.status = PaymentStatus.CANCELING;
+	}
+
+	public void failCancel() {
+		this.status = PaymentStatus.CANCEL_FAILED;
+	}
+
+	public void retryCancel() {
+		this.status = PaymentStatus.CANCELING;
 	}
 
 	public void beginCompensation(String paymentKey) {

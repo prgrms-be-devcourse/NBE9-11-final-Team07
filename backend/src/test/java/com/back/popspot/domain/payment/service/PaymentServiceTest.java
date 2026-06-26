@@ -9,6 +9,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
@@ -192,6 +193,46 @@ class PaymentServiceTest {
 		PaymentCancelResponse response = paymentService.cancel(10L, 1L, request);
 
 		assertThat(response).isEqualTo(expected);
+	}
+
+	@Test
+	@DisplayName("토스 취소 성공 후 DB 완료 처리 실패 시 환불 실패 상태로 기록한다")
+	void recordFailedCancelWhenCompleteFails() throws Exception {
+		PaymentCancelRequest request = new PaymentCancelRequest("구매자 변심", "cancel-key");
+		PaymentCancelCommand command = cancelCommand();
+		JsonNode tossResponse = cancelResponse("CANCELED", "DONE", 1000L);
+
+		given(paymentTransactionService.prepareCancel(10L, 1L, request))
+			.willReturn(PaymentCancelPreparation.required(command));
+		given(tossPaymentsClient.cancel(command)).willReturn(tossResponse);
+		given(paymentTransactionService.completeCancel(
+			command,
+			"transaction-key",
+			LocalDateTime.of(2026, 6, 16, 11, 0)
+		)).willThrow(new TransactionSystemException("commit failed"));
+
+		assertThatThrownBy(() -> paymentService.cancel(10L, 1L, request))
+			.isInstanceOf(TransactionSystemException.class);
+
+		verify(paymentTransactionService).failCancel("cancel-key");
+	}
+
+	@Test
+	@DisplayName("실패한 일반 환불을 스케줄러에서 재시도한다")
+	void retryFailedCancels() throws Exception {
+		PaymentCancelCommand command = cancelCommand();
+		JsonNode tossResponse = cancelResponse("CANCELED", "DONE", 1000L);
+
+		given(paymentTransactionService.prepareFailedCancels()).willReturn(List.of(command));
+		given(tossPaymentsClient.cancel(command)).willReturn(tossResponse);
+
+		paymentService.retryFailedCancels();
+
+		verify(paymentTransactionService).completeCancel(
+			command,
+			"transaction-key",
+			LocalDateTime.of(2026, 6, 16, 11, 0)
+		);
 	}
 
 	@Test

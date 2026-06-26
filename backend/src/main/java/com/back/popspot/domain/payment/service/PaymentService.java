@@ -77,6 +77,18 @@ public class PaymentService {
 		commands.forEach(this::executeCompensation);
 	}
 
+	public void retryFailedCancels() {
+		List<PaymentCancelCommand> commands = paymentTransactionService.prepareFailedCancels();
+		commands.forEach(command -> {
+			try {
+				executeCancel(command);
+			} catch (RuntimeException exception) {
+				log.error("Payment cancel retry failed. paymentId={}, orderId={}",
+					command.paymentId(), command.orderId(), exception);
+			}
+		});
+	}
+
 	private void executeCompensation(PaymentCancelCommand command) {
 		try {
 			JsonNode tossResponse = tossPaymentsClient.cancel(command);
@@ -120,6 +132,34 @@ public class PaymentService {
 			throw exception;
 		}
 
+		try {
+			return completeCancel(command, tossResponse);
+		} catch (RuntimeException exception) {
+			recordFailedCancel(command, exception);
+			throw exception;
+		}
+	}
+
+	private PaymentCancelResponse executeCancel(PaymentCancelCommand command) {
+		try {
+			JsonNode tossResponse = tossPaymentsClient.cancel(command);
+			validateTossCancelResponse(tossResponse, command);
+			return completeCancel(command, tossResponse);
+		} catch (RuntimeException exception) {
+			recordFailedCancel(command, exception);
+			throw exception;
+		}
+	}
+
+	private void recordFailedCancel(PaymentCancelCommand command, RuntimeException exception) {
+		try {
+			paymentTransactionService.failCancel(command.idempotencyKey());
+		} catch (RuntimeException recordingException) {
+			exception.addSuppressed(recordingException);
+		}
+	}
+
+	private PaymentCancelResponse completeCancel(PaymentCancelCommand command, JsonNode tossResponse) {
 		JsonNode cancel = tossResponse.path("cancels").get(tossResponse.path("cancels").size() - 1);
 		return paymentTransactionService.completeCancel(
 			command,
