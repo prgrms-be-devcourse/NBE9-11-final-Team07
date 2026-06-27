@@ -23,6 +23,7 @@ public class PaymentController {
 
 	private final PaymentService paymentService;
 
+	// 결제 승인 요청을 처리
 	@PostMapping("/confirm")
 	public PaymentConfirmResponse confirm(
 		@Valid @RequestBody PaymentConfirmRequest request
@@ -30,6 +31,7 @@ public class PaymentController {
 		return paymentService.confirm(request);
 	}
 
+	// 결제 취소 요청을 처리
 	@PostMapping("/{paymentId}/cancel")
 	public PaymentCancelResponse cancel(
 		@PathVariable Long paymentId,

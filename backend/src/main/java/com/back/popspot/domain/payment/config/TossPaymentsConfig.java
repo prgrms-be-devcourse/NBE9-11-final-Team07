@@ -8,6 +8,7 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class TossPaymentsConfig {
 
+	// 토스페이먼츠 요청용 RestClient를 생성
 	@Bean
 	public RestClient tossPaymentsRestClient(TossPaymentsProperties properties) {
 		return RestClient.builder()

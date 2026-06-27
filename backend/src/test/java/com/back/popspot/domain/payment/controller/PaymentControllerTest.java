@@ -56,7 +56,7 @@ class PaymentControllerTest {
 	@Test
 	@DisplayName("결제 승인 요청을 서비스에 전달한다")
 	void confirmPayment() throws Exception {
-		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L, "confirm-key");
 		PaymentConfirmResponse response = new PaymentConfirmResponse(
 			10L,
 			PaymentType.POPUP,
@@ -75,7 +75,8 @@ class PaymentControllerTest {
 					{
 					  "paymentKey": "payment-key",
 					  "orderId": "order-id",
-					  "amount": 1000
+					  "amount": 1000,
+					  "idempotencyKey": "confirm-key"
 					}
 					"""))
 			.andExpect(status().isOk())
@@ -97,7 +98,8 @@ class PaymentControllerTest {
 					{
 					  "paymentKey": "",
 					  "orderId": "",
-					  "amount": 0
+					  "amount": 0,
+					  "idempotencyKey": ""
 					}
 					"""))
 			.andExpect(status().isBadRequest())

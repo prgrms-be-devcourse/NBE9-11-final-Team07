@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 public record PaymentConfirmRequest(
 	@NotBlank String paymentKey,
 	@NotBlank String orderId,
-	@Min(1) long amount
+	@Min(1) long amount,
+	@NotBlank String idempotencyKey
 ) {
 }

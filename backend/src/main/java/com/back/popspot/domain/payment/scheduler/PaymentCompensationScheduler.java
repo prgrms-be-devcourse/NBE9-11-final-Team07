@@ -14,11 +14,13 @@ public class PaymentCompensationScheduler {
 
 	private final PaymentService paymentService;
 
+	// 실패한 보상 취소를 주기적으로 재시도
 	@Scheduled(fixedDelay = RETRY_DELAY_MILLIS)
 	public void retryFailedCompensations() {
 		paymentService.retryFailedCompensations();
 	}
 
+	// 실패한 일반 취소를 주기적으로 재시도
 	@Scheduled(fixedDelay = RETRY_DELAY_MILLIS)
 	public void retryFailedCancels() {
 		paymentService.retryFailedCancels();

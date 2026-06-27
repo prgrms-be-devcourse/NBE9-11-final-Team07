@@ -24,25 +24,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Table(name = "payment")
 public class Payment extends BaseEntity {
-	public static Payment createReady(
-		User user,
-		PaymentType paymentType,
-		String orderId,
-		String orderName,
-		long amount,
-		String idempotencyKey
-	) {
-		Payment payment = new Payment();
-		payment.user = user;
-		payment.paymentType = paymentType;
-		payment.orderId = orderId;
-		payment.orderName = orderName;
-		payment.amount = amount;
-		payment.status = PaymentStatus.READY;
-		payment.idempotencyKey = idempotencyKey;
-		return payment;
-	}
-
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "user_id", nullable = false)
 	private User user;
@@ -83,6 +64,15 @@ public class Payment extends BaseEntity {
 	@Column(name = "idempotency_key", length = 255, unique = true, nullable = false)
 	private String idempotencyKey;
 
+	// confirm 상태 확인용 멱등성 키
+	@Column(name = "confirm_idempotency_key", length = 255)
+	private String confirmIdempotencyKey;
+
+	// confirm 상태 변경 시간
+	@Column(name = "confirm_started_at")
+	private LocalDateTime confirmStartedAt;
+
+	// 결제 엔티티를 초기화
 	private Payment(
 		User user,
 		Reservation reservation,
@@ -105,6 +95,27 @@ public class Payment extends BaseEntity {
 		this.idempotencyKey = idempotencyKey;
 	}
 
+	// 대상을 특정하지 않은 READY 결제를 생성
+	public static Payment createReady(
+		User user,
+		PaymentType paymentType,
+		String orderId,
+		String orderName,
+		long amount,
+		String idempotencyKey
+	) {
+		Payment payment = new Payment();
+		payment.user = user;
+		payment.paymentType = paymentType;
+		payment.orderId = orderId;
+		payment.orderName = orderName;
+		payment.amount = amount;
+		payment.status = PaymentStatus.READY;
+		payment.idempotencyKey = idempotencyKey;
+		return payment;
+	}
+
+	// 예약용 READY 결제를 생성
 	public static Payment createReadyReservationPayment(
 		User user,
 		Reservation reservation,
@@ -126,6 +137,7 @@ public class Payment extends BaseEntity {
 		);
 	}
 
+	// 굿즈 주문용 READY 결제를 생성
 	public static Payment createReadyGoodsOrderPayment(
 		User user,
 		GoodsOrder goodsOrder,
@@ -147,34 +159,42 @@ public class Payment extends BaseEntity {
 		);
 	}
 
+	// 결제 완료 상태인지 확인
 	public boolean isPaid() {
 		return status == PaymentStatus.PAID;
 	}
 
+	// 결제 준비 상태인지 확인
 	public boolean isReady() {
 		return status == PaymentStatus.READY;
 	}
 
+	// 결제 승인 진행 중 상태인지 확인
 	public boolean isConfirming() {
 		return status == PaymentStatus.CONFIRMING;
 	}
 
+	// 결제 취소 완료 상태인지 확인
 	public boolean isCanceled() {
 		return status == PaymentStatus.CANCELED;
 	}
 
+	// 결제 취소 진행 중 상태인지 확인
 	public boolean isCanceling() {
 		return status == PaymentStatus.CANCELING;
 	}
 
+	// 결제 취소 실패 상태인지 확인
 	public boolean isCancelFailed() {
 		return status == PaymentStatus.CANCEL_FAILED;
 	}
 
+	// 결제 승인 진행 상태로 변경
 	public void beginConfirmation() {
 		this.status = PaymentStatus.CONFIRMING;
 	}
 
+	// 결제를 승인 완료 처리
 	public void complete(String paymentKey, LocalDateTime approvedAt) {
 		this.paymentKey = paymentKey;
 		this.status = PaymentStatus.PAID;
@@ -189,32 +209,55 @@ public class Payment extends BaseEntity {
 		}
 	}
 
+	// 결제를 취소 완료 처리
 	public void cancel() {
 		this.status = PaymentStatus.CANCELED;
 	}
 
+	// 결제 취소 진행 상태로 변경
 	public void beginCancel() {
 		this.status = PaymentStatus.CANCELING;
 	}
 
+	// 결제 취소 실패 상태로 변경
 	public void failCancel() {
 		this.status = PaymentStatus.CANCEL_FAILED;
 	}
 
+	// 결제 취소 재시도 상태로 변경
 	public void retryCancel() {
 		this.status = PaymentStatus.CANCELING;
 	}
 
+	// 보상 취소 진행 상태로 변경
 	public void beginCompensation(String paymentKey) {
 		this.paymentKey = paymentKey;
 		this.status = PaymentStatus.COMPENSATING;
 	}
 
+	// 보상 취소 실패 상태로 변경
 	public void failCompensation() {
 		this.status = PaymentStatus.COMPENSATION_FAILED;
 	}
 
+	// 보상 취소 재시도 상태로 변경
 	public void retryCompensation() {
 		this.status = PaymentStatus.COMPENSATING;
+	}
+
+	// 이미 존재하는 결제인지 확인
+	public boolean hasSameConfirmRequest(String paymentKey, String idempotencyKey) {
+		return paymentKey.equals(this.paymentKey)
+			&& idempotencyKey.equals(this.confirmIdempotencyKey);
+	}
+
+	// 기존 결제 키와 다른 결제 키인지 확인
+	public boolean hasDifferentPaymentKey(String paymentKey) {
+		return this.paymentKey != null && !this.paymentKey.equals(paymentKey);
+	}
+
+	// 결제 승인 진행 상태가 만료되었는지 확인
+	public boolean isConfirmStale(LocalDateTime now, long stateSeconds) {
+		return confirmStartedAt != null && confirmStartedAt.plusSeconds(stateSeconds).isBefore(now);
 	}
 }

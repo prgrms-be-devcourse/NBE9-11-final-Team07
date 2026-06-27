@@ -50,6 +50,9 @@ public enum ErrorCode {
 	PAYMENT_CANCEL_ALREADY_REQUESTED(HttpStatus.CONFLICT, "다른 요청으로 결제 취소가 진행 중입니다."),
 	PAYMENT_CANCEL_RESPONSE_MISMATCH(HttpStatus.BAD_GATEWAY, "결제 취소 응답이 일치하지 않습니다."),
 	PAYMENT_CANCEL_FAILED(HttpStatus.BAD_GATEWAY, "결제 취소 요청에 실패했습니다."),
+	PAYMENT_CONFIRM_ALREADY_REQUESTED(HttpStatus.CONFLICT, "이미 다른 결제 승인 요청이 진행 중입니다."),
+	PAYMENT_CONFIRM_IN_PROGRESS(HttpStatus.CONFLICT, "결제 승인이 처리 중입니다."),
+	PAYMENT_IDEMPOTENCY_KEY_MISMATCH(HttpStatus.CONFLICT, "결제 승인 멱등성 키가 일치하지 않습니다."),
 
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 

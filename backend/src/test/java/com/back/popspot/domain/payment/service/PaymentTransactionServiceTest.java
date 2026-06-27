@@ -2,7 +2,13 @@ package com.back.popspot.domain.payment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -21,6 +27,7 @@ import com.back.popspot.domain.payment.dto.PaymentConfirmResponse;
 import com.back.popspot.domain.payment.dto.PaymentCancelCommand;
 import com.back.popspot.domain.payment.dto.PaymentCancelPreparation;
 import com.back.popspot.domain.payment.dto.PaymentCancelRequest;
+import com.back.popspot.domain.payment.dto.PaymentConfirmPreparation;
 import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.entity.PaymentRefund;
 import com.back.popspot.domain.payment.entity.PaymentRefundStatus;
@@ -54,11 +61,81 @@ class PaymentTransactionServiceTest {
 		Payment payment = readyPayment();
 		PaymentConfirmRequest request = request(1000L);
 		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
+		given(paymentRepository.beginConfirmationIfReady(
+			eq("order-id"),
+			eq(1000L),
+			eq("payment-key"),
+			eq("confirm-key"),
+			any(LocalDateTime.class),
+			eq(PaymentStatus.READY),
+			eq(PaymentStatus.CONFIRMING)
+		)).willReturn(1);
 
-		Optional<PaymentConfirmResponse> result = paymentTransactionService.prepare(request);
+		PaymentConfirmPreparation result = paymentTransactionService.prepare(request);
 
-		assertThat(result).isEmpty();
-		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CONFIRMING);
+		assertThat(result.confirmRequired()).isTrue();
+		assertThat(result.isCompleted()).isFalse();
+	}
+
+	@Test
+	@DisplayName("READY 상태 전환에 실패하고 같은 승인 요청이 진행 중이면 처리 중 예외를 반환한다")
+	void rejectSameConfirmRequestInProgressAfterUpdateFailure() {
+		Payment readyPayment = readyPayment();
+		Payment confirmingPayment = confirmingPayment("payment-key", "confirm-key");
+		PaymentConfirmRequest request = request(1000L);
+		given(paymentRepository.findByOrderId("order-id"))
+			.willReturn(Optional.of(readyPayment))
+			.willReturn(Optional.of(confirmingPayment));
+		given(paymentRepository.beginConfirmationIfReady(
+			eq("order-id"),
+			eq(1000L),
+			eq("payment-key"),
+			eq("confirm-key"),
+			any(LocalDateTime.class),
+			eq(PaymentStatus.READY),
+			eq(PaymentStatus.CONFIRMING)
+		)).willReturn(0);
+
+		assertBusinessException(
+			() -> paymentTransactionService.prepare(request),
+			ErrorCode.PAYMENT_CONFIRM_IN_PROGRESS
+		);
+	}
+
+	@Test
+	@DisplayName("진행 중인 승인 요청과 결제 키가 다르면 승인을 거부한다")
+	void rejectConfirmingPaymentWithDifferentPaymentKey() {
+		Payment payment = confirmingPayment("payment-key", "confirm-key");
+		PaymentConfirmRequest request = new PaymentConfirmRequest(
+			"other-payment-key",
+			"order-id",
+			1000L,
+			"confirm-key"
+		);
+		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
+
+		assertBusinessException(
+			() -> paymentTransactionService.prepare(request),
+			ErrorCode.PAYMENT_KEY_MISMATCH
+		);
+	}
+
+	@Test
+	@DisplayName("진행 중인 승인 요청과 멱등성 키가 다르면 중복 승인 요청으로 거부한다")
+	void rejectConfirmingPaymentWithDifferentIdempotencyKey() {
+		Payment payment = confirmingPayment("payment-key", "confirm-key");
+		PaymentConfirmRequest request = new PaymentConfirmRequest(
+			"payment-key",
+			"order-id",
+			1000L,
+			"other-confirm-key"
+		);
+		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
+
+		assertBusinessException(
+			() -> paymentTransactionService.prepare(request),
+			ErrorCode.PAYMENT_CONFIRM_ALREADY_REQUESTED
+		);
 	}
 
 	@Test
@@ -85,10 +162,19 @@ class PaymentTransactionServiceTest {
 		PaymentConfirmRequest request = request(1000L);
 		given(paymentRepository.findByOrderId("order-id")).willReturn(Optional.of(payment));
 
-		Optional<PaymentConfirmResponse> result = paymentTransactionService.prepare(request);
+		PaymentConfirmPreparation result = paymentTransactionService.prepare(request);
 
-		assertThat(result).isPresent();
-		assertThat(result.orElseThrow().status()).isEqualTo(PaymentStatus.PAID);
+		assertThat(result.isCompleted()).isTrue();
+		assertThat(result.existingResponse().status()).isEqualTo(PaymentStatus.PAID);
+		verify(paymentRepository, never()).beginConfirmationIfReady(
+			anyString(),
+			anyLong(),
+			anyString(),
+			anyString(),
+			any(),
+			any(),
+			any()
+		);
 	}
 
 	@Test
@@ -311,7 +397,7 @@ class PaymentTransactionServiceTest {
 	}
 
 	private PaymentConfirmRequest request(long amount) {
-		return new PaymentConfirmRequest("payment-key", "order-id", amount);
+		return new PaymentConfirmRequest("payment-key", "order-id", amount, "confirm-key");
 	}
 
 	private Payment readyPayment() {
@@ -325,6 +411,15 @@ class PaymentTransactionServiceTest {
 			"idempotency-key"
 		);
 		ReflectionTestUtils.setField(payment, "id", 10L);
+		return payment;
+	}
+
+	private Payment confirmingPayment(String paymentKey, String confirmIdempotencyKey) {
+		Payment payment = readyPayment();
+		payment.beginConfirmation();
+		ReflectionTestUtils.setField(payment, "paymentKey", paymentKey);
+		ReflectionTestUtils.setField(payment, "confirmIdempotencyKey", confirmIdempotencyKey);
+		ReflectionTestUtils.setField(payment, "confirmStartedAt", LocalDateTime.now());
 		return payment;
 	}
 
