@@ -7,7 +7,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
-import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
@@ -32,7 +31,7 @@ import lombok.RequiredArgsConstructor;
 public class ReservationCommandService {
 
 	private final ReservationRepository reservationRepository;
-	private final ReservationSlotRepository reservationSlotRepository;
+	private final ReservationCancelPoolService reservationCancelPoolService;
 
 	@Transactional
 	public Reservation save(User user, ReservationSlot slot, LocalDateTime now, LocalDateTime heldUntil) {
@@ -54,10 +53,7 @@ public class ReservationCommandService {
 			throw new BusinessException(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS);
 		}
 
-		int updatedCount = reservationSlotRepository.decreaseReservedCount(slotId);
-		if (updatedCount == 0) {
-			throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
-		}
+		reservationCancelPoolService.accrue(slotId, now);
 	}
 
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -72,10 +68,6 @@ public class ReservationCommandService {
 			return false;   // 이미 만료됐거나 상태 안 맞음 → Redis 안 건드리게 false
 		}
 
-		int updatedCount = reservationSlotRepository.decreaseReservedCount(slotId);
-		if (updatedCount == 0) {
-			throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
-		}
 		return true;   // 만료 성공 + 커밋됨
 	}
 
