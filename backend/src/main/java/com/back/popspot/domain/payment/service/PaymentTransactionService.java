@@ -21,6 +21,7 @@ import com.back.popspot.domain.payment.repository.PaymentRepository;
 import com.back.popspot.domain.payment.repository.PaymentRefundRepository;
 import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
+import com.back.popspot.domain.reservation.service.ReservationWaitlistService;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 
@@ -32,6 +33,7 @@ public class PaymentTransactionService {
 
 	private final PaymentRepository paymentRepository;
 	private final PaymentRefundRepository paymentRefundRepository;
+	private final ReservationWaitlistService reservationWaitlistService;
 
 	@Transactional
 	public Optional<PaymentConfirmResponse> prepare(PaymentConfirmRequest request) {
@@ -61,6 +63,7 @@ public class PaymentTransactionService {
 
 		validateReservationPayment(payment);
 		payment.complete(request.paymentKey(), approvedAt);
+		deleteReservationWaitlist(payment);
 		return PaymentConfirmResponse.from(payment);
 	}
 
@@ -334,5 +337,14 @@ public class PaymentTransactionService {
 		if (heldUntil == null || !heldUntil.isAfter(LocalDateTime.now())) {
 			throw new BusinessException(ErrorCode.RESERVATION_PAYMENT_EXPIRED);
 		}
+	}
+
+	private void deleteReservationWaitlist(Payment payment) {
+		Reservation reservation = payment.getReservation();
+		if (reservation == null) {
+			return;
+		}
+
+		reservationWaitlistService.deleteByConfirmedReservation(reservation.getUser(), reservation.getSlot());
 	}
 }
