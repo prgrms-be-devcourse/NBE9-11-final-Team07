@@ -174,9 +174,6 @@ public class ReservationService {
 
 		// DB 취소는 별도 트랜잭션 빈에 위임 (리턴 = 커밋 완료)
 		reservationCommandService.cancelInTx(reservationId, slotId, now);
-
-		// 커밋 성공 후에만 Redis 복구
-		redisTemplate.opsForValue().increment(RedisKeys.reservationSlotRemaining(slotId));
 	}
 
 	@Transactional(noRollbackFor = ReservationPaymentExpiredException.class)

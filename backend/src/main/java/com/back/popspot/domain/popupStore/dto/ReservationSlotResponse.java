@@ -5,9 +5,6 @@ import java.time.LocalTime;
 
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 
-/**
- * 예약 슬롯 조회 응답. available 은 잔여 정원 여부(reservedCount &lt; capacity)로 계산된다.
- */
 public record ReservationSlotResponse(
 		Long slotId,
 		LocalDate slotDate,
@@ -17,13 +14,17 @@ public record ReservationSlotResponse(
 		boolean available
 ) {
 	public static ReservationSlotResponse from(ReservationSlot slot) {
+		return from(slot, slot.getReservedCount() < slot.getCapacity());
+	}
+
+	public static ReservationSlotResponse from(ReservationSlot slot, boolean available) {
 		return new ReservationSlotResponse(
 				slot.getId(),
 				slot.getSlotDate(),
 				slot.getStartTime(),
 				slot.getCapacity(),
 				slot.getReservedCount(),
-				slot.getReservedCount() < slot.getCapacity()
+				available
 		);
 	}
 }

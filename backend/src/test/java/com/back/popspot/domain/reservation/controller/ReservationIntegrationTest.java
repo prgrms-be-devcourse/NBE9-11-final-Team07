@@ -35,7 +35,9 @@ import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.reservation.entity.Reservation;
+import com.back.popspot.domain.reservation.entity.ReservationCancelPool;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
+import com.back.popspot.domain.reservation.repository.ReservationCancelPoolRepository;
 import com.back.popspot.domain.reservation.entity.ReservationWaitlist;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
 import com.back.popspot.domain.reservation.repository.ReservationWaitlistRepository;
@@ -63,6 +65,9 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private ReservationRepository reservationRepository;
+
+	@Autowired
+	private ReservationCancelPoolRepository reservationCancelPoolRepository;
 
 	@Autowired
 	private ReservationWaitlistRepository reservationWaitlistRepository;
@@ -418,7 +423,7 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("확정 예약 취소에 성공하면 예약을 취소하고 슬롯 예약 수를 감소시킨다")
+	@DisplayName("확정 예약 취소에 성공하면 예약을 취소하고 재오픈 pool에 적립한다")
 	void cancelReservation_success() throws Exception {
 		User user = persistUser("cancel@test.com");
 		ReservationSlot slot = persistSlot(persistPopup(user, PopupFeeType.FREE, null, "취소 팝업"), 10, 1);
@@ -434,10 +439,16 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 
 		Reservation savedReservation = reservationRepository.findById(reservation.getId()).orElseThrow();
 		ReservationSlot savedSlot = reservationSlotRepository.findById(slot.getId()).orElseThrow();
+		Long remaining = redisTemplate.opsForValue().get(RedisKeys.reservationSlotRemaining(slot.getId()));
+		List<ReservationCancelPool> pools = reservationCancelPoolRepository.findAll();
 
 		assertThat(savedReservation.getStatus()).isEqualTo(ReservationStatus.CANCELED);
 		assertThat(savedReservation.getCanceledAt()).isNotNull();
-		assertThat(savedSlot.getReservedCount()).isZero();
+		assertThat(savedSlot.getReservedCount()).isEqualTo(1);
+		assertThat(remaining).isEqualTo(9L);
+		assertThat(pools).hasSize(1);
+		assertThat(pools.get(0).getSlot().getId()).isEqualTo(slot.getId());
+		assertThat(pools.get(0).getPendingCount()).isEqualTo(1);
 	}
 
 	@Test
