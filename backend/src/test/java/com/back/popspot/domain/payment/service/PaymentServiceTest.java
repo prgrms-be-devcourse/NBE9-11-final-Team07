@@ -10,7 +10,6 @@ import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,12 +21,13 @@ import org.springframework.transaction.TransactionSystemException;
 import org.springframework.web.client.RestClientException;
 
 import com.back.popspot.domain.payment.client.TossPaymentsClient;
-import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
-import com.back.popspot.domain.payment.dto.PaymentConfirmResponse;
 import com.back.popspot.domain.payment.dto.PaymentCancelCommand;
 import com.back.popspot.domain.payment.dto.PaymentCancelPreparation;
 import com.back.popspot.domain.payment.dto.PaymentCancelRequest;
 import com.back.popspot.domain.payment.dto.PaymentCancelResponse;
+import com.back.popspot.domain.payment.dto.PaymentConfirmPreparation;
+import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
+import com.back.popspot.domain.payment.dto.PaymentConfirmResponse;
 import com.back.popspot.domain.payment.entity.PaymentRefundStatus;
 import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
@@ -54,11 +54,11 @@ class PaymentServiceTest {
 	@Test
 	@DisplayName("READY 결제는 토스 승인 후 별도 트랜잭션에서 완료 처리한다")
 	void confirmReadyPayment() throws Exception {
-		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L, "confirm-key");
 		PaymentConfirmResponse expected = paidResponse();
 		JsonNode tossResponse = tossResponse("payment-key", "order-id", 1000L);
 
-		given(paymentTransactionService.prepare(request)).willReturn(Optional.empty());
+		given(paymentTransactionService.prepare(request)).willReturn(PaymentConfirmPreparation.required());
 		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse);
 		given(paymentTransactionService.complete(request, APPROVED_AT)).willReturn(expected);
 
@@ -71,11 +71,11 @@ class PaymentServiceTest {
 	@Test
 	@DisplayName("토스 승인 후 DB 커밋에 실패하면 재요청으로 결제를 완료한다")
 	void recoverPaymentOnRetryAfterCommitFailure() throws Exception {
-		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L, "confirm-key");
 		PaymentConfirmResponse expected = paidResponse();
 		JsonNode tossResponse = tossResponse("payment-key", "order-id", 1000L);
 
-		given(paymentTransactionService.prepare(request)).willReturn(Optional.empty());
+		given(paymentTransactionService.prepare(request)).willReturn(PaymentConfirmPreparation.required());
 		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse);
 		given(paymentTransactionService.complete(request, APPROVED_AT))
 			.willThrow(new TransactionSystemException("commit failed"))
@@ -94,10 +94,10 @@ class PaymentServiceTest {
 	@Test
 	@DisplayName("이미 승인된 결제는 토스 API를 호출하지 않고 기존 결과를 반환한다")
 	void returnExistingDonePayment() {
-		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L, "confirm-key");
 		PaymentConfirmResponse expected = paidResponse();
 
-		given(paymentTransactionService.prepare(request)).willReturn(Optional.of(expected));
+		given(paymentTransactionService.prepare(request)).willReturn(PaymentConfirmPreparation.completed(expected));
 
 		PaymentConfirmResponse response = paymentService.confirm(request);
 
@@ -109,10 +109,10 @@ class PaymentServiceTest {
 	@Test
 	@DisplayName("토스 승인 응답이 요청 정보와 다르면 완료 트랜잭션을 실행하지 않는다")
 	void rejectTossResponseMismatch() throws Exception {
-		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L, "confirm-key");
 		JsonNode tossResponse = tossResponse("other-payment-key", "order-id", 1000L);
 
-		given(paymentTransactionService.prepare(request)).willReturn(Optional.empty());
+		given(paymentTransactionService.prepare(request)).willReturn(PaymentConfirmPreparation.required());
 		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse);
 
 		assertThatThrownBy(() -> paymentService.confirm(request))
@@ -126,12 +126,12 @@ class PaymentServiceTest {
 	@Test
 	@DisplayName("승인 후 예약을 확정할 수 없으면 토스 결제를 보상 취소한다")
 	void compensateWhenReservationCannotBeConfirmed() throws Exception {
-		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L, "confirm-key");
 		PaymentCancelCommand command = cancelCommand();
 		JsonNode tossResponse = tossResponse("payment-key", "order-id", 1000L);
 		JsonNode cancelResponse = cancelResponse("CANCELED", "DONE", 1000L);
 
-		given(paymentTransactionService.prepare(request)).willReturn(Optional.empty());
+		given(paymentTransactionService.prepare(request)).willReturn(PaymentConfirmPreparation.required());
 		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse);
 		given(paymentTransactionService.complete(request, APPROVED_AT))
 			.willThrow(new BusinessException(ErrorCode.RESERVATION_PAYMENT_EXPIRED));
@@ -154,10 +154,10 @@ class PaymentServiceTest {
 	@Test
 	@DisplayName("보상 취소 호출이 실패하면 보상 실패 상태로 기록한다")
 	void recordFailedCompensation() throws Exception {
-		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L);
+		PaymentConfirmRequest request = new PaymentConfirmRequest("payment-key", "order-id", 1000L, "confirm-key");
 		PaymentCancelCommand command = cancelCommand();
 
-		given(paymentTransactionService.prepare(request)).willReturn(Optional.empty());
+		given(paymentTransactionService.prepare(request)).willReturn(PaymentConfirmPreparation.required());
 		given(tossPaymentsClient.confirm(request)).willReturn(tossResponse("payment-key", "order-id", 1000L));
 		given(paymentTransactionService.complete(request, APPROVED_AT))
 			.willThrow(new BusinessException(ErrorCode.RESERVATION_PAYMENT_EXPIRED));

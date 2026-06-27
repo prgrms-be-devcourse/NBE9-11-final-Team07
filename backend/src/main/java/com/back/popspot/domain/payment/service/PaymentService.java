@@ -4,18 +4,18 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
 import com.back.popspot.domain.payment.client.TossPaymentsClient;
-import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
-import com.back.popspot.domain.payment.dto.PaymentConfirmResponse;
 import com.back.popspot.domain.payment.dto.PaymentCancelCommand;
 import com.back.popspot.domain.payment.dto.PaymentCancelPreparation;
 import com.back.popspot.domain.payment.dto.PaymentCancelRequest;
 import com.back.popspot.domain.payment.dto.PaymentCancelResponse;
+import com.back.popspot.domain.payment.dto.PaymentConfirmPreparation;
+import com.back.popspot.domain.payment.dto.PaymentConfirmRequest;
+import com.back.popspot.domain.payment.dto.PaymentConfirmResponse;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
 
@@ -32,10 +32,12 @@ public class PaymentService {
 	private final PaymentTransactionService paymentTransactionService;
 	private final TossPaymentsClient tossPaymentsClient;
 
+	// 결제 승인 요청을 준비하고 토스 승인 후 완료 처리
 	public PaymentConfirmResponse confirm(PaymentConfirmRequest request) {
-		Optional<PaymentConfirmResponse> existingPayment = paymentTransactionService.prepare(request);
-		if (existingPayment.isPresent()) {
-			return existingPayment.get();
+		PaymentConfirmPreparation preparation = paymentTransactionService.prepare(request);
+
+		if (preparation.isCompleted()) {
+			return preparation.existingResponse();
 		}
 
 		JsonNode tossResponse = tossPaymentsClient.confirm(request);
@@ -51,11 +53,13 @@ public class PaymentService {
 		}
 	}
 
+	// 승인 완료 후 보상 취소가 필요한 예외인지 확인
 	private boolean requiresCompensation(BusinessException exception) {
 		return exception.getErrorCode() == ErrorCode.RESERVATION_PAYMENT_EXPIRED
 			|| exception.getErrorCode() == ErrorCode.RESERVATION_PAYMENT_NOT_ALLOWED_STATUS;
 	}
 
+	// 승인 후 주문 확정 실패 결제를 보상 취소 처리
 	private void compensateConfirmedPayment(PaymentConfirmRequest request) {
 		PaymentCancelCommand command;
 		try {
@@ -72,11 +76,13 @@ public class PaymentService {
 		executeCompensation(command);
 	}
 
+	// 실패한 보상 취소를 재시도
 	public void retryFailedCompensations() {
 		List<PaymentCancelCommand> commands = paymentTransactionService.prepareFailedCompensations();
 		commands.forEach(this::executeCompensation);
 	}
 
+	// 실패한 일반 취소를 재시도
 	public void retryFailedCancels() {
 		List<PaymentCancelCommand> commands = paymentTransactionService.prepareFailedCancels();
 		commands.forEach(command -> {
@@ -89,6 +95,7 @@ public class PaymentService {
 		});
 	}
 
+	// 토스 취소 API로 보상 취소를 실행
 	private void executeCompensation(PaymentCancelCommand command) {
 		try {
 			JsonNode tossResponse = tossPaymentsClient.cancel(command);
@@ -110,6 +117,7 @@ public class PaymentService {
 		}
 	}
 
+	// 결제 취소 요청을 준비하고 토스 취소 후 완료 처리
 	public PaymentCancelResponse cancel(Long paymentId, Long userId, PaymentCancelRequest request) {
 		PaymentCancelPreparation preparation = paymentTransactionService.prepareCancel(paymentId, userId, request);
 		if (preparation.isCompleted()) {
@@ -140,6 +148,7 @@ public class PaymentService {
 		}
 	}
 
+	// 토스 취소 API로 일반 취소를 실행
 	private PaymentCancelResponse executeCancel(PaymentCancelCommand command) {
 		try {
 			JsonNode tossResponse = tossPaymentsClient.cancel(command);
@@ -151,6 +160,7 @@ public class PaymentService {
 		}
 	}
 
+	// 일반 취소 실패 상태를 기록
 	private void recordFailedCancel(PaymentCancelCommand command, RuntimeException exception) {
 		try {
 			paymentTransactionService.failCancel(command.idempotencyKey());
@@ -159,6 +169,7 @@ public class PaymentService {
 		}
 	}
 
+	// 토스 취소 응답으로 결제 취소를 완료 처리
 	private PaymentCancelResponse completeCancel(PaymentCancelCommand command, JsonNode tossResponse) {
 		JsonNode cancel = tossResponse.path("cancels").get(tossResponse.path("cancels").size() - 1);
 		return paymentTransactionService.completeCancel(
@@ -168,6 +179,7 @@ public class PaymentService {
 		);
 	}
 
+	// 토스 결제 승인 응답이 요청 정보와 일치하는지 검증
 	private void validateTossConfirmResponse(JsonNode tossResponse, PaymentConfirmRequest request) {
 		if (!"DONE".equals(tossResponse.path("status").asString(null))
 			|| !request.paymentKey().equals(tossResponse.path("paymentKey").asString(null))
@@ -179,6 +191,7 @@ public class PaymentService {
 		}
 	}
 
+	// 토스 승인 시각을 LocalDateTime으로 변환
 	private LocalDateTime extractApprovedAt(JsonNode tossResponse) {
 		String approvedAt = tossResponse.path("approvedAt").asString(null);
 		try {
@@ -188,6 +201,7 @@ public class PaymentService {
 		}
 	}
 
+	// 토스 결제 취소 응답이 요청 정보와 일치하는지 검증
 	private void validateTossCancelResponse(JsonNode tossResponse, PaymentCancelCommand command) {
 		JsonNode cancels = tossResponse.path("cancels");
 		if (!"CANCELED".equals(tossResponse.path("status").asString(null))
@@ -208,6 +222,7 @@ public class PaymentService {
 		}
 	}
 
+	// 토스 취소 시각을 LocalDateTime으로 변환
 	private LocalDateTime extractCanceledAt(JsonNode cancel) {
 		try {
 			return OffsetDateTime.parse(cancel.path("canceledAt").asString()).toLocalDateTime();

@@ -17,6 +17,7 @@ public record PaymentCancelResponse(
 	String transactionKey,
 	LocalDateTime canceledAt
 ) {
+	// 환불 엔티티로 결제 취소 응답을 생성
 	public static PaymentCancelResponse from(PaymentRefund refund) {
 		return new PaymentCancelResponse(
 			refund.getId(),
