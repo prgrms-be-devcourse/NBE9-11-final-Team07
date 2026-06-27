@@ -8,7 +8,6 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -22,7 +21,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -83,6 +81,9 @@ class ReservationServiceTest {
 	private ReservationCommandService reservationCommandService;
 
 	@Mock
+	private ReservationWaitlistService reservationWaitlistService;
+
+	@Mock
 	private RedisTemplate<String, Long> redisTemplate;
 
 	@Mock
@@ -103,6 +104,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -191,6 +193,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -228,6 +231,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -294,6 +298,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -329,6 +334,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -358,6 +364,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -393,6 +400,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -439,6 +447,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -471,10 +480,11 @@ class ReservationServiceTest {
 			any(LocalDateTime.class),
 			any(LocalDateTime.class)
 		);
+		verify(reservationWaitlistService).registerIfAvailable(user, slot);
 	}
 
 	@Test
-	@DisplayName("무료 예약 취소 성공")
+	@DisplayName("무료 예약 취소 성공 시 Redis remaining을 즉시 증가시키지 않는다")
 	void cancelReservation_free_success() {
 		// given
 		ReservationService reservationService = new ReservationService(
@@ -485,6 +495,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -496,16 +507,13 @@ class ReservationServiceTest {
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.findByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 			.thenReturn(Optional.empty());
-		// DB 취소는 별도 빈에 위임된다. 목은 기본적으로 아무 일도 하지 않으므로 = 커밋 성공.
-		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
 		// when
 		reservationService.cancelReservation(100L, 2L);
 
-		// then: DB 커밋(cancelInTx) 후에 Redis 복구(increment) 가 일어나야 한다
-		InOrder inOrder = inOrder(reservationCommandService, valueOperations);
-		inOrder.verify(reservationCommandService).cancelInTx(eq(100L), eq(1L), any(LocalDateTime.class));
-		inOrder.verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
+		// then
+		verify(reservationCommandService).cancelInTx(eq(100L), eq(1L), any(LocalDateTime.class));
+		verify(redisTemplate, never()).opsForValue();
 		verify(paymentService, never()).cancel(any(Long.class), any(Long.class), any());
 	}
 
@@ -521,6 +529,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -533,22 +542,19 @@ class ReservationServiceTest {
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.findByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 			.thenReturn(Optional.of(payment));
-		// DB 취소는 별도 빈(cancelInTx)에 위임 → 목이 정상 리턴 = 커밋 성공
-		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
 		// when
 		reservationService.cancelReservation(100L, 2L);
 
-		// then: 환불 → DB 취소 커밋 → Redis 복구 순서
+		// then
 		verify(paymentService).cancel(
 			eq(10L),
 			eq(2L),
 			argThat(request -> "예약 취소".equals(request.cancelReason())
 				&& "refund-reservation-100-2".equals(request.idempotencyKey()))
 		);
-		InOrder inOrder = inOrder(reservationCommandService, valueOperations);
-		inOrder.verify(reservationCommandService).cancelInTx(eq(100L), eq(1L), any(LocalDateTime.class));
-		inOrder.verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
+		verify(reservationCommandService).cancelInTx(eq(100L), eq(1L), any(LocalDateTime.class));
+		verify(redisTemplate, never()).opsForValue();
 	}
 
 	@Test
@@ -563,6 +569,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -608,6 +615,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -660,6 +668,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -691,6 +700,7 @@ class ReservationServiceTest {
 		assertEquals(ReservationStatus.CONFIRMED, reservation.getStatus());
 		assertEquals("홍길동", ReflectionTestUtils.getField(reservation, "reservationName"));
 		assertEquals("010-1234-5678", ReflectionTestUtils.getField(reservation, "reservationPhone"));
+		verify(reservationWaitlistService).deleteByConfirmedReservation(user, slot);
 		verify(paymentRepository, never()).save(any(Payment.class));
 	}
 
@@ -706,6 +716,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -752,6 +763,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -788,6 +800,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -820,6 +833,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -852,6 +866,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -885,6 +900,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -926,6 +942,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -975,6 +992,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -1009,6 +1027,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -1048,6 +1067,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);

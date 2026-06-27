@@ -35,8 +35,10 @@ import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
 import com.back.popspot.domain.payment.repository.PaymentRefundRepository;
+import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
+import com.back.popspot.domain.reservation.service.ReservationWaitlistService;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
@@ -51,6 +53,9 @@ class PaymentTransactionServiceTest {
 
 	@Mock
 	private PaymentRefundRepository paymentRefundRepository;
+
+	@Mock
+	private ReservationWaitlistService reservationWaitlistService;
 
 	@InjectMocks
 	private PaymentTransactionService paymentTransactionService;
@@ -152,6 +157,7 @@ class PaymentTransactionServiceTest {
 		assertThat(response.paymentKey()).isEqualTo("payment-key");
 		assertThat(response.approvedAt()).isEqualTo(APPROVED_AT);
 		assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+		verify(reservationWaitlistService).deleteByConfirmedReservation(reservation.getUser(), reservation.getSlot());
 	}
 
 	@Test
@@ -469,8 +475,14 @@ class PaymentTransactionServiceTest {
 	}
 
 	private Reservation reservation(ReservationStatus status, LocalDateTime heldUntil) {
+		User user = User.create("reservation-user@example.com", "예약자");
+		ReservationSlot slot = new ReservationSlot();
 		Reservation reservation = new Reservation();
+		ReflectionTestUtils.setField(user, "id", 1L);
+		ReflectionTestUtils.setField(slot, "id", 1L);
 		ReflectionTestUtils.setField(reservation, "id", 1L);
+		ReflectionTestUtils.setField(reservation, "user", user);
+		ReflectionTestUtils.setField(reservation, "slot", slot);
 		ReflectionTestUtils.setField(reservation, "status", status);
 		ReflectionTestUtils.setField(reservation, "heldUntil", heldUntil);
 		return reservation;

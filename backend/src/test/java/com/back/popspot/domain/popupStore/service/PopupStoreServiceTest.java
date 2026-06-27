@@ -23,6 +23,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreDetailResponse;
@@ -37,6 +39,7 @@ import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.s3.S3Service;
 import com.back.popspot.global.exception.ErrorCode;
+import com.back.popspot.global.redis.RedisKeys;
 
 /**
  * PopupStoreService 조회(목록/상세/슬롯) 분기·매핑 로직 단위 테스트 (repository 는 mock).
@@ -53,6 +56,12 @@ class PopupStoreServiceTest {
 
 	@Mock
 	private S3Service s3Service;
+
+	@Mock
+	private RedisTemplate<String, Long> redisTemplate;
+
+	@Mock
+	private ValueOperations<String, Long> valueOperations;
 
 	@InjectMocks
 	private PopupStoreService popupStoreService;
@@ -140,18 +149,36 @@ class PopupStoreServiceTest {
 	}
 
 	@Test
-	@DisplayName("슬롯 조회: 팝업 존재 시 슬롯 목록 반환 + available 계산(reservedCount < capacity)")
+	@DisplayName("슬롯 조회: 팝업 존재 시 Redis remaining 기준으로 available을 계산한다")
 	void getSlots_popupExists_returnsSlotsWithAvailability() {
 		when(popupStoreRepository.existsById(1L)).thenReturn(true);
 		when(reservationSlotRepository.findByPopupStoreIdAndSlotDate(1L, DATE))
 				.thenReturn(List.of(slot(100L, 10, 3), slot(101L, 5, 5)));
+		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+		when(valueOperations.get(RedisKeys.reservationSlotRemaining(100L))).thenReturn(1L);
+		when(valueOperations.get(RedisKeys.reservationSlotRemaining(101L))).thenReturn(0L);
 
 		List<ReservationSlotResponse> result = popupStoreService.getSlots(1L, DATE);
 
 		assertThat(result).hasSize(2);
 		assertThat(result.get(0).slotId()).isEqualTo(100L);
-		assertThat(result.get(0).available()).isTrue();  // 3 < 10
-		assertThat(result.get(1).available()).isFalse(); // 5 == 5 (정원 마감)
+		assertThat(result.get(0).available()).isTrue();
+		assertThat(result.get(1).available()).isFalse();
+	}
+
+	@Test
+	@DisplayName("슬롯 조회: Redis remaining 값이 null이면 available은 false다")
+	void getSlots_remainingNull_returnsUnavailable() {
+		when(popupStoreRepository.existsById(1L)).thenReturn(true);
+		when(reservationSlotRepository.findByPopupStoreIdAndSlotDate(1L, DATE))
+			.thenReturn(List.of(slot(100L, 10, 3)));
+		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+		when(valueOperations.get(RedisKeys.reservationSlotRemaining(100L))).thenReturn(null);
+
+		List<ReservationSlotResponse> result = popupStoreService.getSlots(1L, DATE);
+
+		assertThat(result).hasSize(1);
+		assertThat(result.get(0).available()).isFalse();
 	}
 
 	@Test
