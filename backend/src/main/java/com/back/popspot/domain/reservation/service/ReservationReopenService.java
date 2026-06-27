@@ -13,9 +13,11 @@ import com.back.popspot.domain.reservation.repository.ReservationCancelPoolRepos
 import com.back.popspot.global.redis.RedisKeys;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ReservationReopenService {
 
 	private final ReservationCancelPoolRepository reservationCancelPoolRepository;
@@ -52,6 +54,14 @@ public class ReservationReopenService {
 				.increment(RedisKeys.reservationSlotRemaining(pool.getSlot().getId()), pendingCount);
 			pool.openPending();
 		} catch (RuntimeException e) {
+			log.error(
+				"[RESERVATION_REOPEN_FAILED] 취소 예약 재오픈 Redis 반영 실패: poolId={}, slotId={}, reopenAt={}, pendingCount={}",
+				pool.getId(),
+				pool.getSlot().getId(),
+				pool.getReopenAt(),
+				pool.getPendingCount(),
+				e
+			);
 			pool.fail();
 		}
 	}
