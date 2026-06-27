@@ -7,12 +7,15 @@ import static org.mockito.Mockito.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -284,8 +287,9 @@ class PopupStoreHostServiceTest {
 
 		assertThat(id).isEqualTo(500L);
 		verify(reservationSlotRepository).save(any(ReservationSlot.class));
-		// capacity 는 slotRequest 의 10
-		verify(valueOperations).set(RedisKeys.reservationSlotRemaining(500L), 10L);
+		// capacity 는 slotRequest 의 10, TTL 은 closeDate 까지 남은 초(별도 테스트에서 값 검증)
+		verify(valueOperations).set(
+			eq(RedisKeys.reservationSlotRemaining(500L)), eq(10L), anyLong(), eq(TimeUnit.SECONDS));
 	}
 
 	@Test
@@ -304,17 +308,42 @@ class PopupStoreHostServiceTest {
 			popupStoreHostService.createSlot(USER_ID, 10L, slotRequest(LocalDate.of(2026, 7, 5)));
 
 			// 커밋 전: 아직 카운터를 세팅하지 않는다
-			verify(valueOperations, never()).set(any(), any());
+			verify(valueOperations, never()).set(anyString(), anyLong(), anyLong(), any(TimeUnit.class));
 
 			// 등록된 동기화의 afterCommit 수동 실행
 			TransactionSynchronizationManager.getSynchronizations()
 				.forEach(TransactionSynchronization::afterCommit);
 
-			// 커밋 후: remaining=capacity 세팅
-			verify(valueOperations).set(RedisKeys.reservationSlotRemaining(500L), 10L);
+			// 커밋 후: remaining=capacity + TTL 세팅
+			verify(valueOperations).set(
+				eq(RedisKeys.reservationSlotRemaining(500L)), eq(10L), anyLong(), eq(TimeUnit.SECONDS));
 		} finally {
 			TransactionSynchronizationManager.clearSynchronization();
 		}
+	}
+
+	@Test
+	@DisplayName("슬롯 생성: Redis 카운터에 closeDate 까지 남은 초를 TTL 로 설정한다")
+	void createSlot_setsTtlUntilCloseDate() {
+		// closeDate 를 now 기준 상대값으로 두어 TTL(=closeDate 까지 남은 초)을 검증한다.
+		LocalDateTime closeDate = LocalDateTime.now().plusDays(2);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupForSlotWithCloseDate(USER_ID, closeDate)));
+		when(reservationSlotRepository.save(any(ReservationSlot.class))).thenAnswer(invocation -> {
+			ReservationSlot saved = invocation.getArgument(0);
+			ReflectionTestUtils.setField(saved, "id", 500L);
+			return saved;
+		});
+		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+		// now() 가 메서드 내부에서 호출되므로 호출 전/후로 기대 TTL 범위를 잡는다 (시간이 흐르며 줄어듦).
+		long ttlUpperBound = ChronoUnit.SECONDS.between(LocalDateTime.now(), closeDate);
+		popupStoreHostService.createSlot(USER_ID, 10L, slotRequest(LocalDate.now().plusDays(1)));
+		long ttlLowerBound = ChronoUnit.SECONDS.between(LocalDateTime.now(), closeDate);
+
+		ArgumentCaptor<Long> ttlCaptor = ArgumentCaptor.forClass(Long.class);
+		verify(valueOperations).set(
+			eq(RedisKeys.reservationSlotRemaining(500L)), eq(10L), ttlCaptor.capture(), eq(TimeUnit.SECONDS));
+		assertThat(ttlCaptor.getValue()).isBetween(ttlLowerBound, ttlUpperBound);
 	}
 
 	@Test
@@ -539,6 +568,17 @@ class PopupStoreHostServiceTest {
 		ReflectionTestUtils.setField(popupStore, "user", owner);
 		ReflectionTestUtils.setField(popupStore, "openDate", LocalDateTime.of(2026, 7, 1, 10, 0));
 		ReflectionTestUtils.setField(popupStore, "closeDate", LocalDateTime.of(2026, 7, 10, 18, 0));
+		return popupStore;
+	}
+
+	// TTL 검증용: openDate 는 과거, closeDate 는 인자로 받아 슬롯 날짜(now+1일)가 운영 기간 내에 들도록 한다.
+	private PopupStore popupForSlotWithCloseDate(Long ownerId, LocalDateTime closeDate) {
+		User owner = User.create("owner@test.com", "owner");
+		ReflectionTestUtils.setField(owner, "id", ownerId);
+		PopupStore popupStore = new PopupStore();
+		ReflectionTestUtils.setField(popupStore, "user", owner);
+		ReflectionTestUtils.setField(popupStore, "openDate", LocalDateTime.now().minusDays(1));
+		ReflectionTestUtils.setField(popupStore, "closeDate", closeDate);
 		return popupStore;
 	}
 

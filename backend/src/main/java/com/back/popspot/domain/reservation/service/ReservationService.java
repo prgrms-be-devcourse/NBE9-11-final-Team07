@@ -8,7 +8,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,9 +58,9 @@ public class ReservationService {
 	private final UserRepository userRepository;
 	private final ReservationExpirationService reservationExpirationService;
 	private final ReservationCommandService reservationCommandService;
-	private final ReservationWaitlistService reservationWaitlistService;
-	private final RedisTemplate<String, Long> redisTemplate;
+	private final ReservationRedisService reservationRedisService;
 	private final WaitingQueueRedisService waitingQueueRedisService;
+	private final ReservationWaitlistService reservationWaitlistService;
 
 	@Transactional(readOnly = true)
 	public Page<MyReservationResponse> getMyReservations(Long userId, Pageable pageable) {
@@ -117,10 +116,10 @@ public class ReservationService {
 		String remainingKey = RedisKeys.reservationSlotRemaining(slotId);
 
 		// 2. 모든 검증 통과 후 단일 카운터(remaining) 선차감. DECR 반환값만으로 동시성 제어가 완결된다.
-		Long after = redisTemplate.opsForValue().decrement(remainingKey);
+		Long after = reservationRedisService.decrement(remainingKey);
 		if (after == null || after < 0) {
 			// 남은 자리 없음/미초기화 → remaining 롤백
-			redisTemplate.opsForValue().increment(remainingKey);
+			reservationRedisService.increment(remainingKey);
 			registerWaitlist(user, slot);
 			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
 		}
@@ -136,7 +135,7 @@ public class ReservationService {
 
 			return ReservationCreateResponse.from(reservation);
 		} catch (RuntimeException e) {
-			redisTemplate.opsForValue().increment(remainingKey);
+			reservationRedisService.increment(remainingKey);
 			throw e;
 		}
 	}
@@ -174,6 +173,7 @@ public class ReservationService {
 
 		// DB 취소는 별도 트랜잭션 빈에 위임 (리턴 = 커밋 완료)
 		reservationCommandService.cancelInTx(reservationId, slotId, now);
+
 	}
 
 	@Transactional(noRollbackFor = ReservationPaymentExpiredException.class)

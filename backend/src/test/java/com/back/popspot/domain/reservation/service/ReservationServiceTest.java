@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -21,6 +22,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -28,8 +30,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.back.popspot.domain.payment.entity.PaymentType;
@@ -84,10 +84,7 @@ class ReservationServiceTest {
 	private ReservationWaitlistService reservationWaitlistService;
 
 	@Mock
-	private RedisTemplate<String, Long> redisTemplate;
-
-	@Mock
-	private ValueOperations<String, Long> valueOperations;
+	private ReservationRedisService reservationRedisService;
 
 	@Mock
 	private WaitingQueueRedisService waitingQueueRedisService;
@@ -104,9 +101,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore freePopupStore = createPopupStore();
 		PopupStore paidPopupStore = createPopupStore();
@@ -193,9 +190,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		Pageable pageable = PageRequest.of(0, 10);
 		Page<Reservation> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
@@ -231,9 +228,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -241,8 +238,7 @@ class ReservationServiceTest {
 		User user = createUser(2L);
 
 		// 단일 카운터: remaining -1 → 9 (0 이상) 통과
-		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
@@ -282,8 +278,8 @@ class ReservationServiceTest {
 			any(LocalDateTime.class)
 		);
 		// 정상 흐름: remaining -1 만 일어나고 롤백(remaining +1)은 없어야 한다
-		verify(valueOperations).decrement(RedisKeys.reservationSlotRemaining(1L));
-		verify(valueOperations, never()).increment(RedisKeys.reservationSlotRemaining(1L));
+		verify(reservationRedisService).decrement(RedisKeys.reservationSlotRemaining(1L));
+		verify(reservationRedisService, never()).increment(RedisKeys.reservationSlotRemaining(1L));
 	}
 
 	@Test
@@ -298,9 +294,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -334,9 +330,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 
@@ -364,9 +360,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -400,9 +396,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -410,8 +406,7 @@ class ReservationServiceTest {
 		User user = createUser(2L);
 
 		// remaining -1 → 9 통과했지만 DB 저장이 실패 → remaining 롤백되어야 함
-		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
@@ -432,7 +427,7 @@ class ReservationServiceTest {
 
 		// then
 		// 롤백: remaining +1
-		verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
+		verify(reservationRedisService).increment(RedisKeys.reservationSlotRemaining(1L));
 	}
 
 	@Test
@@ -447,9 +442,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -461,8 +456,7 @@ class ReservationServiceTest {
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
 		// remaining -1 결과가 -1 → 재고 없음
-		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);
+		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);
 
 		// when
 		BusinessException exception = assertThrows(
@@ -473,7 +467,7 @@ class ReservationServiceTest {
 		// then
 		assertEquals(ErrorCode.RESERVATION_CAPACITY_EXCEEDED, exception.getErrorCode());
 		// 롤백: remaining +1
-		verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
+		verify(reservationRedisService).increment(RedisKeys.reservationSlotRemaining(1L));
 		verify(reservationCommandService, never()).save(
 			any(User.class),
 			any(ReservationSlot.class),
@@ -484,7 +478,7 @@ class ReservationServiceTest {
 	}
 
 	@Test
-	@DisplayName("무료 예약 취소 성공 시 Redis remaining을 즉시 증가시키지 않는다")
+	@DisplayName("무료 예약 취소 성공 시 DB 커밋(cancelInTx) 후 Redis remaining을 복구한다")
 	void cancelReservation_free_success() {
 		// given
 		ReservationService reservationService = new ReservationService(
@@ -495,9 +489,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -511,9 +505,9 @@ class ReservationServiceTest {
 		// when
 		reservationService.cancelReservation(100L, 2L);
 
-		// then
+		// then: DB 취소 커밋(cancelInTx) 후 Redis remaining은 즉시 증가하지 않는다
 		verify(reservationCommandService).cancelInTx(eq(100L), eq(1L), any(LocalDateTime.class));
-		verify(redisTemplate, never()).opsForValue();
+		verify(reservationRedisService, never()).increment(any());
 		verify(paymentService, never()).cancel(any(Long.class), any(Long.class), any());
 	}
 
@@ -529,9 +523,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -553,8 +547,9 @@ class ReservationServiceTest {
 			argThat(request -> "예약 취소".equals(request.cancelReason())
 				&& "refund-reservation-100-2".equals(request.idempotencyKey()))
 		);
+		// then: DB 취소 커밋(cancelInTx) 후 Redis remaining은 즉시 증가하지 않는다
 		verify(reservationCommandService).cancelInTx(eq(100L), eq(1L), any(LocalDateTime.class));
-		verify(redisTemplate, never()).opsForValue();
+		verify(reservationRedisService, never()).increment(any());
 	}
 
 	@Test
@@ -569,9 +564,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -600,7 +595,7 @@ class ReservationServiceTest {
 			any(LocalDateTime.class)
 		);
 		verify(reservationSlotRepository, never()).decreaseReservedCount(any(Long.class));
-		verify(redisTemplate, never()).opsForValue();
+		verify(reservationRedisService, never()).increment(any());
 	}
 
 	@Test
@@ -615,9 +610,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -668,9 +663,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -716,9 +711,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -763,9 +758,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -800,9 +795,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -833,9 +828,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -866,9 +861,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -900,9 +895,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -925,7 +920,7 @@ class ReservationServiceTest {
 		// then
 		assertEquals(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS, exception.getErrorCode());
 		// 커밋 실패 → Redis 복구(INCR) 없음
-		verify(redisTemplate, never()).opsForValue();
+		verify(reservationRedisService, never()).increment(any());
 	}
 
 	// ────────── admission 검증 관련 신규 케이스 ──────────
@@ -942,9 +937,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -955,8 +950,7 @@ class ReservationServiceTest {
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
-		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 		when(reservationCommandService.save(
 			any(User.class),
 			any(ReservationSlot.class),
@@ -992,9 +986,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -1012,7 +1006,7 @@ class ReservationServiceTest {
 		// then
 		assertEquals(ErrorCode.RESERVATION_ADMISSION_REQUIRED, exception.getErrorCode());
 		// remaining 카운터에 전혀 손대지 않았는지 확인
-		verify(redisTemplate, never()).opsForValue();
+		verify(reservationRedisService, never()).increment(any());
 	}
 
 	@Test
@@ -1027,9 +1021,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -1040,8 +1034,7 @@ class ReservationServiceTest {
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
-		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);
+		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);
 
 		// when
 		BusinessException exception = assertThrows(
@@ -1067,9 +1060,9 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			reservationWaitlistService,
-			redisTemplate,
-			waitingQueueRedisService
+			reservationRedisService,
+			waitingQueueRedisService,
+			reservationWaitlistService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -1080,8 +1073,7 @@ class ReservationServiceTest {
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
-		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-		when(valueOperations.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 		when(reservationCommandService.save(
 			any(User.class),
 			any(ReservationSlot.class),
@@ -1098,7 +1090,7 @@ class ReservationServiceTest {
 		// then: flag는 decrement 직후에 이미 소각됐다 — 재진입하려면 대기열 재진입이 필요하다
 		verify(waitingQueueRedisService).revokeProceedPermission(1L, "2");
 		// remaining은 DB 실패 catch 블록에서 롤백된다
-		verify(valueOperations).increment(RedisKeys.reservationSlotRemaining(1L));
+		verify(reservationRedisService).increment(RedisKeys.reservationSlotRemaining(1L));
 	}
 
 	// TODO(이번 PR 범위 외 누락 테스트):
