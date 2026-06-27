@@ -36,7 +36,9 @@ import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.reservation.entity.Reservation;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
+import com.back.popspot.domain.reservation.entity.ReservationWaitlist;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
+import com.back.popspot.domain.reservation.repository.ReservationWaitlistRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
 import com.back.popspot.global.redis.RedisKeys;
@@ -61,6 +63,9 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private ReservationRepository reservationRepository;
+
+	@Autowired
+	private ReservationWaitlistRepository reservationWaitlistRepository;
 
 	@Autowired
 	private PaymentRepository paymentRepository;
@@ -167,6 +172,132 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 	}
 
 	@Test
+	@DisplayName("정원 초과 시 기존 409 응답을 유지하고 대기 row를 생성한다")
+	void createReservation_capacityExceeded_registersWaitlist() throws Exception {
+		User user = persistUser("waitlist@test.com");
+		PopupStore popup = persistPopup(user, PopupFeeType.FREE, null, "대기 팝업");
+		ReservationSlot slot = persistSlot(popup, 1, 1);
+		grantProceedPermission(popup.getId(), user.getId());
+
+		mockMvc.perform(post("/reservations")
+				.with(authentication(auth(user.getId())))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "slotId": %d
+					}
+					""".formatted(slot.getId())))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("RESERVATION_CAPACITY_EXCEEDED"));
+
+		flushAndClear();
+
+		assertThat(reservationWaitlistRepository.existsByUserIdAndSlotId(user.getId(), slot.getId())).isTrue();
+		assertThat(reservationWaitlistRepository.countBySlotId(slot.getId())).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("이미 대기 row가 있으면 정원 초과 재요청에도 중복 생성하지 않는다")
+	void createReservation_capacityExceeded_skipDuplicateWaitlist() throws Exception {
+		User user = persistUser("waitlist-duplicate@test.com");
+		PopupStore popup = persistPopup(user, PopupFeeType.FREE, null, "대기 중복 팝업");
+		ReservationSlot slot = persistSlot(popup, 10, 10);
+		persistWaitlist(user, slot);
+		grantProceedPermission(popup.getId(), user.getId());
+
+		mockMvc.perform(post("/reservations")
+				.with(authentication(auth(user.getId())))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "slotId": %d
+					}
+					""".formatted(slot.getId())))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("RESERVATION_CAPACITY_EXCEEDED"));
+
+		flushAndClear();
+
+		assertThat(reservationWaitlistRepository.countBySlotId(slot.getId())).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("대기열이 슬롯 정원만큼 차 있으면 추가 대기 row를 생성하지 않는다")
+	void createReservation_capacityExceeded_skipWhenWaitlistFull() throws Exception {
+		User owner = persistUser("waitlist-full-owner@test.com");
+		User waitingUser = persistUser("waitlist-full-existing@test.com");
+		User requestUser = persistUser("waitlist-full-request@test.com");
+		PopupStore popup = persistPopup(owner, PopupFeeType.FREE, null, "대기 만석 팝업");
+		ReservationSlot slot = persistSlot(popup, 1, 1);
+		persistWaitlist(waitingUser, slot);
+		grantProceedPermission(popup.getId(), requestUser.getId());
+
+		mockMvc.perform(post("/reservations")
+				.with(authentication(auth(requestUser.getId())))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "slotId": %d
+					}
+					""".formatted(slot.getId())))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("RESERVATION_CAPACITY_EXCEEDED"));
+
+		flushAndClear();
+
+		assertThat(reservationWaitlistRepository.countBySlotId(slot.getId())).isEqualTo(1);
+		assertThat(reservationWaitlistRepository.existsByUserIdAndSlotId(requestUser.getId(), slot.getId())).isFalse();
+	}
+
+	@Test
+	@DisplayName("정원 초과 외 실패에서는 대기 row를 생성하지 않는다")
+	void createReservation_nonCapacityFailure_doesNotRegisterWaitlist() throws Exception {
+		User user = persistUser("waitlist-no-admission@test.com");
+		PopupStore popup = persistPopup(user, PopupFeeType.FREE, null, "대기 미대상 팝업");
+		ReservationSlot slot = persistSlot(popup, 1, 1);
+
+		mockMvc.perform(post("/reservations")
+				.with(authentication(auth(user.getId())))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "slotId": %d
+					}
+					""".formatted(slot.getId())))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("RESERVATION_ADMISSION_REQUIRED"));
+
+		flushAndClear();
+
+		assertThat(reservationWaitlistRepository.countBySlotId(slot.getId())).isZero();
+	}
+
+	@Test
+	@DisplayName("대기 row가 있어도 HELD 예약 생성만으로는 삭제하지 않는다")
+	void createReservation_success_doesNotDeleteWaitlistOnHeld() throws Exception {
+		User user = persistUser("waitlist-held@test.com");
+		PopupStore popup = persistPopup(user, PopupFeeType.FREE, null, "대기 유지 팝업");
+		ReservationSlot slot = persistSlot(popup, 1, 0);
+		persistWaitlist(user, slot);
+		grantProceedPermission(popup.getId(), user.getId());
+
+		mockMvc.perform(post("/reservations")
+				.with(authentication(auth(user.getId())))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "slotId": %d
+					}
+					""".formatted(slot.getId())))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.data.status").value("HELD"));
+
+		flushAndClear();
+
+		assertThat(reservationWaitlistRepository.existsByUserIdAndSlotId(user.getId(), slot.getId())).isTrue();
+	}
+
+	@Test
 	@DisplayName("무료 예약 결제 시작에 성공하면 예약자 정보를 저장하고 예약을 확정한다")
 	void startFreeReservationPayment_success() throws Exception {
 		User user = persistUser("free@test.com");
@@ -196,6 +327,32 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 		assertThat(savedReservation.getReservationName()).isEqualTo("홍길동");
 		assertThat(savedReservation.getReservationPhone()).isEqualTo("010-1234-5678");
 		assertThat(paymentRepository.findAll()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("무료 예약이 확정되면 같은 사용자와 슬롯의 대기 row를 삭제한다")
+	void startFreeReservationPayment_success_deletesWaitlist() throws Exception {
+		User user = persistUser("free-waitlist@test.com");
+		ReservationSlot slot = persistSlot(persistPopup(user, PopupFeeType.FREE, null, "무료 대기 팝업"), 10, 1);
+		Reservation reservation = persistReservation(user, slot, ReservationStatus.HELD);
+		persistWaitlist(user, slot);
+
+		mockMvc.perform(post("/reservations/{reservationId}/payments", reservation.getId())
+				.with(authentication(auth(user.getId())))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "name": "홍길동",
+					  "phone": "010-1234-5678",
+					  "idempotencyKey": "free-waitlist-payment-key"
+					}
+					"""))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+
+		flushAndClear();
+
+		assertThat(reservationWaitlistRepository.existsByUserIdAndSlotId(user.getId(), slot.getId())).isFalse();
 	}
 
 	@Test
@@ -231,6 +388,33 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.READY);
 		assertThat(payment.getReservation().getId()).isEqualTo(reservation.getId());
 		assertThat(payment.getIdempotencyKey()).isEqualTo("paid-payment-key");
+	}
+
+	@Test
+	@DisplayName("유료 예약 결제 시작만으로는 대기 row를 삭제하지 않는다")
+	void startPaidReservationPayment_success_doesNotDeleteWaitlist() throws Exception {
+		User user = persistUser("paid-waitlist@test.com");
+		PopupStore popupStore = persistPopup(user, PopupFeeType.PAID, 15000, "유료 대기 팝업");
+		ReservationSlot slot = persistSlot(popupStore, 10, 1);
+		Reservation reservation = persistReservation(user, slot, ReservationStatus.HELD);
+		persistWaitlist(user, slot);
+
+		mockMvc.perform(post("/reservations/{reservationId}/payments", reservation.getId())
+				.with(authentication(auth(user.getId())))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "name": "홍길동",
+					  "phone": "010-1234-5678",
+					  "idempotencyKey": "paid-waitlist-payment-key"
+					}
+					"""))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.orderName").value("유료 대기 팝업 예약"));
+
+		flushAndClear();
+
+		assertThat(reservationWaitlistRepository.existsByUserIdAndSlotId(user.getId(), slot.getId())).isTrue();
 	}
 
 	@Test
@@ -349,6 +533,10 @@ class ReservationIntegrationTest extends IntegrationTestSupport {
 			reservation.expire();
 		}
 		return reservationRepository.save(reservation);
+	}
+
+	private ReservationWaitlist persistWaitlist(User user, ReservationSlot slot) {
+		return reservationWaitlistRepository.save(ReservationWaitlist.of(user, slot));
 	}
 
 	private void grantProceedPermission(Long popupId, Long userId) {

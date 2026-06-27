@@ -39,9 +39,11 @@ import com.back.popspot.global.queue.service.WaitingQueueRedisService;
 import com.back.popspot.global.redis.RedisKeys;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ReservationService {
 
 	private static final long HOLD_MINUTES = 5L;
@@ -57,6 +59,7 @@ public class ReservationService {
 	private final UserRepository userRepository;
 	private final ReservationExpirationService reservationExpirationService;
 	private final ReservationCommandService reservationCommandService;
+	private final ReservationWaitlistService reservationWaitlistService;
 	private final RedisTemplate<String, Long> redisTemplate;
 	private final WaitingQueueRedisService waitingQueueRedisService;
 
@@ -118,6 +121,7 @@ public class ReservationService {
 		if (after == null || after < 0) {
 			// 남은 자리 없음/미초기화 → remaining 롤백
 			redisTemplate.opsForValue().increment(remainingKey);
+			registerWaitlist(user, slot);
 			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
 		}
 
@@ -210,6 +214,7 @@ public class ReservationService {
 		PopupStore popupStore = reservation.getSlot().getPopupStore();
 		if (popupStore.getFeeType() == PopupFeeType.FREE) {
 			reservation.confirm();
+			reservationWaitlistService.deleteByConfirmedReservation(reservation.getUser(), reservation.getSlot());
 			return ReservationPaymentResponse.free(reservation);
 		}
 
@@ -245,5 +250,14 @@ public class ReservationService {
 		paymentRepository.save(payment);
 
 		return ReservationPaymentResponse.paid(payment);
+	}
+
+	private void registerWaitlist(User user, ReservationSlot slot) {
+		try {
+			reservationWaitlistService.registerIfAvailable(user, slot);
+		} catch (RuntimeException exception) {
+			log.warn("Reservation waitlist registration failed. userId={}, slotId={}",
+				user.getId(), slot.getId(), exception);
+		}
 	}
 }

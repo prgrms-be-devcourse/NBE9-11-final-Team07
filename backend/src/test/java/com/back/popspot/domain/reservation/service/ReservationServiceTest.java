@@ -83,6 +83,9 @@ class ReservationServiceTest {
 	private ReservationCommandService reservationCommandService;
 
 	@Mock
+	private ReservationWaitlistService reservationWaitlistService;
+
+	@Mock
 	private RedisTemplate<String, Long> redisTemplate;
 
 	@Mock
@@ -103,6 +106,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -191,6 +195,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -228,6 +233,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -294,6 +300,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -329,6 +336,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -358,6 +366,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -393,6 +402,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -439,6 +449,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -471,6 +482,7 @@ class ReservationServiceTest {
 			any(LocalDateTime.class),
 			any(LocalDateTime.class)
 		);
+		verify(reservationWaitlistService).registerIfAvailable(user, slot);
 	}
 
 	@Test
@@ -485,6 +497,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -521,6 +534,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -563,6 +577,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -608,6 +623,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -660,6 +676,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -691,6 +708,7 @@ class ReservationServiceTest {
 		assertEquals(ReservationStatus.CONFIRMED, reservation.getStatus());
 		assertEquals("홍길동", ReflectionTestUtils.getField(reservation, "reservationName"));
 		assertEquals("010-1234-5678", ReflectionTestUtils.getField(reservation, "reservationPhone"));
+		verify(reservationWaitlistService).deleteByConfirmedReservation(user, slot);
 		verify(paymentRepository, never()).save(any(Payment.class));
 	}
 
@@ -706,6 +724,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -752,6 +771,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -788,6 +808,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -820,6 +841,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -852,6 +874,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -885,6 +908,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -926,6 +950,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -975,6 +1000,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -1009,6 +1035,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
@@ -1048,6 +1075,7 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
+			reservationWaitlistService,
 			redisTemplate,
 			waitingQueueRedisService
 		);
