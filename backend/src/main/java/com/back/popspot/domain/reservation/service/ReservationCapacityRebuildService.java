@@ -10,6 +10,7 @@ import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.reservation.dto.ReservationCapacityRebuildResult;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
+import com.back.popspot.domain.reservation.repository.ReservationCancelPoolRepository;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
@@ -30,6 +31,7 @@ public class ReservationCapacityRebuildService {
 
 	private final ReservationSlotRepository reservationSlotRepository;
 	private final ReservationRepository reservationRepository;
+	private final ReservationCancelPoolRepository reservationCancelPoolRepository;
 	private final RedisTemplate<String, Long> redisTemplate;
 
 	@Transactional(readOnly = true)
@@ -44,8 +46,10 @@ public class ReservationCapacityRebuildService {
 		// DB 예약 원장에서 현재 자리를 점유 중인 HELD, CONFIRMED 예약 수만 센다.
 		long activeReservationCount = reservationRepository.countBySlotIdAndStatusIn(slotId, ACTIVE_STATUSES);
 
-		// DB 원장 기준 남은 정원은 총 정원에서 활성 예약 수를 뺀 값이다.
-		long remaining = capacity - activeReservationCount;
+		long pendingCancelCount = reservationCancelPoolRepository.sumPendingCountBySlotId(slotId);
+
+		// DB 원장 기준 남은 정원에서 아직 공개하지 않은 취소 예약 수량을 제외한다.
+		long remaining = capacity - activeReservationCount - pendingCancelCount;
 
 		// DB 기준으로 이미 정원을 초과했다면 Redis 값을 덮어쓰지 않는다.
 		if (remaining < 0) {

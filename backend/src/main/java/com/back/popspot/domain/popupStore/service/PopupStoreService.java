@@ -6,6 +6,7 @@ import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,7 @@ import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.global.exception.BusinessException;
 import com.back.popspot.global.exception.ErrorCode;
+import com.back.popspot.global.redis.RedisKeys;
 import com.back.popspot.global.s3.S3Service;
 
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,7 @@ PopupStoreService {
 	private final PopupStoreRepository popupStoreRepository;
 	private final ReservationSlotRepository reservationSlotRepository;
 	private final S3Service s3Service;
+	private final RedisTemplate<String, Long> redisTemplate;
 
 	/**
 	 * 팝업스토어 목록을 조회한다.
@@ -86,8 +89,13 @@ PopupStoreService {
 
 		return reservationSlotRepository.findByPopupStoreIdAndSlotDate(popupStoreId, date)
 			.stream()
-			.map(ReservationSlotResponse::from)
+			.map(slot -> ReservationSlotResponse.from(slot, isAvailable(slot.getId())))
 			.toList();
+	}
+
+	private boolean isAvailable(Long slotId) {
+		Long remaining = redisTemplate.opsForValue().get(RedisKeys.reservationSlotRemaining(slotId));
+		return remaining != null && remaining > 0;
 	}
 
 	private Page<PopupStore> findByStatus(PopupStatus status, LocalDateTime now, Pageable pageable) {
