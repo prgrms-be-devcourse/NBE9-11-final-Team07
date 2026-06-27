@@ -57,7 +57,7 @@ public class ReservationService {
 	private final UserRepository userRepository;
 	private final ReservationExpirationService reservationExpirationService;
 	private final ReservationCommandService reservationCommandService;
-	private final RedisTemplate<String, Long> redisTemplate;
+	private final ReservationRedisService reservationRedisService;
 	private final WaitingQueueRedisService waitingQueueRedisService;
 
 	@Transactional(readOnly = true)
@@ -114,10 +114,10 @@ public class ReservationService {
 		String remainingKey = RedisKeys.reservationSlotRemaining(slotId);
 
 		// 2. 모든 검증 통과 후 단일 카운터(remaining) 선차감. DECR 반환값만으로 동시성 제어가 완결된다.
-		Long after = redisTemplate.opsForValue().decrement(remainingKey);
+		Long after = reservationRedisService.decrement(remainingKey);
 		if (after == null || after < 0) {
 			// 남은 자리 없음/미초기화 → remaining 롤백
-			redisTemplate.opsForValue().increment(remainingKey);
+			reservationRedisService.increment(remainingKey);
 			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
 		}
 
@@ -132,7 +132,7 @@ public class ReservationService {
 
 			return ReservationCreateResponse.from(reservation);
 		} catch (RuntimeException e) {
-			redisTemplate.opsForValue().increment(remainingKey);
+			reservationRedisService.increment(remainingKey);
 			throw e;
 		}
 	}
@@ -172,7 +172,7 @@ public class ReservationService {
 		reservationCommandService.cancelInTx(reservationId, slotId, now);
 
 		// 커밋 성공 후에만 Redis 복구
-		redisTemplate.opsForValue().increment(RedisKeys.reservationSlotRemaining(slotId));
+		reservationRedisService.increment(RedisKeys.reservationSlotRemaining(slotId));
 	}
 
 	@Transactional(noRollbackFor = ReservationPaymentExpiredException.class)

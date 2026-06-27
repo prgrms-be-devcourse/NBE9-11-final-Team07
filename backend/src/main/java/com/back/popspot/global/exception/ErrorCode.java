@@ -51,6 +51,7 @@ public enum ErrorCode {
 	PAYMENT_CANCEL_RESPONSE_MISMATCH(HttpStatus.BAD_GATEWAY, "결제 취소 응답이 일치하지 않습니다."),
 	PAYMENT_CANCEL_FAILED(HttpStatus.BAD_GATEWAY, "결제 취소 요청에 실패했습니다."),
 
+	RESERVATION_TEMPORARILY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "예약이 일시 중단됩니다. 잠시 후 다시 시도해주세요."),
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
 	private final HttpStatus status;
