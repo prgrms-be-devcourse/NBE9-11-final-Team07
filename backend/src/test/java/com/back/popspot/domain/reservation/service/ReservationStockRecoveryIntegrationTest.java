@@ -31,8 +31,11 @@ import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
+import com.back.popspot.domain.reservation.dto.ReservationCapacityRebuildResult;
 import com.back.popspot.domain.reservation.entity.Reservation;
+import com.back.popspot.domain.reservation.entity.ReservationCancelPool;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
+import com.back.popspot.domain.reservation.repository.ReservationCancelPoolRepository;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
@@ -44,7 +47,8 @@ import com.back.popspot.support.IntegrationTestSupport;
  *
  * <p>핵심 검증 포인트:
  * <ul>
- *   <li>취소/만료 시 Redis remaining 복구(INCR)가 <b>DB 커밋 이후</b>에만 일어난다.</li>
+ *   <li>확정 예약 취소 시 Redis remaining 은 즉시 복구하지 않고 취소 예약 재오픈 pool 에 적립한다.</li>
+ *   <li>만료 시 Redis remaining 복구(INCR)가 <b>DB 커밋 이후</b>에만 일어난다.</li>
  *   <li>결제 경로 만료의 {@code expireInTx}(REQUIRES_NEW)가 바깥 메서드의 예외와 무관하게 독립 커밋된다.</li>
  *   <li>DB 커밋이 실패(롤백)하면 Redis 를 건드리지 않는다.</li>
  * </ul>
@@ -66,6 +70,9 @@ class ReservationStockRecoveryIntegrationTest extends IntegrationTestSupport {
 	private ReservationExpirationService reservationExpirationService;
 
 	@Autowired
+	private ReservationCapacityRebuildService reservationCapacityRebuildService;
+
+	@Autowired
 	private UserRepository userRepository;
 
 	@Autowired
@@ -76,6 +83,9 @@ class ReservationStockRecoveryIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private ReservationRepository reservationRepository;
+
+	@Autowired
+	private ReservationCancelPoolRepository reservationCancelPoolRepository;
 
 	@Autowired
 	private PaymentRepository paymentRepository;
@@ -91,6 +101,7 @@ class ReservationStockRecoveryIntegrationTest extends IntegrationTestSupport {
 		// FK 순서: payment -> reservation -> slot -> popup -> user
 		paymentRepository.deleteAllInBatch();
 		reservationRepository.deleteAllInBatch();
+		reservationCancelPoolRepository.deleteAllInBatch();
 		reservationSlotRepository.deleteAllInBatch();
 		popupStoreRepository.deleteAllInBatch();
 		userRepository.deleteAllInBatch();
@@ -99,10 +110,10 @@ class ReservationStockRecoveryIntegrationTest extends IntegrationTestSupport {
 		slotIds.clear();
 	}
 
-	// ── 1. 취소: DB 커밋(cancelInTx) 후 Redis remaining 복구 ──────────────────
+	// ── 1. 취소: DB 커밋(cancelInTx) 후 취소 예약 재오픈 pool 적립 ─────────────
 	@Test
-	@DisplayName("확정 예약 취소가 커밋되면 slot reservedCount 감소가 영속되고 Redis remaining 이 복구된다")
-	void cancel_commitsDbThenRestoresRedis() throws Exception {
+	@DisplayName("확정 예약 취소가 커밋되면 Redis remaining은 그대로이고 취소 예약 재오픈 pool에 적립된다")
+	void cancel_commitsDbThenAccruesCancelPool() throws Exception {
 		User user = persistUser("cancel@test.com");
 		ReservationSlot slot = persistSlot(persistPopup(user, PopupFeeType.FREE, null, "취소"), 10, 1); // remaining=9
 		Reservation reservation = persistReservation(user, slot, ReservationStatus.CONFIRMED, future());
@@ -116,11 +127,15 @@ class ReservationStockRecoveryIntegrationTest extends IntegrationTestSupport {
 		Reservation saved = reservationRepository.findById(reservation.getId()).orElseThrow();
 		ReservationSlot savedSlot = reservationSlotRepository.findById(slot.getId()).orElseThrow();
 		Long remaining = redisTemplate.opsForValue().get(RedisKeys.reservationSlotRemaining(slot.getId()));
+		List<ReservationCancelPool> pools = reservationCancelPoolRepository.findAll();
 
 		assertThat(saved.getStatus()).isEqualTo(ReservationStatus.CANCELED); // DB 커밋됨
 		assertThat(saved.getCanceledAt()).isNotNull();
-		assertThat(savedSlot.getReservedCount()).isZero();
-		assertThat(remaining).isEqualTo(10L);                                // 커밋 후 INCR
+		assertThat(savedSlot.getReservedCount()).isEqualTo(1);
+		assertThat(remaining).isEqualTo(9L);                                  // 즉시 INCR 없음
+		assertThat(pools).hasSize(1);
+		assertThat(pools.get(0).getSlot().getId()).isEqualTo(slot.getId());
+		assertThat(pools.get(0).getPendingCount()).isEqualTo(1);
 	}
 
 	// ── 2. 스케줄러 만료: 건별 커밋 후 Redis 복구 (서비스 직접 호출) ───────────
@@ -139,7 +154,7 @@ class ReservationStockRecoveryIntegrationTest extends IntegrationTestSupport {
 		Long remaining = redisTemplate.opsForValue().get(RedisKeys.reservationSlotRemaining(slot.getId()));
 
 		assertThat(saved.getStatus()).isEqualTo(ReservationStatus.EXPIRED);
-		assertThat(savedSlot.getReservedCount()).isZero();
+		assertThat(savedSlot.getReservedCount()).isEqualTo(1);
 		assertThat(remaining).isEqualTo(10L);
 	}
 
@@ -166,30 +181,60 @@ class ReservationStockRecoveryIntegrationTest extends IntegrationTestSupport {
 		Long remaining = redisTemplate.opsForValue().get(RedisKeys.reservationSlotRemaining(slot.getId()));
 
 		assertThat(saved.getStatus()).isEqualTo(ReservationStatus.EXPIRED); // REQUIRES_NEW 가 독립 커밋
-		assertThat(savedSlot.getReservedCount()).isZero();
+		assertThat(savedSlot.getReservedCount()).isEqualTo(1);
 		assertThat(remaining).isEqualTo(10L);                              // 커밋 후 INCR
 	}
 
-	// ── 4. 취소 DB 커밋 실패: 롤백되면 Redis 를 건드리지 않는다 ────────────────
+	// ── 4. 취소: reservedCount 에 의존하지 않는다 ────────────────────────────
 	@Test
-	@DisplayName("취소 중 slot 정원 복구가 0건이면 트랜잭션이 롤백되고 예약 상태/Redis 가 그대로 유지된다")
-	void cancel_rollsBackAndKeepsRedisWhenDecreaseFails() throws Exception {
+	@DisplayName("reservedCount가 0이어도 확정 예약 취소는 성공하고 Redis remaining은 즉시 증가하지 않는다")
+	void cancel_succeedsEvenWhenReservedCountIsZero() throws Exception {
 		User user = persistUser("cancel-fail@test.com");
-		// reservedCount=0 → decreaseReservedCount 가 0건 → cancelInTx 가 INTERNAL_SERVER_ERROR 로 롤백.
 		ReservationSlot slot = persistSlot(persistPopup(user, PopupFeeType.FREE, null, "취소실패"), 10, 0); // remaining=10
 		Reservation reservation = persistReservation(user, slot, ReservationStatus.CONFIRMED, future());
 
 		mockMvc.perform(delete("/reservations/{id}", reservation.getId())
 				.with(authentication(auth(user.getId()))))
-			// INTERNAL_SERVER_ERROR(500)
-			.andExpect(status().isInternalServerError());
+			.andExpect(status().isOk());
 
 		Reservation saved = reservationRepository.findById(reservation.getId()).orElseThrow();
+		ReservationSlot savedSlot = reservationSlotRepository.findById(slot.getId()).orElseThrow();
 		Long remaining = redisTemplate.opsForValue().get(RedisKeys.reservationSlotRemaining(slot.getId()));
+		List<ReservationCancelPool> pools = reservationCancelPoolRepository.findAll();
 
-		assertThat(saved.getStatus()).isEqualTo(ReservationStatus.CONFIRMED); // 롤백되어 그대로
-		assertThat(saved.getCanceledAt()).isNull();
-		assertThat(remaining).isEqualTo(10L);                                // 커밋 실패 → INCR 없음
+		assertThat(saved.getStatus()).isEqualTo(ReservationStatus.CANCELED);
+		assertThat(saved.getCanceledAt()).isNotNull();
+		assertThat(savedSlot.getReservedCount()).isZero();
+		assertThat(remaining).isEqualTo(10L);
+		assertThat(pools).hasSize(1);
+		assertThat(pools.get(0).getPendingCount()).isEqualTo(1);
+	}
+
+	// ── 5. 수동 복구: 장애로 틀어진 Redis remaining 을 DB 원장 기준으로 재구축 ────
+	@Test
+	@DisplayName("Redis remaining이 장애로 틀어진 경우 DB 원장과 미공개 취소 예약 수량 기준으로 복구한다")
+	void rebuildSlotRemaining_recoversWrongRedisRemaining() {
+		User host = persistUser("rebuild-host@test.com");
+		PopupStore popupStore = persistPopup(host, PopupFeeType.FREE, null, "복구");
+		ReservationSlot slot = persistSlot(popupStore, 10, 0);
+
+		for (int i = 0; i < 4; i++) {
+			User user = persistUser("rebuild-user-" + i + "@test.com");
+			persistReservation(user, slot, ReservationStatus.CONFIRMED, future());
+		}
+
+		ReservationCancelPool pool = ReservationCancelPool.create(slot, LocalDateTime.now().plusHours(1));
+		pool.increasePending();
+		pool.increasePending();
+		reservationCancelPoolRepository.save(pool);
+		redisTemplate.opsForValue().set(RedisKeys.reservationSlotRemaining(slot.getId()), 99L);
+
+		ReservationCapacityRebuildResult result = reservationCapacityRebuildService.rebuildSlotRemaining(slot.getId());
+		Long rebuiltRemaining = redisTemplate.opsForValue().get(RedisKeys.reservationSlotRemaining(slot.getId()));
+
+		assertThat(result.previousRedisRemaining()).isEqualTo(99L);
+		assertThat(result.rebuiltRedisRemaining()).isEqualTo(4L);
+		assertThat(rebuiltRemaining).isEqualTo(4L);
 	}
 
 	// ── helpers ───────────────────────────────────────────────────────────────

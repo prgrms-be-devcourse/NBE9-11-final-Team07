@@ -18,6 +18,7 @@ public class TossPaymentsClient {
 
 	private final RestClient tossPaymentsRestClient;
 
+	// 토스 결제 승인 API를 호출
 	public JsonNode confirm(PaymentConfirmRequest request) {
 		return tossPaymentsRestClient.post()
 			.uri("/v1/payments/confirm")
@@ -27,6 +28,7 @@ public class TossPaymentsClient {
 			.body(JsonNode.class);
 	}
 
+	// 토스 결제 취소 API를 호출
 	public JsonNode cancel(PaymentCancelCommand command) {
 		return tossPaymentsRestClient.post()
 			.uri("/v1/payments/{paymentKey}/cancel", command.paymentKey())

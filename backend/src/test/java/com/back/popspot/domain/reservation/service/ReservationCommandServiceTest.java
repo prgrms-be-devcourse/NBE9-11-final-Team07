@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -18,7 +17,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.back.popspot.domain.popupStore.repository.ReservationSlotRepository;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
 import com.back.popspot.global.exception.BusinessException;
@@ -38,7 +36,7 @@ class ReservationCommandServiceTest {
 	private ReservationRepository reservationRepository;
 
 	@Mock
-	private ReservationSlotRepository reservationSlotRepository;
+	private ReservationCancelPoolService reservationCancelPoolService;
 
 	@InjectMocks
 	private ReservationCommandService service;
@@ -54,30 +52,14 @@ class ReservationCommandServiceTest {
 		boolean expired = service.expireInTx(100L, 1L, now);
 
 		assertFalse(expired);
-		verify(reservationSlotRepository, never()).decreaseReservedCount(any(Long.class));
 	}
 
 	@Test
-	@DisplayName("슬롯 정원 복구(decreaseReservedCount)가 0건이면 예외로 롤백시킨다")
-	void expireInTx_throwsWhenRestoreCapacityFails() {
-		LocalDateTime now = LocalDateTime.now();
-		when(reservationRepository.expireHeldReservation(
-			100L, ReservationStatus.HELD, ReservationStatus.EXPIRED, now)).thenReturn(1);
-		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(0);
-
-		BusinessException exception = assertThrows(BusinessException.class,
-			() -> service.expireInTx(100L, 1L, now));
-
-		assertTrue(exception.getErrorCode() == ErrorCode.INTERNAL_SERVER_ERROR);
-	}
-
-	@Test
-	@DisplayName("만료와 슬롯 정원 복구가 모두 성공하면 true 를 반환한다")
+	@DisplayName("만료 상태 변경이 성공하면 true 를 반환한다")
 	void expireInTx_returnsTrueOnSuccess() {
 		LocalDateTime now = LocalDateTime.now();
 		when(reservationRepository.expireHeldReservation(
 			100L, ReservationStatus.HELD, ReservationStatus.EXPIRED, now)).thenReturn(1);
-		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
 
 		assertTrue(service.expireInTx(100L, 1L, now));
 	}
@@ -94,31 +76,17 @@ class ReservationCommandServiceTest {
 			() -> service.cancelInTx(100L, 1L, now));
 
 		assertTrue(exception.getErrorCode() == ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS);
-		verify(reservationSlotRepository, never()).decreaseReservedCount(any(Long.class));
+		verify(reservationCancelPoolService, never()).accrue(1L, now);
 	}
 
 	@Test
-	@DisplayName("슬롯 정원 복구가 0건이면 예외로 롤백시킨다")
-	void cancelInTx_throwsWhenRestoreCapacityFails() {
-		LocalDateTime now = LocalDateTime.now();
-		when(reservationRepository.cancelConfirmedReservation(
-			100L, ReservationStatus.CONFIRMED, ReservationStatus.CANCELED, now)).thenReturn(1);
-		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(0);
-
-		BusinessException exception = assertThrows(BusinessException.class,
-			() -> service.cancelInTx(100L, 1L, now));
-
-		assertTrue(exception.getErrorCode() == ErrorCode.INTERNAL_SERVER_ERROR);
-	}
-
-	@Test
-	@DisplayName("취소와 슬롯 정원 복구가 모두 성공하면 정상 종료한다")
+	@DisplayName("취소 상태 변경이 성공하면 취소 예약 재오픈 pool에 적립한다")
 	void cancelInTx_success() {
 		LocalDateTime now = LocalDateTime.now();
 		when(reservationRepository.cancelConfirmedReservation(
 			100L, ReservationStatus.CONFIRMED, ReservationStatus.CANCELED, now)).thenReturn(1);
-		when(reservationSlotRepository.decreaseReservedCount(1L)).thenReturn(1);
 
 		assertDoesNotThrow(() -> service.cancelInTx(100L, 1L, now));
+		verify(reservationCancelPoolService).accrue(1L, now);
 	}
 }

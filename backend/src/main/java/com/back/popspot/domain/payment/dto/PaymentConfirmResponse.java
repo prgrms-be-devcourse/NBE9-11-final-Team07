@@ -17,6 +17,7 @@ public record PaymentConfirmResponse(
 	LocalDateTime approvedAt
 ) {
 
+	// 결제 엔티티로 결제 승인 응답을 생성
 	public static PaymentConfirmResponse from(Payment payment) {
 		return new PaymentConfirmResponse(
 			payment.getId(),

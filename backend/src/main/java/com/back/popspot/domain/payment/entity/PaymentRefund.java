@@ -48,6 +48,7 @@ public class PaymentRefund extends BaseEntity {
 	@Column(name = "completed_at")
 	private LocalDateTime completedAt;
 
+	// 환불 요청 엔티티를 생성
 	public static PaymentRefund request(
 		Payment payment,
 		User user,
@@ -65,16 +66,19 @@ public class PaymentRefund extends BaseEntity {
 		return refund;
 	}
 
+	// 환불 요청 상태로 재시도 처리
 	public void retry() {
 		this.status = PaymentRefundStatus.REQUESTED;
 	}
 
+	// 환불 완료 상태로 변경
 	public void complete(String transactionKey, LocalDateTime completedAt) {
 		this.status = PaymentRefundStatus.DONE;
 		this.transactionKey = transactionKey;
 		this.completedAt = completedAt;
 	}
 
+	// 환불 실패 상태로 변경
 	public void fail() {
 		this.status = PaymentRefundStatus.FAILED;
 	}
