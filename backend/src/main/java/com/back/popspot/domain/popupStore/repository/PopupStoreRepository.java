@@ -1,6 +1,7 @@
 package com.back.popspot.domain.popupStore.repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,4 +24,8 @@ public interface PopupStoreRepository extends JpaRepository<PopupStore, Long> {
 	// CLOSED: 예약 종료
 	@Query("SELECT p FROM PopupStore p WHERE p.reservationEndAt <= :now")
 	Page<PopupStore> findClosed(@Param("now") LocalDateTime now, Pageable pageable);
+
+	// 자정 배치 전용 — reservationEndAt <= now 인 팝업 ID 목록
+	@Query("SELECT p.id FROM PopupStore p WHERE p.reservationEndAt <= :now")
+	List<Long> findExpiredPopupIds(@Param("now") LocalDateTime now);
 }

@@ -54,6 +54,9 @@ waiting-queue:
   poll-interval-seconds: 5
   queue-ttl-buffer-seconds: 1800
 
+queue-cleanup:
+  chunk-size: 1000
+
 management:
   endpoints:
     web:
