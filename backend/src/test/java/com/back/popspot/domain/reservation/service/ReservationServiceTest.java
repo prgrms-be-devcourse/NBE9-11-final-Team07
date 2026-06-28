@@ -97,20 +97,7 @@ class ReservationServiceTest {
 	@DisplayName("내 예약 내역 조회 성공")
 	void getMyReservations_success() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore freePopupStore = createPopupStore();
 		PopupStore paidPopupStore = createPopupStore();
 		ReservationSlot freeSlot = createReservationSlot(freePopupStore);
@@ -188,20 +175,7 @@ class ReservationServiceTest {
 	@DisplayName("내 예약 내역이 없으면 빈 페이지를 반환한다")
 	void getMyReservations_emptyPage() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		Pageable pageable = PageRequest.of(0, 10);
 		Page<Reservation> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
 
@@ -228,20 +202,7 @@ class ReservationServiceTest {
 	@DisplayName("예약 선점 성공")
 	void createReservation_holdSuccess() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -296,20 +257,7 @@ class ReservationServiceTest {
 	@DisplayName("같은 유저 같은 슬롯 중복 선점 실패")
 	void createReservation_fail_duplicateHold() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -334,20 +282,7 @@ class ReservationServiceTest {
 	@DisplayName("존재하지 않는 슬롯이면 선점 실패")
 	void createReservation_fail_slotNotFound() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.empty());
@@ -366,20 +301,7 @@ class ReservationServiceTest {
 	@DisplayName("예약 가능 기간이 아니면 선점 실패")
 	void createReservation_fail_popupReservationNotAvailable() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -404,20 +326,7 @@ class ReservationServiceTest {
 	@DisplayName("DB 저장 실패 시 남은 재고(remaining)를 롤백한다")
 	void createReservation_fail_dbSaveRollback() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -452,20 +361,7 @@ class ReservationServiceTest {
 	@DisplayName("남은 재고(remaining)가 음수면 롤백하고 DB 까지 가지 않는다")
 	void createReservation_fail_remainingExhausted() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -501,20 +397,7 @@ class ReservationServiceTest {
 	@DisplayName("무료 예약 취소 성공 시 DB 커밋(cancelInTx) 후 Redis remaining을 복구한다")
 	void cancelReservation_free_success() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -537,20 +420,7 @@ class ReservationServiceTest {
 	@DisplayName("유료 예약 취소 성공 시 결제 환불 후 예약을 취소한다")
 	void cancelReservation_paid_success() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -580,20 +450,7 @@ class ReservationServiceTest {
 	@DisplayName("유료 예약 환불 실패 시 예약 취소를 진행하지 않는다")
 	void cancelReservation_paid_fail_refund() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -628,20 +485,7 @@ class ReservationServiceTest {
 	@DisplayName("유료 예약 결제 시작 성공")
 	void startReservationPayment_paidSuccess() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -693,20 +537,7 @@ class ReservationServiceTest {
 	@DisplayName("무료 예약 결제 시작 성공")
 	void startReservationPayment_freeSuccess() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -743,20 +574,7 @@ class ReservationServiceTest {
 	@DisplayName("같은 멱등성 키 재요청이면 기존 결제를 재응답한다")
 	void startReservationPayment_success_reuseExistingPaymentByIdempotencyKey() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -800,20 +618,7 @@ class ReservationServiceTest {
 	@DisplayName("선점 시간이 만료되면 예약을 만료 처리하고 결제 시작에 실패한다")
 	void startReservationPayment_fail_expiredHeldUntil() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -839,20 +644,7 @@ class ReservationServiceTest {
 	@DisplayName("본인 예약이 아니면 취소 실패")
 	void cancelReservation_fail_forbidden() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -874,20 +666,7 @@ class ReservationServiceTest {
 	@DisplayName("확정 상태가 아니면 취소 실패")
 	void cancelReservation_fail_notConfirmed() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -909,20 +688,7 @@ class ReservationServiceTest {
 	@DisplayName("취소 기한이 지나면 취소 실패")
 	void cancelReservation_fail_deadlinePassed() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -945,20 +711,7 @@ class ReservationServiceTest {
 	@DisplayName("조건부 상태 변경에 실패하면 취소 실패")
 	void cancelReservation_fail_conditionalCancelUpdate() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
@@ -989,20 +742,7 @@ class ReservationServiceTest {
 	@DisplayName("입장 허가 후 예약 성공 시 proceed flag를 정확히 1번 소각한다")
 	void createReservation_success_revokesAdmissionFlagOnHold() {
 		// given
-		ReservationService reservationService = new ReservationService(
-		reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -1040,20 +780,7 @@ class ReservationServiceTest {
 	@DisplayName("proceed flag 없으면 RESERVATION_ADMISSION_REQUIRED, remaining 차감 없음")
 	void createReservation_fail_admissionRequired() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -1077,20 +804,7 @@ class ReservationServiceTest {
 	@DisplayName("admission 통과 후 capacity 초과 시 proceed flag를 소각하지 않는다 (재시도 가능)")
 	void createReservation_fail_capacityExceeded_doesNotRevokeFlag() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -1118,20 +832,7 @@ class ReservationServiceTest {
 	@DisplayName("remaining 차감 성공 후 DB save 실패 시 proceed flag는 이미 소각된 상태다 (characterization)")
 	void createReservation_fail_dbSave_proceedFlagAlreadyRevoked() {
 		// given
-		ReservationService reservationService = new ReservationService(
-			reservationRepository,
-			reservationSlotRepository,
-			paymentRepository,
-			paymentService,
-			userRepository,
-			reservationExpirationService,
-			reservationCommandService,
-			reservationWaitlistService,
-    		redisTemplate,
-			waitingQueueRedisService,
-			paymentReadyService,
-			reservationRedisService
-		);
+		ReservationService reservationService = createReservationService();
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -1166,6 +867,22 @@ class ReservationServiceTest {
 	//     slotDate/startTime 이 현재 시각보다 과거인 케이스가 단위·통합 어디에도 없다.
 	//  2. createReservation_fail_userNotFound — RESOURCE_NOT_FOUND
 	//     userRepository.findById 가 empty 를 반환하는 케이스가 단위·통합 어디에도 없다.
+
+	private ReservationService createReservationService() {
+		return new ReservationService(
+			reservationRepository,
+			reservationSlotRepository,
+			paymentRepository,
+			paymentService,
+			userRepository,
+			reservationExpirationService,
+			reservationCommandService,
+			reservationRedisService,
+			waitingQueueRedisService,
+			paymentReadyService,
+			reservationWaitlistService
+		);
+	}
 
 	private PopupStore createPopupStore() {
 		PopupStore popupStore = new PopupStore();
