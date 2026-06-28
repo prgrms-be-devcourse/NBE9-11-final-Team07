@@ -71,7 +71,7 @@ public class PaymentReadyService {
 	// goods 구조는 최대한 건드리지 않고
 	// payment 쪽에서 굿즈 주문에 대해 결제가 중복되어 생성되지 않도록 방어
 	@Transactional
-	public Payment getORCreateGoodsOrderReadyPayment(
+	public Payment getOrCreateGoodsOrderReadyPayment(
 		User user,
 		GoodsOrder goodsOrder,
 		String orderName,
@@ -241,8 +241,8 @@ public class PaymentReadyService {
 	) {
 		if (!payment.getUser().getId().equals(user.getId())
 		|| payment.getPaymentType() != PaymentType.GOODS
-		|| payment.getReservation() == null
-		|| !payment.getReservation().getId().equals(goodsOrder.getId())) {
+		|| payment.getGoodsOrder() == null
+		|| !payment.getGoodsOrder().getId().equals(goodsOrder.getId())) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 	}
