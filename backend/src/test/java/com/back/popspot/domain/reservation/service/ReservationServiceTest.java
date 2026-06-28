@@ -105,12 +105,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore freePopupStore = createPopupStore();
 		PopupStore paidPopupStore = createPopupStore();
@@ -197,12 +196,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		Pageable pageable = PageRequest.of(0, 10);
 		Page<Reservation> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
@@ -238,12 +236,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -307,12 +304,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -346,12 +342,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 
@@ -379,12 +374,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -418,12 +412,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -467,12 +460,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-      
+			paymentReadyService,
+			reservationRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -517,12 +509,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -554,12 +545,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -598,12 +588,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -647,12 +636,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -713,12 +701,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -764,12 +751,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -822,12 +808,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -862,12 +847,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -898,12 +882,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-      
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -934,12 +917,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -971,12 +953,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -1009,19 +990,18 @@ class ReservationServiceTest {
 	void createReservation_success_revokesAdmissionFlagOnHold() {
 		// given
 		ReservationService reservationService = new ReservationService(
-			reservationRepository,
+		reservationRepository,
 			reservationSlotRepository,
 			paymentRepository,
 			paymentService,
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -1068,12 +1048,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-      redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-      
+			paymentReadyService,
+			reservationRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -1106,12 +1085,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -1148,12 +1126,11 @@ class ReservationServiceTest {
 			userRepository,
 			reservationExpirationService,
 			reservationCommandService,
-			redisTemplate,
+			reservationWaitlistService,
+    		redisTemplate,
 			waitingQueueRedisService,
-			paymentReadyService
-			reservationRedisService,
-			reservationWaitlistService
-
+			paymentReadyService,
+			reservationRedisService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
