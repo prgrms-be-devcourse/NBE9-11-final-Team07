@@ -16,7 +16,7 @@ import com.back.popspot.domain.queue.entity.QueueEntryStatus;
  */
 public interface PopupQueueEntryRepository extends JpaRepository<PopupQueueEntry, Long> {
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("""
         UPDATE PopupQueueEntry e
         SET e.status = :admitted
