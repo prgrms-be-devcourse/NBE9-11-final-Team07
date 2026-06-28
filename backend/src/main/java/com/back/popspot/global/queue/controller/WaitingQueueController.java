@@ -34,7 +34,6 @@ public class WaitingQueueController {
 		Long rank0 = queueService.getQueueRank(popupId, userIdStr);
 		if (rank0 != null) {
 			int rank = (int)(rank0 + 1);
-			queueService.setLastSeen(popupId, userIdStr);
 			return ResponseEntity.ok(CommonApiResponse.success(
 				WaitingStatusResponse.waiting(rank, calculateEta(rank), properties.pollIntervalSeconds())
 			));

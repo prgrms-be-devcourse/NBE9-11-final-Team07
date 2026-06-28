@@ -7,8 +7,6 @@ public record WaitingQueueProperties(
     int batchSize,
     long schedulerFixedRateMs,
     long proceedTtlSeconds,
-    int pollIntervalSeconds,
-    int lastSeenTtlSeconds,
-    long sweeperFixedRateMs
+    int pollIntervalSeconds
 ) {
 }

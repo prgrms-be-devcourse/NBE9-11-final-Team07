@@ -12,7 +12,6 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -268,35 +267,6 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 				.with(authentication(auth(unknownId))))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.status").value("NOT_IN_QUEUE"));
-	}
-
-	// ── 폴링 검증 3: lastSeen TTL 갱신 ───────────────────────────────────
-
-	@Test
-	@DisplayName("폴링검증3: WAITING 폴링 시마다 lastSeen TTL이 갱신됨")
-	void lastSeen_폴링시_TTL_갱신() throws Exception {
-		long userId = 55L;
-		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId));
-		String lastSeenKey = RedisKeys.popupLastSeen(TEST_POPUP_ID, String.valueOf(userId));
-
-		// 첫 번째 폴링 → lastSeen 키 생성 (TTL=3s)
-		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
-				.with(authentication(auth(userId))))
-			.andExpect(status().isOk());
-
-		assertThat(redisTemplate.hasKey(lastSeenKey)).isTrue();
-
-		// 1.1초 대기 → TTL ≈ 1.9s로 소진
-		Thread.sleep(1100);
-		Long ttlBeforeReset = redisTemplate.getExpire(lastSeenKey, TimeUnit.SECONDS);
-
-		// 두 번째 폴링 → TTL 3s로 갱신
-		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
-				.with(authentication(auth(userId))))
-			.andExpect(status().isOk());
-
-		Long ttlAfterReset = redisTemplate.getExpire(lastSeenKey, TimeUnit.SECONDS);
-		assertThat(ttlAfterReset).isGreaterThan(ttlBeforeReset);
 	}
 
 	// ── 헬퍼 ─────────────────────────────────────────────────────────────
