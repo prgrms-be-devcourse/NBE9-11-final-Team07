@@ -10,6 +10,10 @@ import org.springframework.data.repository.query.Param;
 import com.back.popspot.domain.queue.entity.PopupQueueEntry;
 import com.back.popspot.domain.queue.entity.QueueEntryStatus;
 
+/**
+ * 운영 중 경로(enqueue, admission)에서 이 리포지토리의 delete* 메서드를 호출하지 말 것.
+ * 행 삭제는 오직 자정 배치({@link #deleteAllByPopupIdAndCreatedAtBefore})만 허용한다.
+ */
 public interface PopupQueueEntryRepository extends JpaRepository<PopupQueueEntry, Long> {
 
     @Modifying
