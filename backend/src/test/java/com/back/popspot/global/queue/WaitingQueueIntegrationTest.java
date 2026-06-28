@@ -211,6 +211,29 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 		assertThat(redisTemplate.hasKey(proceedKey)).isFalse();
 	}
 
+	// ── 검증 6: ZSET·seq 절대 TTL 자동 소멸 ────────────────────────────────
+
+	@Test
+	@DisplayName("검증6: reservationEndAt + buffer 경과 후 ZSET·seq 키 자동 소멸")
+	void ZSET_seq_키_TTL_만료_후_자동소멸() throws InterruptedException {
+		// reservationEndAt = now - 1s → expireAt = (now - 1s) + buffer(5s) = now + 4s
+		LocalDateTime pastReservationEndAt = LocalDateTime.now().minusSeconds(1);
+		queueService.enqueue(TEST_POPUP_ID, "66", pastReservationEndAt);
+
+		assertThat(redisTemplate.hasKey(RedisKeys.popupWaitingQueue(TEST_POPUP_ID))).isTrue();
+		assertThat(redisTemplate.hasKey(RedisKeys.popupQueueSeq(TEST_POPUP_ID))).isTrue();
+
+		// expiry(4s) + 여유(1.5s) 대기
+		Thread.sleep(5500L);
+
+		assertThat(redisTemplate.hasKey(RedisKeys.popupWaitingQueue(TEST_POPUP_ID)))
+			.as("TTL 만료 후 waiting ZSET 키가 소멸되어야 한다")
+			.isFalse();
+		assertThat(redisTemplate.hasKey(RedisKeys.popupQueueSeq(TEST_POPUP_ID)))
+			.as("TTL 만료 후 seq 카운터 키가 소멸되어야 한다")
+			.isFalse();
+	}
+
 	// ── 폴링 검증 1: 순번 정확도 ──────────────────────────────────────────
 
 	@Test
