@@ -13,7 +13,10 @@ import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import com.back.popspot.domain.queue.entity.PopupQueueEntry;
+import com.back.popspot.domain.queue.repository.PopupQueueEntryRepository;
 import com.back.popspot.global.queue.config.WaitingQueueProperties;
 import com.back.popspot.global.redis.RedisKeys;
 
@@ -25,9 +28,12 @@ public class WaitingQueueRedisService {
 
 	private final StringRedisTemplate redisTemplate;
 	private final WaitingQueueProperties properties;
+	private final PopupQueueEntryRepository popupQueueEntryRepository;
 
+	@Transactional
 	public void enqueue(long popupId, String userId) {
 		Long seq = redisTemplate.opsForValue().increment(RedisKeys.popupQueueSeq(popupId));
+		popupQueueEntryRepository.save(PopupQueueEntry.waiting(Long.parseLong(userId), popupId, seq));
 		redisTemplate.opsForZSet().addIfAbsent(RedisKeys.popupWaitingQueue(popupId), userId, seq);
 	}
 
