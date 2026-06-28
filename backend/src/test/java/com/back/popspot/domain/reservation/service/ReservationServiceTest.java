@@ -36,6 +36,7 @@ import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
+import com.back.popspot.domain.payment.service.PaymentReadyService;
 import com.back.popspot.domain.payment.service.PaymentService;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
@@ -92,6 +93,9 @@ class ReservationServiceTest {
 	@Mock
 	private WaitingQueueRedisService waitingQueueRedisService;
 
+	@Mock
+	private PaymentReadyService paymentReadyService;
+
 	@Test
 	@DisplayName("내 예약 내역 조회 성공")
 	void getMyReservations_success() {
@@ -106,7 +110,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore freePopupStore = createPopupStore();
 		PopupStore paidPopupStore = createPopupStore();
@@ -195,7 +200,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		Pageable pageable = PageRequest.of(0, 10);
 		Page<Reservation> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
@@ -233,7 +239,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -300,7 +307,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -336,7 +344,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 
@@ -366,7 +375,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -402,7 +412,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -449,7 +460,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -497,7 +509,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -531,7 +544,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -571,7 +585,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -617,7 +632,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -632,8 +648,20 @@ class ReservationServiceTest {
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 			.thenReturn(false);
-		when(paymentRepository.findByIdempotencyKey("idem-paid-1")).thenReturn(Optional.empty());
-		when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(paymentReadyService.getOrCreateReservationReadyPayment(
+			eq(user),
+			eq(reservation),
+			eq("성수 빈티지 토이 팝업 예약"),
+			eq(5000L),
+			eq("idem-paid-1")
+		)).thenReturn(Payment.createReadyReservationPayment(
+			user,
+			reservation,
+			"order-123",
+			"성수 빈티지 토이 팝업 예약",
+			5000L,
+			"idem-paid-1"
+		));
 
 		// when
 		ReservationPaymentResponse response = reservationService.startReservationPayment(100L, 2L, request);
@@ -645,15 +673,13 @@ class ReservationServiceTest {
 		assertEquals("홍길동", ReflectionTestUtils.getField(reservation, "reservationName"));
 		assertEquals("010-1234-5678", ReflectionTestUtils.getField(reservation, "reservationPhone"));
 
-		verify(paymentRepository).save(argThat(payment ->
-			payment.getReservation().equals(reservation)
-				&& payment.getUser().equals(user)
-				&& payment.getPaymentType() == PaymentType.POPUP
-				&& payment.getStatus() == PaymentStatus.READY
-				&& "idem-paid-1".equals(payment.getIdempotencyKey())
-				&& "성수 빈티지 토이 팝업 예약".equals(payment.getOrderName())
-				&& payment.getAmount() == 5000L
-		));
+		verify(paymentReadyService).getOrCreateReservationReadyPayment(
+			eq(user),
+			eq(reservation),
+			eq("성수 빈티지 토이 팝업 예약"),
+			eq(5000L),
+			eq("idem-paid-1")
+		);
 	}
 
 	@Test
@@ -670,7 +696,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -718,7 +745,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -734,12 +762,20 @@ class ReservationServiceTest {
 			"idem-paid-2"
 		);
 
+		ReflectionTestUtils.setField(popupStore, "title", "성수 빈티지 토이 팝업");
 		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.PAID);
+		ReflectionTestUtils.setField(popupStore, "price", 5000);
 
 		when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 		when(paymentRepository.existsByReservationIdAndPaymentTypeAndStatus(100L, PaymentType.POPUP, PaymentStatus.PAID))
 			.thenReturn(false);
-		when(paymentRepository.findByIdempotencyKey("idem-paid-2")).thenReturn(Optional.of(existingPayment));
+		when(paymentReadyService.getOrCreateReservationReadyPayment(
+			eq(user),
+			eq(reservation),
+			eq("성수 빈티지 토이 팝업 예약"),
+			eq(5000L),
+			eq("idem-paid-2")
+		)).thenReturn(existingPayment);
 
 		// when
 		ReservationPaymentResponse response = reservationService.startReservationPayment(100L, 2L, request);
@@ -765,7 +801,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -802,7 +839,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -835,7 +873,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -868,7 +907,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -902,7 +942,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
@@ -944,7 +985,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -994,7 +1036,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -1029,7 +1072,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();
@@ -1069,7 +1113,8 @@ class ReservationServiceTest {
 			reservationCommandService,
 			reservationWaitlistService,
 			redisTemplate,
-			waitingQueueRedisService
+			waitingQueueRedisService,
+			paymentReadyService
 		);
 		ReservationCreateRequest request = new ReservationCreateRequest(1L);
 		PopupStore popupStore = createPopupStore();

@@ -233,16 +233,16 @@ public class PaymentReadyService {
 		}
 	}
 
-	// 멱등성 키로 찾은 결제가 현재 예약 결제 요청과 같은 요청인지 검증
+	// 멱등성 키로 찾은 결제가 현재 굿즈 주문 결제 요청과 같은 요청인지 검증
 	private void validateSameGoodsOrderPayment(
 		Payment payment,
 		User user,
 		GoodsOrder goodsOrder
 	) {
 		if (!payment.getUser().getId().equals(user.getId())
-		|| payment.getPaymentType() != PaymentType.GOODS
-		|| payment.getGoodsOrder() == null
-		|| !payment.getGoodsOrder().getId().equals(goodsOrder.getId())) {
+			|| payment.getPaymentType() != PaymentType.GOODS
+			|| payment.getGoodsOrder() == null
+			|| !payment.getGoodsOrder().getId().equals(goodsOrder.getId())) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 	}

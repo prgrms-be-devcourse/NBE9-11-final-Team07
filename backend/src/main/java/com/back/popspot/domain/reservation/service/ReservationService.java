@@ -228,7 +228,7 @@ public class ReservationService {
 		Payment payment = paymentReadyService.getOrCreateReservationReadyPayment(
 			reservation.getUser(),
 			reservation,
-			popupStore.getTitle() + "예약",
+			popupStore.getTitle() + " 예약",
 			popupStore.getPrice(),
 			request.idempotencyKey()
 		);

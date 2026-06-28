@@ -44,6 +44,7 @@ import com.back.popspot.domain.goods.repository.GoodsOrderRepository;
 import com.back.popspot.domain.goods.repository.GoodsRepository;
 import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
+import com.back.popspot.domain.payment.service.PaymentReadyService;
 import com.back.popspot.domain.payment.service.PaymentService;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
@@ -61,6 +62,7 @@ class GoodsOrderServiceTest {
 	@Mock private GoodsOrderItemRepository goodsOrderItemRepository;
 	@Mock private PaymentRepository paymentRepository;
 	@Mock private PaymentService paymentService;
+	@Mock private PaymentReadyService paymentReadyService;
 	@Mock private TransactionTemplate transactionTemplate;
 
 	@InjectMocks
@@ -121,7 +123,13 @@ class GoodsOrderServiceTest {
 		given(goodsRepository.decreaseStock(10L, 2)).willReturn(1);
 		given(goodsOrderRepository.save(any())).willReturn(order);
 		given(goodsOrderItemRepository.save(any())).willReturn(orderItem);
-		given(paymentRepository.save(any())).willReturn(payment);
+		given(paymentReadyService.getOrCreateGoodsOrderReadyPayment(
+			eq(user),
+			eq(order),
+			eq("테스트굿즈"),
+			eq(10000L),
+			eq("idempotency-key")
+		)).willReturn(payment);
 
 		GoodsOrderCreateResponse response = goodsOrderService.createOrder(1L, buildCreateRequest(10L, 2));
 
