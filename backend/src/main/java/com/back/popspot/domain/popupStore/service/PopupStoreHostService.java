@@ -3,6 +3,8 @@ package com.back.popspot.domain.popupStore.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -187,7 +189,7 @@ public class PopupStoreHostService {
 
 		// 재고 카운터(remaining=capacity) 초기화는 DB 커밋 성공 후 실행한다.
 		// 트랜잭션이 롤백되면 슬롯이 존재하지 않으므로 Redis 카운터도 만들지 않는다.
-		registerAfterCommitSlotCounterInit(slot.getId(), slot.getCapacity());
+		registerAfterCommitSlotCounterInit(slot.getId(), slot.getCapacity(),popupStore.getCloseDate());
 
 		return slot.getId();
 	}
@@ -274,8 +276,14 @@ public class PopupStoreHostService {
 
 	// 트랜잭션 커밋 성공 후에 슬롯 재고 카운터를 초기화한다. (remaining=capacity)
 	// 동기화가 비활성(트랜잭션 밖)이면 즉시 실행한다.
-	private void registerAfterCommitSlotCounterInit(Long slotId, int capacity) {
-		Runnable init = () -> redisTemplate.opsForValue().set(RedisKeys.reservationSlotRemaining(slotId), (long)capacity);
+	private void registerAfterCommitSlotCounterInit(Long slotId, int capacity, LocalDateTime closeDate) {
+		long ttlSeconds = ChronoUnit.SECONDS.between(LocalDateTime.now(),closeDate);
+		Runnable init = () -> redisTemplate.opsForValue().set(
+			RedisKeys.reservationSlotRemaining(slotId),
+			(long)capacity,
+			ttlSeconds,
+			TimeUnit.SECONDS
+		);
 		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
 			init.run();
 			return;
