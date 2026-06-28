@@ -1,6 +1,7 @@
 package com.back.popspot.domain.payment.repository;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -34,7 +35,20 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 	// 주문 번호로 결제를 조회
 	Optional<Payment> findByOrderId(String orderId);
 
+	Optional<Payment> findFirstByReservationIdAndPaymentTypeAndStatusInOrderByIdDesc(
+		Long reservationId,
+		PaymentType paymentType,
+		Collection<PaymentStatus> statuses
+	);
+
+	Optional<Payment> findFirstByGoodsOrderIdAndPaymentTypeAndStatusInOrderByIdDesc(
+		Long goodsOrderId,
+		PaymentType paymentType,
+		Collection<PaymentStatus> statuses
+	);
+
 	// READY 상태 결제를 승인 진행 상태로 조건부 변경
+	// READY 결제를 CONFIRMING 상태로 원자적으로 전환한다.
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query("""
 		update Payment p
