@@ -2,7 +2,6 @@ package com.back.popspot.domain.reservation.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -16,6 +15,7 @@ import com.back.popspot.domain.payment.entity.Payment;
 import com.back.popspot.domain.payment.entity.PaymentStatus;
 import com.back.popspot.domain.payment.entity.PaymentType;
 import com.back.popspot.domain.payment.repository.PaymentRepository;
+import com.back.popspot.domain.payment.service.PaymentReadyService;
 import com.back.popspot.domain.payment.service.PaymentService;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
@@ -60,6 +60,7 @@ public class ReservationService {
 	private final ReservationCommandService reservationCommandService;
 	private final ReservationRedisService reservationRedisService;
 	private final WaitingQueueRedisService waitingQueueRedisService;
+	private final PaymentReadyService paymentReadyService;
 	private final ReservationWaitlistService reservationWaitlistService;
 
 	@Transactional(readOnly = true)
@@ -223,28 +224,18 @@ public class ReservationService {
 			throw new BusinessException(ErrorCode.RESERVATION_PAYMENT_ALREADY_COMPLETED);
 		}
 
-		// 재요청이면 기존 결제를 그대로 반환한다.
-		Payment existingIdempotentPayment = paymentRepository.findByIdempotencyKey(request.idempotencyKey())
-			.orElse(null);
-		if (existingIdempotentPayment != null) {
-			if (!existingIdempotentPayment.getReservation().getId().equals(reservationId)
-				|| !existingIdempotentPayment.getUser().getId().equals(userId)
-				|| existingIdempotentPayment.getPaymentType() != PaymentType.POPUP) {
-				throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
-			}
-			return ReservationPaymentResponse.paid(existingIdempotentPayment);
-		}
-
-		// 첫 결제 진입이면 READY 상태의 결제를 새로 만든다.
-		Payment payment = Payment.createReadyReservationPayment(
+		// 기존의 재요청 처리는 payment에서 하고, 주문 생성만 하도록 로직 분리
+		Payment payment = paymentReadyService.getOrCreateReservationReadyPayment(
 			reservation.getUser(),
 			reservation,
-			UUID.randomUUID().toString(),
 			popupStore.getTitle() + " 예약",
 			popupStore.getPrice(),
 			request.idempotencyKey()
 		);
-		paymentRepository.save(payment);
+
+		if (payment.getStatus() == PaymentStatus.PAID) {
+			throw new BusinessException(ErrorCode.RESERVATION_PAYMENT_ALREADY_COMPLETED);
+		}
 
 		return ReservationPaymentResponse.paid(payment);
 	}
