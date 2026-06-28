@@ -30,13 +30,4 @@ public class WaitingQueueScheduler {
 		}
 	}
 
-	@Scheduled(fixedRateString = "${waiting-queue.sweeper-fixed-rate-ms}")
-	@SchedulerLock(name = "popup-queue-sweeper", lockAtMostFor = "PT1M", lockAtLeastFor = "5s")
-	public void sweepWaiting() {
-		LockAssert.assertLocked();
-		Set<Long> popupIds = queueService.getActivePopupIds();
-		for (Long popupId : popupIds) {
-			queueService.sweepAbsentMembers(popupId);
-		}
-	}
 }

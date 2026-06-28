@@ -8,7 +8,6 @@ public record WaitingQueueProperties(
     long schedulerFixedRateMs,
     long proceedTtlSeconds,
     int pollIntervalSeconds,
-    int lastSeenTtlSeconds,
-    long sweeperFixedRateMs
+    long queueTtlBufferSeconds
 ) {
 }

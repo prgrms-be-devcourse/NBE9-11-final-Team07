@@ -29,7 +29,4 @@ public final class RedisKeys {
 		return "proceed:popup:" + popupId + ":*";
 	}
 
-	public static String popupLastSeen(Long popupId, String userId) {
-		return "lastSeen:popup:" + popupId + ":" + userId;
-	}
 }
