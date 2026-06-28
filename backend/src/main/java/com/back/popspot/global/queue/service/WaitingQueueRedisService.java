@@ -1,10 +1,15 @@
 package com.back.popspot.global.queue.service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Collections;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.stereotype.Service;
@@ -29,10 +34,24 @@ public class WaitingQueueRedisService {
 	private final PopupQueueEntryRepository popupQueueEntryRepository;
 
 	@Transactional
-	public void enqueue(long popupId, String userId) {
+	public void enqueue(long popupId, String userId, LocalDateTime reservationEndAt) {
 		Long seq = redisTemplate.opsForValue().increment(RedisKeys.popupQueueSeq(popupId));
 		popupQueueEntryRepository.save(PopupQueueEntry.waiting(Long.parseLong(userId), popupId, seq));
 		redisTemplate.opsForZSet().addIfAbsent(RedisKeys.popupWaitingQueue(popupId), userId, seq);
+
+		if (Long.valueOf(1L).equals(seq)) {
+			Instant expireAt = reservationEndAt
+				.plusSeconds(properties.queueTtlBufferSeconds())
+				.atZone(ZoneId.systemDefault())
+				.toInstant();
+			byte[] seqKey = RedisKeys.popupQueueSeq(popupId).getBytes(StandardCharsets.UTF_8);
+			byte[] waitingKey = RedisKeys.popupWaitingQueue(popupId).getBytes(StandardCharsets.UTF_8);
+			redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+				connection.keyCommands().expireAt(seqKey, expireAt);
+				connection.keyCommands().expireAt(waitingKey, expireAt);
+				return null;
+			});
+		}
 	}
 
 	public boolean hasProceedPermission(long popupId, String userId) {

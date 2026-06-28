@@ -3,6 +3,7 @@ package com.back.popspot.global.queue;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -24,6 +25,7 @@ import com.back.popspot.support.IntegrationTestSupport;
 class WaitingQueueDbSyncTest extends IntegrationTestSupport {
 
     private static final long POPUP_ID = 77777L;
+    private static final LocalDateTime TEST_RESERVATION_END_AT = LocalDateTime.of(2099, 12, 31, 23, 59);
 
     @Autowired
     private WaitingQueueRedisService queueService;
@@ -56,7 +58,7 @@ class WaitingQueueDbSyncTest extends IntegrationTestSupport {
     @Test
     @DisplayName("DB_SYNC_1: enqueue 후 DB WAITING 행 존재, ZSET score == DB seq")
     void enqueue_후_DB_WAITING_행과_ZSET_score_일치() {
-        queueService.enqueue(POPUP_ID, "100");
+        queueService.enqueue(POPUP_ID, "100", TEST_RESERVATION_END_AT);
 
         // DB 확인
         List<PopupQueueEntry> entries = entryRepository.findAll();
@@ -79,7 +81,7 @@ class WaitingQueueDbSyncTest extends IntegrationTestSupport {
     @Test
     @DisplayName("DB_SYNC_2: admitBatch 후 DB ADMITTED 전환 + ZSET 제거 + proceed 키 존재")
     void admitBatch_후_DB_ADMITTED_ZSET제거_proceed키존재() {
-        queueService.enqueue(POPUP_ID, "200");
+        queueService.enqueue(POPUP_ID, "200", TEST_RESERVATION_END_AT);
         Long entryId = entryRepository.findAll().get(0).getId();
 
         queueService.admitBatch(POPUP_ID, 1);
@@ -102,9 +104,9 @@ class WaitingQueueDbSyncTest extends IntegrationTestSupport {
     @Test
     @DisplayName("DB_SYNC_3: 정상 흐름 한 바퀴 — DB 행 집합 ↔ Redis 상태 완전 일치")
     void 정상흐름_한바퀴_DB와_Redis_상태_일치() {
-        queueService.enqueue(POPUP_ID, "1");
-        queueService.enqueue(POPUP_ID, "2");
-        queueService.enqueue(POPUP_ID, "3");
+        queueService.enqueue(POPUP_ID, "1", TEST_RESERVATION_END_AT);
+        queueService.enqueue(POPUP_ID, "2", TEST_RESERVATION_END_AT);
+        queueService.enqueue(POPUP_ID, "3", TEST_RESERVATION_END_AT);
 
         queueService.admitBatch(POPUP_ID, 2);
 

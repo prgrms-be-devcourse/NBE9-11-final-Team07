@@ -38,6 +38,7 @@ import com.back.popspot.support.IntegrationTestSupport;
 class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 
 	private static final long TEST_POPUP_ID = 99999L;
+	private static final LocalDateTime TEST_RESERVATION_END_AT = LocalDateTime.of(2099, 12, 31, 23, 59);
 
 	@Autowired
 	private WaitingQueueRedisService queueService;
@@ -68,9 +69,11 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 	}
 
 	private void cleanupTestKeys() {
-		Set<String> keys = redisTemplate.keys("*popup:" + TEST_POPUP_ID + "*");
-		if (keys != null && !keys.isEmpty()) {
-			redisTemplate.delete(keys);
+		for (String pattern : List.of("*popup:" + TEST_POPUP_ID + "*", "waiting:popup:*", "seq:popup:*")) {
+			Set<String> keys = redisTemplate.keys(pattern);
+			if (keys != null && !keys.isEmpty()) {
+				redisTemplate.delete(keys);
+			}
 		}
 	}
 
@@ -87,7 +90,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 			final String userId = String.valueOf(i);
 			executor.submit(() -> {
 				try {
-					queueService.enqueue(TEST_POPUP_ID, userId);
+					queueService.enqueue(TEST_POPUP_ID, userId, TEST_RESERVATION_END_AT);
 				} finally {
 					latch.countDown();
 				}
@@ -118,7 +121,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 		int total = batchSize + 5;
 
 		for (long i = 1; i <= total; i++) {
-			queueService.enqueue(TEST_POPUP_ID, String.valueOf(i));
+			queueService.enqueue(TEST_POPUP_ID, String.valueOf(i), TEST_RESERVATION_END_AT);
 		}
 
 		assertThat(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(TEST_POPUP_ID))).isEqualTo(total);
@@ -135,11 +138,11 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 	@DisplayName("검증3: 같은 userId 두 번 enqueue해도 ZSET에 1건, 순번 불변")
 	void 동일_userId_중복_등록_차단() {
 		String userId = "42";
-		queueService.enqueue(TEST_POPUP_ID, userId);
+		queueService.enqueue(TEST_POPUP_ID, userId, TEST_RESERVATION_END_AT);
 		Double scoreAfterFirst = redisTemplate.opsForZSet()
 			.score(RedisKeys.popupWaitingQueue(TEST_POPUP_ID), userId);
 
-		queueService.enqueue(TEST_POPUP_ID, userId);
+		queueService.enqueue(TEST_POPUP_ID, userId, TEST_RESERVATION_END_AT);
 
 		assertThat(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(TEST_POPUP_ID))).isEqualTo(1);
 		assertThat(redisTemplate.opsForZSet().score(RedisKeys.popupWaitingQueue(TEST_POPUP_ID), userId))
@@ -165,14 +168,15 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 	@DisplayName("검증4-b: 회원 + 미허가 → 202 + ZSET에 userId 등록")
 	void 게이트_회원_미허가_202() throws Exception {
 		long userId = 77L;
+		PopupStore popup = persistPopup(persistUser());
 
-		mockMvc.perform(get("/popups/" + TEST_POPUP_ID)
+		mockMvc.perform(get("/popups/" + popup.getId())
 				.with(authentication(auth(userId))))
 			.andExpect(status().isAccepted())
 			.andExpect(jsonPath("$.code").value("WAITING"));
 
 		assertThat(redisTemplate.opsForZSet()
-			.score(RedisKeys.popupWaitingQueue(TEST_POPUP_ID), String.valueOf(userId))).isNotNull();
+			.score(RedisKeys.popupWaitingQueue(popup.getId()), String.valueOf(userId))).isNotNull();
 	}
 
 	@Test
@@ -195,7 +199,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 	@DisplayName("검증5: 허가 키가 TTL 만료 후 자동 삭제")
 	void 허가키_TTL_만료_후_삭제() throws InterruptedException {
 		String userId = "99";
-		queueService.enqueue(TEST_POPUP_ID, userId);
+		queueService.enqueue(TEST_POPUP_ID, userId, TEST_RESERVATION_END_AT);
 		queueService.admitBatch(TEST_POPUP_ID, 1);
 
 		String proceedKey = RedisKeys.popupProceedFlag(TEST_POPUP_ID, userId);
@@ -213,9 +217,9 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 	@DisplayName("폴링검증1: 진입 순서대로 ZRANK 기반 순번 1·2·3 부여")
 	void 순번_진입순서와_일치() throws Exception {
 		long userId1 = 10L, userId2 = 20L, userId3 = 30L;
-		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId1));
-		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId2));
-		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId3));
+		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId1), TEST_RESERVATION_END_AT);
+		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId2), TEST_RESERVATION_END_AT);
+		queueService.enqueue(TEST_POPUP_ID, String.valueOf(userId3), TEST_RESERVATION_END_AT);
 
 		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
 				.with(authentication(auth(userId1))))
@@ -250,7 +254,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 
 		// (b) WAITING + 순번
 		long waitingId = 22L;
-		queueService.enqueue(TEST_POPUP_ID, String.valueOf(waitingId));
+		queueService.enqueue(TEST_POPUP_ID, String.valueOf(waitingId), TEST_RESERVATION_END_AT);
 
 		mockMvc.perform(get("/popups/" + TEST_POPUP_ID + "/waiting-status")
 				.with(authentication(auth(waitingId))))

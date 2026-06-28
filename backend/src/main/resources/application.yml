@@ -52,6 +52,7 @@ waiting-queue:
   scheduler-fixed-rate-ms: 500
   proceed-ttl-seconds: 180
   poll-interval-seconds: 5
+  queue-ttl-buffer-seconds: 1800
 
 management:
   endpoints:

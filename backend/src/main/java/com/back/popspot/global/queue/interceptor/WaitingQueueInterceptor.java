@@ -8,6 +8,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import com.back.popspot.domain.popupStore.entity.PopupStore;
+import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.global.queue.service.WaitingQueueRedisService;
 import com.back.popspot.global.response.CommonApiResponse;
 
@@ -22,6 +24,7 @@ public class WaitingQueueInterceptor implements HandlerInterceptor {
 
 	private final WaitingQueueRedisService queueService;
 	private final ObjectMapper objectMapper;
+	private final PopupStoreRepository popupStoreRepository;
 
 	@Override
 	public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
@@ -43,7 +46,11 @@ public class WaitingQueueInterceptor implements HandlerInterceptor {
 			return true;
 		}
 
-		queueService.enqueue(popupId, userIdStr);
+		PopupStore popup = popupStoreRepository.findById(popupId).orElse(null);
+		if (popup == null) {
+			return true;
+		}
+		queueService.enqueue(popupId, userIdStr, popup.getReservationEndAt());
 		writeWaitingResponse(response);
 		return false;
 	}
