@@ -153,6 +153,7 @@ class QueueRecoveryServiceTest extends ContainerIntegrationTestSupport {
 
         // then — 기존 WAITING userId=21 의 score(4)와 중복 없음
         assertThat(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(POPUP_C))).isEqualTo(2L);
+        assertThat(redisTemplate.opsForZSet().score(RedisKeys.popupWaitingQueue(POPUP_C), "21")).isEqualTo(4.0);
 
         // then — TTL: INCR/ZADD는 TTL을 초기화하지 않으므로 recover()가 설정한 TTL이 유지됨
         assertThat(redisTemplate.getExpire(RedisKeys.popupWaitingQueue(POPUP_C))).isGreaterThan(0L);
