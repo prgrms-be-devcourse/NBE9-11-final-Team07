@@ -4,15 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +20,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.annotation.Propagation;
@@ -36,6 +34,7 @@ import com.back.popspot.domain.queue.repository.PopupQueueEntryRepository;
 import com.back.popspot.domain.user.entity.User;
 import com.back.popspot.domain.user.repository.UserRepository;
 import com.back.popspot.global.queue.scheduler.QueueCleanupScheduler;
+import com.back.popspot.global.queue.service.QueueChunkDeleter;
 import com.back.popspot.support.IntegrationTestSupport;
 
 /**
@@ -47,6 +46,11 @@ import com.back.popspot.support.IntegrationTestSupport;
  * <p>부모 {@link IntegrationTestSupport}의 {@code @Transactional}을
  * {@code NOT_SUPPORTED}로 덮어쓴다. 실제 커밋 후 잔존 데이터를 확인해야
  * 청크별 트랜잭션 분리를 검증할 수 있기 때문이다.
+ *
+ * <p>TX_ISOLATION 테스트는 {@link QueueChunkDeleter}(구체 클래스)에
+ * {@code @MockitoSpyBean}을 걸어 {@code doCallRealMethod()}를 사용한다.
+ * 구체 클래스 spy는 실제 운영 경로(스케줄러 → QueueChunkDeleter.deleteChunk
+ * → deleteAllByIdInBatch → @Transactional 커밋)를 그대로 실행한다.
  */
 @DisplayName("Phase 3 — 자정 일괄 삭제 배치 통합 테스트")
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -55,16 +59,16 @@ class QueueCleanupSchedulerTest extends IntegrationTestSupport {
 
     @Autowired private QueueCleanupScheduler scheduler;
     @Autowired private PopupStoreRepository popupStoreRepository;
+    @Autowired private PopupQueueEntryRepository entryRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private StringRedisTemplate redisTemplate;
-    @Autowired private NamedParameterJdbcTemplate namedJdbc;
 
     @MockitoSpyBean
-    private PopupQueueEntryRepository entryRepository;
+    private QueueChunkDeleter chunkDeleter;
 
     @BeforeEach
     void setUp() {
-        reset(entryRepository);
+        reset(chunkDeleter);
         clearShedLockKey();
     }
 
@@ -107,33 +111,25 @@ class QueueCleanupSchedulerTest extends IntegrationTestSupport {
     // ── TX_ISOLATION: 청크별 독립 트랜잭션 검증 ─────────────────────────────
 
     @Test
-    @DisplayName("TX_ISOLATION: 2번째 청크 DELETE에서 예외 → 1번째 청크(5행)는 이미 커밋, 나머지 2행 잔존")
+    @DisplayName("TX_ISOLATION: 2번째 deleteChunk에서 예외 → 1번째 청크(5행)는 실제 운영 경로로 커밋, 나머지 2행 잔존")
     void 두번째_청크_예외시_첫번째_청크_커밋_유지() {
         User user = persistUser("tx@test.com");
         PopupStore expired = persistExpiredPopup(user);
         insertEntries(expired.getId(), 7);  // 청크1: 5행, 청크2: 2행
 
-        // @MockitoSpyBean on interface → doCallRealMethod() 사용 불가 (delegation mock 제약).
-        // 첫 번째 호출은 NamedParameterJdbcTemplate으로 직접 DELETE(auto-commit).
-        // 두 번째 호출에서 RuntimeException을 던져 트랜잭션 분리를 증명한다.
-        AtomicInteger callCount = new AtomicInteger();
-        doAnswer(invocation -> {
-            if (callCount.getAndIncrement() > 0) {
-                throw new RuntimeException("청크2 강제 실패 — 트랜잭션 분리 검증");
-            }
-            @SuppressWarnings("unchecked")
-            List<Long> ids = (List<Long>) invocation.getArgument(0);
-            namedJdbc.update(
-                "DELETE FROM popup_queue_entry WHERE id IN (:ids)",
-                Map.of("ids", ids)
-            );
-            return null;
-        }).when(entryRepository).deleteAllByIdInBatch(any());
+        // QueueChunkDeleter는 구체 클래스이므로 doCallRealMethod()가 동작한다.
+        // 1번째 호출: 실제 운영 경로 그대로 실행
+        //   scheduler → chunkDeleter.deleteChunk(5개) → entryRepository.deleteAllByIdInBatch
+        //   → SimpleJpaRepository의 @Transactional(REQUIRED) → 커밋
+        // 2번째 호출: RuntimeException 발생
+        doCallRealMethod()
+            .doThrow(new RuntimeException("청크2 강제 실패 — 트랜잭션 분리 검증"))
+            .when(chunkDeleter).deleteChunk(any());
 
         assertThatThrownBy(() -> scheduler.cleanupExpiredQueues())
             .isInstanceOf(RuntimeException.class);
 
-        // 첫 번째 청크는 독립적으로 커밋됨 → 예외에도 롤백되지 않고 2행만 남아 있어야 함
+        // 1번째 청크는 독립 트랜잭션으로 이미 커밋됨 → 예외 발생 후에도 롤백 없이 2행만 잔존
         assertThat(entryRepository.count()).isEqualTo(2);
     }
 
@@ -150,7 +146,6 @@ class QueueCleanupSchedulerTest extends IntegrationTestSupport {
 
         scheduler.cleanupExpiredQueues();
 
-        // 전체 3행만 남아 있고, 그 3행 모두 운영 중 팝업 소속
         assertThat(entryRepository.count()).isEqualTo(3);
         List<Long> remainingIds = entryRepository.findIdsByPopupId(active.getId(), PageRequest.of(0, 10));
         assertThat(remainingIds).hasSize(3);
@@ -162,7 +157,6 @@ class QueueCleanupSchedulerTest extends IntegrationTestSupport {
     @DisplayName("TARGET_2: reservationEndAt이 배치 실행 시각보다 1초 전 → 삭제 대상 포함")
     void reservationEndAt_직전_경계값_삭제대상_포함() {
         User user = persistUser("target2@test.com");
-        // reservationEndAt = now - 1s → 쿼리 조건 reservationEndAt <= :now 충족
         PopupStore boundary = persistPopupWithEndAt(user, LocalDateTime.now().minusSeconds(1));
         insertEntries(boundary.getId(), 2);
 
@@ -176,7 +170,7 @@ class QueueCleanupSchedulerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("LOOP_1: 종료 팝업에 행이 0개 → 예외 없이 즉시 종료")
     void 행없는_종료_팝업_예외없이_종료() {
-        persistExpiredPopup(persistUser("loop1@test.com"));  // 행 미삽입
+        persistExpiredPopup(persistUser("loop1@test.com"));
 
         assertThatNoException().isThrownBy(() -> scheduler.cleanupExpiredQueues());
         assertThat(entryRepository.count()).isZero();
@@ -189,7 +183,7 @@ class QueueCleanupSchedulerTest extends IntegrationTestSupport {
     void 부분_청크_단일_삭제_정상종료() {
         User user = persistUser("loop2@test.com");
         PopupStore expired = persistExpiredPopup(user);
-        insertEntries(expired.getId(), 3);  // chunkSize 미만
+        insertEntries(expired.getId(), 3);
 
         scheduler.cleanupExpiredQueues();
 
@@ -203,7 +197,6 @@ class QueueCleanupSchedulerTest extends IntegrationTestSupport {
     void 두번째_호출_ShedLock_스킵() {
         User user = persistUser("shed@test.com");
 
-        // 1차 배치 실행 — 락 획득, lockAtLeastFor="1m" 동안 Redis 키 유지
         PopupStore expired1 = persistExpiredPopup(user);
         insertEntries(expired1.getId(), 3);
         scheduler.cleanupExpiredQueues();
@@ -217,7 +210,6 @@ class QueueCleanupSchedulerTest extends IntegrationTestSupport {
         // 2차 호출 — ShedLock이 락 획득 실패로 메서드 바디 스킵, 예외 없이 반환
         assertThatNoException().isThrownBy(() -> scheduler.cleanupExpiredQueues());
 
-        // 바디가 실행되지 않았으므로 신규 데이터 그대로 잔존
         assertThat(entryRepository.count()).isEqualTo(3);
     }
 

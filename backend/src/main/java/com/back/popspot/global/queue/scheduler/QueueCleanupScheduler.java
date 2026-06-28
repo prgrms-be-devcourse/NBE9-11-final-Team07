@@ -13,10 +13,18 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
 import com.back.popspot.domain.queue.repository.PopupQueueEntryRepository;
 import com.back.popspot.global.queue.config.QueueCleanupProperties;
+import com.back.popspot.global.queue.service.QueueChunkDeleter;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * 자정 일괄 삭제 배치.
+ *
+ * <p>이 클래스는 대상 popup 조회와 ID 페이징 순회만 담당한다.
+ * 실제 DELETE 실행은 {@link QueueChunkDeleter}가 청크 단위로 수행한다.
+ * Redis 키(ZSET·seq)는 절대 TTL로 자동 소멸하므로 이 배치는 DB만 정리한다.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -25,6 +33,7 @@ public class QueueCleanupScheduler {
     private final PopupQueueEntryRepository entryRepository;
     private final PopupStoreRepository popupStoreRepository;
     private final QueueCleanupProperties properties;
+    private final QueueChunkDeleter chunkDeleter;
 
     @Scheduled(cron = "0 0 0 * * *")
     @SchedulerLock(name = "queue-cleanup-scheduler", lockAtMostFor = "30m", lockAtLeastFor = "1m")
@@ -54,7 +63,7 @@ public class QueueCleanupScheduler {
         do {
             ids = entryRepository.findIdsByPopupId(popupId, PageRequest.of(0, chunkSize));
             if (!ids.isEmpty()) {
-                entryRepository.deleteAllByIdInBatch(ids);
+                chunkDeleter.deleteChunk(ids);
                 deleted += ids.size();
             }
         } while (ids.size() == chunkSize);
