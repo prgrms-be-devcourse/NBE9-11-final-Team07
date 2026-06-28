@@ -1,6 +1,7 @@
 package com.back.popspot.domain.queue.repository;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -33,6 +34,13 @@ public interface PopupQueueEntryRepository extends JpaRepository<PopupQueueEntry
         @Param("waiting") QueueEntryStatus waiting,
         @Param("admitted") QueueEntryStatus admitted
     );
+
+    // 복구 전용 — WAITING 행을 seq 오름차순으로 조회
+    List<PopupQueueEntry> findByPopupIdAndStatusOrderBySeqAsc(Long popupId, QueueEntryStatus status);
+
+    // 복구 전용 — status 무관 MAX(seq) 조회. 항목이 없으면 Optional.empty()
+    @Query("SELECT MAX(e.seq) FROM PopupQueueEntry e WHERE e.popupId = :popupId")
+    Optional<Long> findMaxSeqByPopupId(@Param("popupId") Long popupId);
 
     // 자정 배치 전용 — 청크 단위 ID 조회. 운영 경로에서 호출하지 말 것
     @Query("SELECT e.id FROM PopupQueueEntry e WHERE e.popupId = :popupId ORDER BY e.id")

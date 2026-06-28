@@ -4,7 +4,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Collections;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -37,13 +36,15 @@ public class WaitingQueueRedisService {
 	public void enqueue(long popupId, String userId, LocalDateTime reservationEndAt) {
 		Long seq = redisTemplate.opsForValue().increment(RedisKeys.popupQueueSeq(popupId));
 		popupQueueEntryRepository.save(PopupQueueEntry.waiting(Long.parseLong(userId), popupId, seq));
-		redisTemplate.opsForZSet().addIfAbsent(RedisKeys.popupWaitingQueue(popupId), userId, seq);
+		Boolean added = redisTemplate.opsForZSet().addIfAbsent(RedisKeys.popupWaitingQueue(popupId), userId, seq);
 
-		if (Long.valueOf(1L).equals(seq)) {
-			Instant expireAt = reservationEndAt
-				.plusSeconds(properties.queueTtlBufferSeconds())
-				.atZone(ZoneId.systemDefault())
-				.toInstant();
+		// added==true(신규 멤버) && size==1(ZSET이 방금 생성됨) → TTL 적용
+		// recover(WAITING=0) 이후 첫 enqueue에서도 이 경로로 TTL이 설정됨
+		boolean isFirstInZset = Boolean.TRUE.equals(added)
+				&& Long.valueOf(1L).equals(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(popupId)));
+
+		if (isFirstInZset) {
+			Instant expireAt = properties.computeExpireAt(reservationEndAt);
 			byte[] seqKey = RedisKeys.popupQueueSeq(popupId).getBytes(StandardCharsets.UTF_8);
 			byte[] waitingKey = RedisKeys.popupWaitingQueue(popupId).getBytes(StandardCharsets.UTF_8);
 			redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
