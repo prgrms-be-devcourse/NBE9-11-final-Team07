@@ -2,7 +2,6 @@ package com.back.popspot.global.queue.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -14,7 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import com.back.popspot.global.queue.service.QueueRecoveryService;
+import com.back.popspot.global.queue.service.QueueRecoveryCoordinator;
 import com.back.popspot.global.queue.service.WaitingQueueRedisService;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -26,7 +25,7 @@ class QueueCircuitBreakerEventConfigTest {
     private CircuitBreakerRegistry registry;
     private CircuitBreaker cb;
     private WaitingQueueRedisService queueRedisService;
-    private QueueRecoveryService queueRecoveryService;
+    private QueueRecoveryCoordinator recoveryCoordinator;
     private ExecutorService mockExecutor;
     private QueueCircuitBreakerEventConfig config;
 
@@ -36,10 +35,10 @@ class QueueCircuitBreakerEventConfigTest {
         cb = registry.circuitBreaker(QueueCircuitBreakerEventConfig.CB_NAME);
 
         queueRedisService = mock(WaitingQueueRedisService.class);
-        queueRecoveryService = mock(QueueRecoveryService.class);
+        recoveryCoordinator = mock(QueueRecoveryCoordinator.class);
         mockExecutor = mock(ExecutorService.class);
 
-        config = new QueueCircuitBreakerEventConfig(registry, queueRedisService, queueRecoveryService);
+        config = new QueueCircuitBreakerEventConfig(registry, queueRedisService, recoveryCoordinator);
         config.setRecoveryExecutor(mockExecutor);
         config.registerCircuitBreakerEventListeners();
     }
@@ -71,40 +70,20 @@ class QueueCircuitBreakerEventConfigTest {
         verify(mockExecutor).submit(any(Runnable.class));
     }
 
-    // ── CLOSED 전이: 복구 성공 시 recovering=false ───────────────────────────
+    // ── CLOSED 전이: 복구 작업이 coordinator에 위임된다 ─────────────────────
 
     @Test
-    @DisplayName("recoverAll() 성공 → recovering 플래그가 false로 해제된다")
-    void onClosed_recoverAllSucceeds_setsRecoveringFalse() {
+    @DisplayName("CB CLOSED 전이 → 제출된 Runnable이 coordinator.executeAndLowerGate()를 호출한다")
+    void onClosed_submittedRunnableDelegatesToCoordinator() {
         cb.transitionToOpenState();
         cb.transitionToHalfOpenState();
         cb.transitionToClosedState();
 
-        // 제출된 Runnable을 꺼내 동기 실행
         ArgumentCaptor<Runnable> captor = ArgumentCaptor.forClass(Runnable.class);
         verify(mockExecutor).submit(captor.capture());
         captor.getValue().run();
 
-        verify(queueRecoveryService).recoverAll();
-        verify(queueRedisService).setRecovering(false);
-    }
-
-    // ── CLOSED 전이: 복구 실패 시 recovering 유지 ────────────────────────────
-
-    @Test
-    @DisplayName("recoverAll() 예외 → recovering 플래그가 false로 내려가지 않는다")
-    void onClosed_recoverAllFails_recoveringFlagNotCleared() {
-        doThrow(new RuntimeException("Redis still down")).when(queueRecoveryService).recoverAll();
-
-        cb.transitionToOpenState();
-        cb.transitionToHalfOpenState();
-        cb.transitionToClosedState();
-
-        ArgumentCaptor<Runnable> captor = ArgumentCaptor.forClass(Runnable.class);
-        verify(mockExecutor).submit(captor.capture());
-        captor.getValue().run(); // 예외를 삼키고 리턴해야 함 (executor 스레드를 죽이면 안 됨)
-
-        verify(queueRedisService, never()).setRecovering(false);
+        verify(recoveryCoordinator).executeAndLowerGate();
     }
 
     // ── HALF_OPEN 전이: 별도 처리 없음 ──────────────────────────────────────

@@ -5,7 +5,7 @@ import java.util.concurrent.Executors;
 
 import org.springframework.context.annotation.Configuration;
 
-import com.back.popspot.global.queue.service.QueueRecoveryService;
+import com.back.popspot.global.queue.service.QueueRecoveryCoordinator;
 import com.back.popspot.global.queue.service.WaitingQueueRedisService;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -23,7 +23,7 @@ public class QueueCircuitBreakerEventConfig {
 
     private final CircuitBreakerRegistry circuitBreakerRegistry;
     private final WaitingQueueRedisService queueRedisService;
-    private final QueueRecoveryService queueRecoveryService;
+    private final QueueRecoveryCoordinator recoveryCoordinator;
 
     // CB 이벤트 콜백 스레드를 블로킹하지 않기 위해 별도 스레드에 복구 작업을 제출.
     // 패키지 전용 setter(setRecoveryExecutor)로 테스트에서 mock으로 교체 가능.
@@ -49,16 +49,7 @@ public class QueueCircuitBreakerEventConfig {
                 queueRedisService.setRecovering(true);
             } else if (to == CircuitBreaker.State.CLOSED) {
                 log.info("[CB] waitingQueueRedis → CLOSED: 대기열 복구 작업 제출");
-                recoveryExecutor.submit(() -> {
-                    try {
-                        queueRecoveryService.recoverAll();
-                        queueRedisService.setRecovering(false);
-                        log.info("[CB] 대기열 복구 완료 — recovering 플래그 해제");
-                    } catch (Exception e) {
-                        // 복구 실패 시 recovering=true 유지 → 게이트가 계속 막아 데이터 정합성 보호
-                        log.error("[CB] 대기열 복구 실패 — recovering 플래그 유지", e);
-                    }
-                });
+                recoveryExecutor.submit(recoveryCoordinator::executeAndLowerGate);
             }
         });
     }
