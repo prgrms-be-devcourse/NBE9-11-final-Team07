@@ -21,7 +21,7 @@ import com.back.popspot.global.queue.service.WaitingQueueRedisService;
 import com.back.popspot.global.redis.RedisKeys;
 import com.back.popspot.support.IntegrationTestSupport;
 
-@DisplayName("Phase 0 — DB source of truth 통합 테스트")
+@DisplayName("DB source of truth 통합 테스트")
 class WaitingQueueDbSyncTest extends IntegrationTestSupport {
 
     private static final long POPUP_ID = 77777L;
