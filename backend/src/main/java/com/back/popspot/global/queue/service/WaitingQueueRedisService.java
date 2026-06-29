@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import org.springframework.data.redis.core.RedisCallback;
@@ -37,6 +38,18 @@ public class WaitingQueueRedisService {
 	private final StringRedisTemplate redisTemplate;
 	private final WaitingQueueProperties properties;
 	private final PopupQueueEntryRepository popupQueueEntryRepository;
+
+	// Redis 장애 복구 중 플래그 — 인메모리여야 함 (Redis 장애 시 함께 날아가면 게이트 무의미)
+	// CB가 CLOSED로 전이해도 이 플래그가 true인 동안은 enqueue 게이트가 계속 막음
+	private final AtomicBoolean recovering = new AtomicBoolean(false);
+
+	public boolean isRecovering() {
+		return recovering.get();
+	}
+
+	public void setRecovering(boolean recovering) {
+		this.recovering.set(recovering);
+	}
 
 	@CircuitBreaker(name = CB_NAME, fallbackMethod = "enqueueFallback")
 	@Transactional

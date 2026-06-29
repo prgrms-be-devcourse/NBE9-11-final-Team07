@@ -49,6 +49,11 @@ public class WaitingQueueInterceptor implements HandlerInterceptor {
 			return true;
 		}
 
+		if (queueService.isRecovering()) {
+			writeServiceUnavailableResponse(response);
+			return false;
+		}
+
 		PopupStore popup = popupStoreRepository.findById(popupId).orElse(null);
 		if (popup == null) {
 			return true;
