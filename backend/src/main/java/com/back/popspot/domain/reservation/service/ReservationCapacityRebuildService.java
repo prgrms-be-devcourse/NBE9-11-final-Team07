@@ -1,6 +1,9 @@
 package com.back.popspot.domain.reservation.service;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -37,7 +40,7 @@ public class ReservationCapacityRebuildService {
 	@Transactional(readOnly = true)
 	public ReservationCapacityRebuildResult rebuildSlotRemaining(Long slotId) {
 		// 복구할 슬롯이 실제로 존재하는지 먼저 확인한다.
-		ReservationSlot slot = reservationSlotRepository.findById(slotId)
+		ReservationSlot slot = reservationSlotRepository.findByIdWithPopupStore(slotId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESERVATION_SLOT_NOT_FOUND));
 
 		// 슬롯의 총 정원은 Redis가 아니라 DB 슬롯 정보를 기준으로 사용한다.
@@ -71,7 +74,13 @@ public class ReservationCapacityRebuildService {
 
 		try {
 			// Redis remaining 값을 DB 원장 기준 계산값으로 재설정한다.
-			redisTemplate.opsForValue().set(remainingKey, remaining);
+			LocalDateTime closeDate = slot.getPopupStore().getCloseDate();
+			long ttlSeconds = ChronoUnit.SECONDS.between(LocalDateTime.now(), closeDate);
+			if (ttlSeconds > 0) {
+				redisTemplate.opsForValue().set(remainingKey, remaining, ttlSeconds, TimeUnit.SECONDS);
+			} else {
+				redisTemplate.opsForValue().set(remainingKey, remaining);
+			}
 		} catch (RuntimeException e) {
 			// Redis 쓰기 실패는 DB를 건드리지 않고 실패로 알린다.
 			log.error(
