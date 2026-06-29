@@ -1,0 +1,20 @@
+code_review:
+  comment_severity_threshold: HIGH
+  omit_request_changes: true
+  path_filters:
+    - "src/main/**"
+    - "!src/test/**"
+    - "!**.md"
+    - "!build.gradle.kts"
+    - "!**.yml"
+    - "!**.yaml"
+    - "!**.sql"
+  extra_prompt: |
+    너는 시니어 백엔드 개발자야.
+    심각한 버그, 보안 문제만 리뷰해줘.
+    스타일, 네이밍 지적은 하지 마.
+    리뷰 댓글은 최대 3개로 제한해줘.
+    삭제된 파일은 리뷰하지 마.
+    테스트 파일은 리뷰하지 마.
+    주석은 리뷰하지 마.
+    이미 지적한 내용은 반복하지 마.

@@ -1,0 +1,10 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            redirect-uri: https://popspot-team07.duckdns.org/oauth2/callback/google

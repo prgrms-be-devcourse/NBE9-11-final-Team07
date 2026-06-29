@@ -1,0 +1,77 @@
+spring:
+  application:
+    name: popspot
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            authorization-grant-type: authorization_code
+            redirect-uri: http://localhost:8080/oauth2/callback/google
+            scope:
+              - email
+              - profile
+  profiles:
+    active: dev
+
+  output:
+    ansi:
+      enabled: always
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+aws:
+  s3:
+    region: ${AWS_REGION}
+    bucket: ${AWS_S3_BUCKET}
+    # .env 는 Spring Environment 에만 주입되어 AWS SDK 의 DefaultCredentialsProvider(System.getenv)
+    # 가 읽지 못하므로, 자격증명을 프로퍼티로 명시해 StaticCredentialsProvider 로 주입한다.
+    # 운영에서 IAM Role 등 기본 체인을 쓰려면 두 값을 비워두면 된다.
+    access-key: ${AWS_ACCESS_KEY_ID:}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:}
+    presigned-url-expiration: 600
+
+jwt:
+  secret: ${JWT_SECRET}
+  # access token 유효시간 (초 단위, 기본 1시간)
+  access-token-validity-seconds: 3600
+
+
+toss-payments:
+  client-key: ${TOSS_PAYMENTS_CLIENT_KEY}
+  secret-key: ${TOSS_PAYMENTS_SECRET_KEY}
+
+waiting-queue:
+  batch-size: 10
+  scheduler-fixed-rate-ms: 500
+  proceed-ttl-seconds: 180
+  poll-interval-seconds: 5
+  queue-ttl-buffer-seconds: 1800
+
+queue-cleanup:
+  chunk-size: 1000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      redisReservation:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        sliding-window-size: 10
+        sliding-window-type: COUNT_BASED
+        permitted-number-of-calls-in-half-open-state: 3
