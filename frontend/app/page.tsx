@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BottomNav } from '@/components/bottom-nav'
 import { HomeScreen } from '@/components/screens/home-screen'
@@ -15,6 +15,7 @@ import { MyPageScreen } from '@/components/screens/mypage-screen'
 import { PurchasesScreen } from '@/components/screens/purchases-screen'
 import { PurchaseDetailScreen } from '@/components/screens/purchase-detail-screen'
 import { CouponIssuanceScreen } from '@/components/screens/coupon-issuance-screen'
+import { WaitingQueueScreen } from '@/components/screens/waiting-queue-screen'
 import { PopupStoreListScreen } from '@/components/screens/organizer/popup-store-list-screen'
 import { PopupStoreFormScreen } from '@/components/screens/organizer/popup-store-form-screen'
 import { CouponListScreen } from '@/components/screens/organizer/coupon-list-screen'
@@ -29,6 +30,7 @@ import { orgPopupStores } from '@/lib/data'
 type ViewKey =
   | TabKey
   | 'detail'
+  | 'waiting'
   | 'payment'
   | 'complete'
   | 'goods-order'
@@ -78,6 +80,14 @@ export default function Page() {
     setSelectedStoreId(storeId)
     setCurrentView('detail')
   }
+
+  const handleWaiting = useCallback(() => {
+    setCurrentView('waiting')
+  }, [])
+
+  const handleWaitingAdmitted = useCallback(() => {
+    setCurrentView('detail')
+  }, [])
 
   function handleTabChange(tab: TabKey) {
     setActiveTab(tab)
@@ -230,6 +240,7 @@ export default function Page() {
   // Bottom nav is hidden for transient screens
   const showBottomNav = (
     currentView !== 'detail' &&
+    currentView !== 'waiting' &&
     currentView !== 'payment' &&
     currentView !== 'complete' &&
     currentView !== 'goods-order' &&
@@ -262,9 +273,18 @@ export default function Page() {
             <DetailScreen
               storeId={selectedStoreId}
               onBack={handleBack}
+              onWaiting={handleWaiting}
               onReserve={handleReserve}
               onOrderGoods={handleOrderGoods}
               onIssueCoupon={handleIssueCoupon}
+            />
+          )}
+
+          {currentView === 'waiting' && selectedStoreId && (
+            <WaitingQueueScreen
+              storeId={selectedStoreId}
+              onBack={handleBack}
+              onAdmitted={handleWaitingAdmitted}
             />
           )}
 
