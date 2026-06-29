@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { getOperatingDates, formatDateKorean } from '@/lib/data'
 import type { PopupStore, TimeSlot, GoodsItem, CouponItem, ReservationPayload, GoodsOrderPayload, CouponIssuancePayload } from '@/lib/data'
-import { getPopupDetail, getPopupSlots, toPopupStoreFromDetail, toTimeSlot } from '@/lib/popup-api'
+import { getPopupDetailEntry, getPopupSlots, toPopupStoreFromDetail, toTimeSlot } from '@/lib/popup-api'
 import { couponApi, formatDiscount } from '@/lib/coupon-api'
 import { goodsApi, toGoodsItem } from '@/lib/goods-api'
 
@@ -28,6 +28,7 @@ type ReservationSlotView = TimeSlot & { slotId: number }
 interface DetailScreenProps {
   storeId: string
   onBack: () => void
+  onWaiting: () => void
   onReserve: (payload: ReservationPayload) => void
   onOrderGoods: (payload: GoodsOrderPayload) => void
   onIssueCoupon: (payload: CouponIssuancePayload) => void
@@ -392,7 +393,7 @@ function CouponCard({ coupon, onIssue }: { coupon: CouponItem; onIssue: () => vo
   )
 }
 
-export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssueCoupon }: DetailScreenProps) {
+export function DetailScreen({ storeId, onBack, onWaiting, onReserve, onOrderGoods, onIssueCoupon }: DetailScreenProps) {
   const [store, setStore] = useState<PopupStore | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
@@ -410,9 +411,14 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
   useEffect(() => {
     let active = true
     setLoading(true)
-    getPopupDetail(storeId)
+    getPopupDetailEntry(storeId)
       .then((res) => {
-        if (active) setStore(toPopupStoreFromDetail(res))
+        if (!active) return
+        if (res.type === 'waiting') {
+          onWaiting()
+          return
+        }
+        setStore(toPopupStoreFromDetail(res.data))
       })
       .catch(() => {
         if (active) setStore(null)
@@ -423,7 +429,7 @@ export function DetailScreen({ storeId, onBack, onReserve, onOrderGoods, onIssue
     return () => {
       active = false
     }
-  }, [storeId])
+  }, [storeId, onWaiting])
 
   useEffect(() => {
     let active = true

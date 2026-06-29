@@ -27,6 +27,14 @@ export function getAccessToken(): string | null {
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const { payload } = await apiRequestEnvelope<T>(path, init)
+    return payload.data
+}
+
+export async function apiRequestEnvelope<T>(
+    path: string,
+    init: RequestInit = {},
+): Promise<{ status: number; payload: ApiResponse<T> }> {
     const headers = new Headers(init.headers)
     if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
         headers.set('Content-Type', 'application/json')
@@ -47,5 +55,5 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     if (!payload) {
         throw new ApiError('서버 응답을 읽을 수 없습니다.', response.status)
     }
-    return payload.data
+    return { status: response.status, payload }
 }

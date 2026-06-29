@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, MapPin, Calendar, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { popupStores, formatDateKorean } from '@/lib/data'
 import type { ReservationPayload } from '@/lib/data'
+import { ApiError } from '@/lib/api'
 import { reservationApi } from '@/lib/reservation-api'
 import type { PopupStoreDetailResponse, ReservationPaymentResponse } from '@/lib/reservation-api'
 import { createIdempotencyKey } from '@/lib/idempotency'
@@ -125,7 +126,11 @@ export function ReservationPaymentScreen({
         onComplete(payment)
       }
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : '예약 결제를 준비하지 못했습니다.')
+      if (submitError instanceof ApiError && submitError.code === 'RESERVATION_ADMISSION_REQUIRED') {
+        setError('입장 시간이 만료되었습니다. 다시 입장해 주세요.')
+      } else {
+        setError(submitError instanceof Error ? submitError.message : '예약 결제를 준비하지 못했습니다.')
+      }
     } finally {
       setSubmitting(false)
     }

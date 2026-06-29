@@ -1,4 +1,4 @@
-import {apiRequest} from './api'
+import {apiRequest, apiRequestEnvelope} from './api'
 import type {OrgPopupStore, OrgStoreStatus, PopupStore, ReservationStatus, TimeSlot} from './data'
 
 // ── 타입 ──────────────────────────────────────────────────────────────────────
@@ -53,6 +53,10 @@ export interface PopupImagePresignResponse {
     presignedUrl: string
 }
 
+export type PopupDetailEntryResult =
+    | { type: 'success'; data: PopupStoreDetailResponse }
+    | { type: 'waiting' }
+
 // ── API 함수 ──────────────────────────────────────────────────────────────────
 
 export const getPopups = () =>
@@ -60,6 +64,17 @@ export const getPopups = () =>
 
 export const getPopupDetail = (popupStoreId: string) =>
     apiRequest<PopupStoreDetailResponse>(`/popups/${popupStoreId}`)
+
+export const getPopupDetailEntry = async (popupStoreId: string): Promise<PopupDetailEntryResult> => {
+    const {status, payload} = await apiRequestEnvelope<PopupStoreDetailResponse | null>(`/popups/${popupStoreId}`)
+    if (status === 202 && payload.code === 'WAITING') {
+        return {type: 'waiting'}
+    }
+    if (!payload.data) {
+        throw new Error(payload.message || '팝업 정보를 불러오지 못했습니다.')
+    }
+    return {type: 'success', data: payload.data}
+}
 
 export const getPopupSlots = (popupStoreId: string, date: string) =>
     apiRequest<ReservationSlotResponse[]>(`/popups/${popupStoreId}/slots?date=${date}`)
