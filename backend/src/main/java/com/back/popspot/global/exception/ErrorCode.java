@@ -55,6 +55,7 @@ public enum ErrorCode {
 	PAYMENT_IDEMPOTENCY_KEY_MISMATCH(HttpStatus.CONFLICT, "결제 승인 멱등성 키가 일치하지 않습니다."),
 
 	RESERVATION_TEMPORARILY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "예약이 일시 중단됩니다. 잠시 후 다시 시도해주세요."),
+	QUEUE_TEMPORARILY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "대기열 서비스가 일시 중단됩니다. 잠시 후 다시 시도해주세요."),
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
 	private final HttpStatus status;

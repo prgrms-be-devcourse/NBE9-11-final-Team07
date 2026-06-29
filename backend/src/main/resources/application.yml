@@ -75,3 +75,18 @@ resilience4j:
         sliding-window-size: 10
         sliding-window-type: COUNT_BASED
         permitted-number-of-calls-in-half-open-state: 3
+      # CB 수치는 실측 데이터 부재로 인한 초기 추정값, 운영 후 재조정 예정
+      waitingQueueRedis:
+        sliding-window-type: TIME_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 20
+        failure-rate-threshold: 60
+        slow-call-duration-threshold: 2000ms
+        slow-call-rate-threshold: 60
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        record-exceptions:
+          - org.springframework.data.redis.RedisConnectionFailureException
+          - org.springframework.dao.QueryTimeoutException
+        ignore-exceptions:
+          - com.back.popspot.global.queue.exception.QueueFullException

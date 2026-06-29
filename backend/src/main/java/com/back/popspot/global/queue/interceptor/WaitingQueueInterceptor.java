@@ -10,6 +10,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
+import com.back.popspot.global.queue.exception.QueueCircuitOpenException;
 import com.back.popspot.global.queue.service.WaitingQueueRedisService;
 import com.back.popspot.global.response.CommonApiResponse;
 
@@ -21,6 +22,8 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 @RequiredArgsConstructor
 public class WaitingQueueInterceptor implements HandlerInterceptor {
+
+	private static final String RETRY_AFTER_SECONDS = "10";
 
 	private final WaitingQueueRedisService queueService;
 	private final ObjectMapper objectMapper;
@@ -50,7 +53,14 @@ public class WaitingQueueInterceptor implements HandlerInterceptor {
 		if (popup == null) {
 			return true;
 		}
-		queueService.enqueue(popupId, userIdStr, popup.getReservationEndAt());
+
+		try {
+			queueService.enqueue(popupId, userIdStr, popup.getReservationEndAt());
+		} catch (QueueCircuitOpenException e) {
+			writeServiceUnavailableResponse(response);
+			return false;
+		}
+
 		writeWaitingResponse(response);
 		return false;
 	}
@@ -87,6 +97,19 @@ public class WaitingQueueInterceptor implements HandlerInterceptor {
 		response.setStatus(HttpServletResponse.SC_ACCEPTED);
 		response.setContentType("application/json;charset=UTF-8");
 		CommonApiResponse<Void> body = new CommonApiResponse<>("WAITING", "대기 중입니다.", null);
+		response.getWriter().write(objectMapper.writeValueAsString(body));
+		response.getWriter().flush();
+	}
+
+	private void writeServiceUnavailableResponse(HttpServletResponse response) throws IOException {
+		response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+		response.setHeader("Retry-After", RETRY_AFTER_SECONDS);
+		response.setContentType("application/json;charset=UTF-8");
+		CommonApiResponse<Void> body = new CommonApiResponse<>(
+			"QUEUE_TEMPORARILY_UNAVAILABLE",
+			"대기열 서비스가 일시 중단됩니다. 잠시 후 다시 시도해주세요.",
+			null
+		);
 		response.getWriter().write(objectMapper.writeValueAsString(body));
 		response.getWriter().flush();
 	}

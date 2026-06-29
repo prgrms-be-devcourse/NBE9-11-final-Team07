@@ -65,6 +65,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:junit-jupiter:1.20.4")
     testImplementation("org.testcontainers:mysql:1.20.4")
+    testImplementation("org.testcontainers:toxiproxy:1.20.4")
 }
 
 tasks.withType<Test> {
