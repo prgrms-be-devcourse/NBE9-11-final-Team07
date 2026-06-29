@@ -51,9 +51,9 @@ variable "public_subnet_cidrs" {
 ##############################################
 
 variable "ec2_instance_type" {
-  description = "EC2 인스턴스 타입 (블루/그린 동시 실행 고려, t3.small / 2GB)"
+  description = "EC2 인스턴스 타입 (블루/그린 동시 실행 고려, t3.medium / 4GB)"
   type        = string
-  default     = "t3.small"
+  default     = "t3.medium"
 }
 
 variable "key_pair_name" {

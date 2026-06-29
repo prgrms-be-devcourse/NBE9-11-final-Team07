@@ -169,6 +169,10 @@ resource "aws_instance" "main" {
     volume_type = "gp3"
   }
 
+  lifecycle {
+    ignore_changes = [ami]
+  }
+
   tags = merge(var.common_tags, { Name = "team07-web" })
 }
 
