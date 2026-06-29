@@ -13,9 +13,11 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 @EnableSchedulerLock(defaultLockAtMostFor = "30s")
 public class SchedulerLockConfig {
 
+    public static final String SHEDLOCK_ENV = "popspot";
+
     @Bean
     public LockProvider lockProvider(RedisConnectionFactory connectionFactory) {
-        return new RedisLockProvider(connectionFactory, "popspot");
+        return new RedisLockProvider(connectionFactory, SHEDLOCK_ENV);
     }
 
     @Bean

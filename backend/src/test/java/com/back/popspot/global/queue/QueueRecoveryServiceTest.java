@@ -203,16 +203,24 @@ class QueueRecoveryServiceTest extends ContainerIntegrationTestSupport {
         );
 
         // 백그라운드 스레드가 락을 점유한 채 대기
+        // executeWithLock은 락 획득 실패 시 재시도 없이 즉시 복귀하므로 직접 재시도한다.
+        // (스케줄러가 500ms 주기·lockAtLeastFor=450ms로 락을 거의 상시 보유하기 때문)
         CompletableFuture<Void> lockHolder = CompletableFuture.runAsync(() -> {
             try {
-                lockingTaskExecutor.executeWithLock(
-                    () -> {
-                        lockAcquired.countDown();
-                        schedulerDone.await(10, TimeUnit.SECONDS);
-                        return null;
-                    },
-                    lockConfig
-                );
+                Instant deadline = Instant.now().plusSeconds(5);
+                while (lockAcquired.getCount() > 0 && Instant.now().isBefore(deadline)) {
+                    lockingTaskExecutor.executeWithLock(
+                        () -> {
+                            lockAcquired.countDown();
+                            schedulerDone.await(10, TimeUnit.SECONDS);
+                            return null;
+                        },
+                        lockConfig
+                    );
+                    if (lockAcquired.getCount() > 0) {
+                        Thread.sleep(60);
+                    }
+                }
             } catch (Throwable e) {
                 throw new RuntimeException(e);
             }
@@ -225,12 +233,13 @@ class QueueRecoveryServiceTest extends ContainerIntegrationTestSupport {
         // when — 동일 락 이름으로 admitWaiting() 시도 (ShedLock이 스킵해야 함)
         waitingQueueScheduler.admitWaiting();
 
-        // 백그라운드 스레드 해제
-        schedulerDone.countDown();
-        lockHolder.get(5, TimeUnit.SECONDS);
-
-        // then — ZSET이 그대로 (popMin이 실행되지 않았음)
+        // then — 락이 아직 보유된 상태에서 검증 (Spring 스케줄러가 이 시점에 실행돼도 락 획득 실패 → 스킵)
+        // schedulerDone.countDown() 이후에 검증하면 500ms 주기 스케줄러가 락을 선점해 ZSET을 비울 수 있음
         assertThat(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(POPUP_D))).isEqualTo(2L);
         assertThat(redisTemplate.keys(RedisKeys.popupProceedFlagPattern(POPUP_D))).isEmpty();
+
+        // 백그라운드 스레드 해제 (assertion 완료 후)
+        schedulerDone.countDown();
+        lockHolder.get(5, TimeUnit.SECONDS);
     }
 }
