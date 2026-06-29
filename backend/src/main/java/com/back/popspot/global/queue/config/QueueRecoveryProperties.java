@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record QueueRecoveryProperties(
     int maxAttempts,
     long pollIntervalSeconds,
-    long lockAtMostForSeconds
+    long lockAtMostForSeconds,
+    long retryDeadlineSeconds
 ) {
 }

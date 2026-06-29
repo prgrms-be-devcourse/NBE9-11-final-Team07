@@ -67,7 +67,7 @@ class QueueRecoveryCoordinatorTest {
     private QueueRecoveryCoordinator coordinator(int maxAttempts) {
         return new QueueRecoveryCoordinator(
             lockingTaskExecutor, recoveryService, queueRedisService,
-            new QueueRecoveryProperties(maxAttempts, 0L, 300L)
+            new QueueRecoveryProperties(maxAttempts, 0L, 300L, 360L)
         );
     }
 

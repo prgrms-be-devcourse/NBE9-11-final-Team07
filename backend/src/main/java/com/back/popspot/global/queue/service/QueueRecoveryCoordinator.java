@@ -34,7 +34,7 @@ public class QueueRecoveryCoordinator {
      */
     public void executeAndLowerGate() {
         int attempts = 0;
-        Instant deadline = Instant.now().plusSeconds(properties.lockAtMostForSeconds());
+        Instant deadline = Instant.now().plusSeconds(properties.retryDeadlineSeconds());
 
         while (attempts < properties.maxAttempts() && Instant.now().isBefore(deadline)) {
             attempts++;

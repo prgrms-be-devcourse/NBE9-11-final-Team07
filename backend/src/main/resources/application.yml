@@ -61,6 +61,7 @@ queue-recovery:
   max-attempts: 60
   poll-interval-seconds: 5
   lock-at-most-for-seconds: 300
+  retry-deadline-seconds: 360
 
 management:
   endpoints:
