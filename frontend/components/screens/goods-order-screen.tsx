@@ -312,27 +312,17 @@ export function GoodsOrderScreen({ payload, onBack }: GoodsOrderScreenProps) {
                   className="w-full px-4 py-3 rounded-xl border-2 border-border bg-card text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground transition-colors"
                 />
               </div>
-              <div className="flex gap-2">
-                <div className="flex-1 space-y-1">
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                    우편번호
-                  </label>
-                  <input
-                    type="text"
-                    value={postalCode}
-                    onChange={(e) => setPostalCode(e.target.value)}
-                    placeholder="00000"
-                    className="w-full px-4 py-3 rounded-xl border-2 border-border bg-card text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground transition-colors"
-                  />
-                </div>
-                <div className="space-y-1 shrink-0 flex flex-col">
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide opacity-0 select-none">
-                    검색
-                  </label>
-                  <button className="px-3 h-[46px] rounded-xl border-2 border-foreground bg-foreground text-background text-[12px] font-bold whitespace-nowrap hover:opacity-90 transition-opacity">
-                    주소 검색
-                  </button>
-                </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  우편번호
+                </label>
+                <input
+                  type="text"
+                  value={postalCode}
+                  onChange={(e) => setPostalCode(e.target.value)}
+                  placeholder="00000"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-border bg-card text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground transition-colors"
+                />
               </div>
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
