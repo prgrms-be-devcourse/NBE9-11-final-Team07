@@ -8,7 +8,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
@@ -69,6 +71,28 @@ class ReservationCapacityRebuildServiceTest {
 		// remaining = capacity(10) - active(4) - pending(2) = 4
 		assertThat(result.rebuiltRedisRemaining()).isEqualTo(4L);
 		verify(valueOperations).set(eq(RedisKeys.reservationSlotRemaining(SLOT_ID)), eq(4L), anyLong(), eq(TimeUnit.SECONDS));
+	}
+
+	@Test
+	@DisplayName("Redis 재구축 시 예약 가능 시간 안에 재오픈될 pendingCount만 차감한다")
+	void rebuildSlotRemaining_subtractsPendingBeforeReservableUntil() {
+		LocalDateTime reservationEndAt = LocalDateTime.of(2026, 6, 28, 23, 0);
+		ReservationSlot slot = slot(
+			SLOT_ID,
+			10,
+			LocalDateTime.now().plusDays(2),
+			LocalDate.of(2026, 6, 29),
+			LocalTime.of(10, 0),
+			reservationEndAt
+		);
+		stubCommon(slot, 4L, 2L);
+
+		service.rebuildSlotRemaining(SLOT_ID);
+
+		verify(reservationCancelPoolRepository).sumScheduledPendingCountBySlotIdAndReopenAtBefore(
+			SLOT_ID,
+			reservationEndAt
+		);
 	}
 
 	@Test
@@ -133,18 +157,40 @@ class ReservationCapacityRebuildServiceTest {
 		when(reservationSlotRepository.findByIdWithPopupStore(SLOT_ID)).thenReturn(Optional.of(slot));
 		when(reservationRepository.countBySlotIdAndStatusIn(
 			eq(SLOT_ID), eq(List.of(ReservationStatus.HELD, ReservationStatus.CONFIRMED)))).thenReturn(activeCount);
-		when(reservationCancelPoolRepository.sumScheduledPendingCountBySlotId(SLOT_ID)).thenReturn(pendingCount);
+		when(reservationCancelPoolRepository.sumScheduledPendingCountBySlotIdAndReopenAtBefore(
+			eq(SLOT_ID), any(LocalDateTime.class))).thenReturn(pendingCount);
 		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 	}
 
 	private ReservationSlot slot(Long id, int capacity, LocalDateTime closeDate) {
+		return slot(
+			id,
+			capacity,
+			closeDate,
+			LocalDate.of(2026, 6, 29),
+			LocalTime.of(10, 0),
+			LocalDateTime.of(2026, 6, 28, 23, 0)
+		);
+	}
+
+	private ReservationSlot slot(
+		Long id,
+		int capacity,
+		LocalDateTime closeDate,
+		LocalDate slotDate,
+		LocalTime startTime,
+		LocalDateTime reservationEndAt
+	) {
 		PopupStore popupStore = new PopupStore();
 		ReflectionTestUtils.setField(popupStore, "closeDate", closeDate);
+		ReflectionTestUtils.setField(popupStore, "reservationEndAt", reservationEndAt);
 
 		ReservationSlot slot = new ReservationSlot();
 		ReflectionTestUtils.setField(slot, "id", id);
 		ReflectionTestUtils.setField(slot, "capacity", capacity);
 		ReflectionTestUtils.setField(slot, "popupStore", popupStore);
+		ReflectionTestUtils.setField(slot, "slotDate", slotDate);
+		ReflectionTestUtils.setField(slot, "startTime", startTime);
 		return slot;
 	}
 }
