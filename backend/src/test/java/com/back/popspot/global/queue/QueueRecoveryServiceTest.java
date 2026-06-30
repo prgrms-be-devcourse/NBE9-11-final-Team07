@@ -188,10 +188,7 @@ class QueueRecoveryServiceTest extends ContainerIntegrationTestSupport {
     @Test
     @DisplayName("시나리오4: recover()가 popup-admission-scheduler 락 보유 중 admitWaiting()이 스킵됨")
     void recover_락_보유중_admitWaiting_스킵() throws Exception {
-        // given — Redis ZSET에 직접 대기 항목 추가 (recover() 호출 없이 락 경쟁만 검증)
-        redisTemplate.opsForZSet().add(RedisKeys.popupWaitingQueue(POPUP_D), "1", 1.0);
-        redisTemplate.opsForZSet().add(RedisKeys.popupWaitingQueue(POPUP_D), "2", 2.0);
-
+        // given — 락 경쟁만 검증 (ZSET 셋업은 락 획득 확인 후에 수행)
         CountDownLatch lockAcquired = new CountDownLatch(1);
         CountDownLatch schedulerDone = new CountDownLatch(1);
 
@@ -229,6 +226,10 @@ class QueueRecoveryServiceTest extends ContainerIntegrationTestSupport {
         // 백그라운드 스레드가 락을 획득할 때까지 대기
         assertThat(lockAcquired.await(5, TimeUnit.SECONDS))
             .as("락 획득이 5초 안에 완료되어야 합니다").isTrue();
+
+        // given — 락 보유 확인 후 ZSET 셋업 (Spring Scheduler가 락 획득 전에 선점하는 것을 방지)
+        redisTemplate.opsForZSet().add(RedisKeys.popupWaitingQueue(POPUP_D), "1", 1.0);
+        redisTemplate.opsForZSet().add(RedisKeys.popupWaitingQueue(POPUP_D), "2", 2.0);
 
         // when — 동일 락 이름으로 admitWaiting() 시도 (ShedLock이 스킵해야 함)
         waitingQueueScheduler.admitWaiting();
