@@ -5,7 +5,6 @@ import java.util.List;
 
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import com.back.popspot.domain.reservation.entity.ReservationCancelPool;
 import com.back.popspot.domain.reservation.entity.ReservationCancelPoolStatus;
@@ -21,48 +20,66 @@ import lombok.extern.slf4j.Slf4j;
 public class ReservationReopenService {
 
 	private final ReservationCancelPoolRepository reservationCancelPoolRepository;
+	private final ReservationCancelPoolService reservationCancelPoolService;
 	private final RedisTemplate<String, Long> redisTemplate;
 
-	@Transactional
 	public void reopenDuePools() {
 		LocalDateTime now = LocalDateTime.now();
-		List<ReservationCancelPool> pools =
-			reservationCancelPoolRepository.findByReopenStatusAndReopenAtLessThanEqualAndPendingCountGreaterThan(
-				ReservationCancelPoolStatus.SCHEDULED,
-				now,
-				0
-			);
+		List<ReservationCancelPool> pools = reservationCancelPoolRepository.findDuePoolsWithSlot(
+			ReservationCancelPoolStatus.SCHEDULED,
+			now,
+			0
+		);
 
 		for (ReservationCancelPool pool : pools) {
-			reopen(pool);
+			try {
+				reopen(pool);
+			} catch (RuntimeException e) {
+				log.error(
+					"[RESERVATION_REOPEN_POOL_FAILED] 취소 예약 재오픈 pool 처리 실패: poolId={}, slotId={}, reopenAt={}, pendingCount={}",
+					pool.getId(),
+					pool.getSlot().getId(),
+					pool.getReopenAt(),
+					pool.getPendingCount(),
+					e
+				);
+			}
 		}
 	}
 
 	private void reopen(ReservationCancelPool pool) {
-		int claimed = reservationCancelPoolRepository.claimOpening(
-			pool.getId(),
-			ReservationCancelPoolStatus.SCHEDULED,
-			ReservationCancelPoolStatus.OPENING
-		);
-		if (claimed == 0) {
+		boolean claimed = reservationCancelPoolService.claimOpeningInTx(pool.getId());
+		if (!claimed) {
 			return;
 		}
 
+		int pendingCount = pool.getPendingCount();
+		Long slotId = pool.getSlot().getId();
+
 		try {
-			int pendingCount = pool.getPendingCount();
 			redisTemplate.opsForValue()
-				.increment(RedisKeys.reservationSlotRemaining(pool.getSlot().getId()), pendingCount);
-			pool.openPending();
+				.increment(RedisKeys.reservationSlotRemaining(slotId), pendingCount);
 		} catch (RuntimeException e) {
 			log.error(
-				"[RESERVATION_REOPEN_FAILED] 취소 예약 재오픈 Redis 반영 실패: poolId={}, slotId={}, reopenAt={}, pendingCount={}",
+				"[RESERVATION_REOPEN_REDIS_FAILED] 취소 예약 재오픈 Redis 반영 실패: poolId={}, slotId={}, reopenAt={}, pendingCount={}",
 				pool.getId(),
-				pool.getSlot().getId(),
+				slotId,
 				pool.getReopenAt(),
-				pool.getPendingCount(),
+				pendingCount,
 				e
 			);
-			pool.fail();
+			return;
+		}
+
+		boolean opened = reservationCancelPoolService.markOpenedInTx(pool.getId());
+		if (!opened) {
+			log.warn(
+				"[RESERVATION_REOPEN_MARK_OPENED_FAILED] 취소 예약 재오픈 OPENED 처리 실패: poolId={}, slotId={}, reopenAt={}, pendingCount={}",
+				pool.getId(),
+				slotId,
+				pool.getReopenAt(),
+				pendingCount
+			);
 		}
 	}
 }
