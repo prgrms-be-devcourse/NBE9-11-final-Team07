@@ -75,6 +75,7 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 				redisTemplate.delete(keys);
 			}
 		}
+		redisTemplate.delete(RedisKeys.admissionSchedulerLockKey());
 	}
 
 	// ── 검증 1: FIFO 순서 보장 ─────────────────────────────────────────────

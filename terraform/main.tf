@@ -169,6 +169,10 @@ resource "aws_instance" "main" {
     volume_type = "gp3"
   }
 
+  lifecycle {
+    ignore_changes = [ami]
+  }
+
   tags = merge(var.common_tags, { Name = "team07-web" })
 }
 
@@ -257,4 +261,33 @@ resource "aws_s3_bucket_public_access_block" "main" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_cors_configuration" "main" {
+  bucket = aws_s3_bucket.main.id
+
+  cors_rule {
+    allowed_origins = var.s3_cors_allowed_origins
+    allowed_methods = ["PUT", "GET"]
+    allowed_headers = ["*"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "main" {
+  bucket = aws_s3_bucket.main.id
+
+  rule {
+    id     = "expire-temp-objects"
+    status = "Enabled"
+
+    filter {
+      prefix = "temp/"
+    }
+
+    expiration {
+      days = 3
+    }
+  }
 }

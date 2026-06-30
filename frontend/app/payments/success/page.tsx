@@ -32,16 +32,17 @@ function PaymentSuccessContent() {
     }
 
     const pendingPayment = getPendingPayment()
-    if (
-      pendingPayment &&
-      (pendingPayment.orderId !== orderId || pendingPayment.amount !== amount)
-    ) {
+    if (!pendingPayment || !pendingPayment.confirmIdempotencyKey) {
+      setError('결제 승인 정보가 만료됐습니다. 처음부터 다시 시도해 주세요.')
+      return
+    }
+    if (pendingPayment.orderId !== orderId || pendingPayment.amount !== amount) {
       clearPendingPayment()
       setError('요청한 주문 정보와 결제 결과가 일치하지 않습니다.')
       return
     }
 
-    confirmPayment({ paymentKey, orderId, amount })
+    confirmPayment({ paymentKey, orderId, amount, idempotencyKey: pendingPayment.confirmIdempotencyKey })
       .then((response) => {
         clearPendingPayment()
         setResult(response)

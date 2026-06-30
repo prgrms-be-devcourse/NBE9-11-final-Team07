@@ -1,12 +1,8 @@
 package com.back.popspot.global.queue;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatNoException;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doCallRealMethod;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.reset;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -52,7 +48,7 @@ import com.back.popspot.support.IntegrationTestSupport;
  * 구체 클래스 spy는 실제 운영 경로(스케줄러 → QueueChunkDeleter.deleteChunk
  * → deleteAllByIdInBatch → @Transactional 커밋)를 그대로 실행한다.
  */
-@DisplayName("Phase 3 — 자정 일괄 삭제 배치 통합 테스트")
+@DisplayName("자정 일괄 삭제 배치 통합 테스트")
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @TestPropertySource(properties = "queue-cleanup.chunk-size=5")
 class QueueCleanupSchedulerTest extends IntegrationTestSupport {

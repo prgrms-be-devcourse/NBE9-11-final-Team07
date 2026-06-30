@@ -91,7 +91,11 @@ public class SecurityConfig {
 	@Bean
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
-		config.setAllowedOrigins(List.of("http://localhost:3000"));
+		config.setAllowedOriginPatterns(List.of(
+				"http://localhost:3000",
+				"https://nbe-9-11-final-team07.vercel.app",
+				"https://nbe-9-11-final-team07-*.vercel.app"
+		));
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 		config.setAllowedHeaders(List.of("*"));
 		// 쿠키(access_token) 전송을 위해 필수

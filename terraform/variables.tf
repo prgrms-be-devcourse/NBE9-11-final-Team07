@@ -51,9 +51,9 @@ variable "public_subnet_cidrs" {
 ##############################################
 
 variable "ec2_instance_type" {
-  description = "EC2 인스턴스 타입 (블루/그린 동시 실행 고려, t3.small / 2GB)"
+  description = "EC2 인스턴스 타입 (블루/그린 동시 실행 고려, t3.medium / 4GB)"
   type        = string
-  default     = "t3.small"
+  default     = "t3.medium"
 }
 
 variable "key_pair_name" {
@@ -122,4 +122,10 @@ variable "s3_bucket_name" {
   description = "굿즈/팝업 이미지 저장용 S3 버킷 이름 (전역 유니크 필요, Private 버킷 + Pre-signed URL)"
   type        = string
   default     = "7sungsa-bucket-popup-images"
+}
+
+variable "s3_cors_allowed_origins" {
+  description = "S3 CORS 허용 Origin 목록 (Presigned PUT preflight 허용 대상)"
+  type        = list(string)
+  default     = ["https://nbe-9-11-final-team07.vercel.app", "http://localhost:3000"]
 }
