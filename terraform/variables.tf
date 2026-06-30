@@ -123,3 +123,9 @@ variable "s3_bucket_name" {
   type        = string
   default     = "7sungsa-bucket-popup-images"
 }
+
+variable "s3_cors_allowed_origins" {
+  description = "S3 CORS 허용 Origin 목록 (Presigned PUT preflight 허용 대상)"
+  type        = list(string)
+  default     = ["https://nbe-9-11-final-team07.vercel.app", "http://localhost:3000"]
+}
