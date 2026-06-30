@@ -157,6 +157,7 @@ class PaymentTransactionServiceTest {
 		assertThat(response.paymentKey()).isEqualTo("payment-key");
 		assertThat(response.approvedAt()).isEqualTo(APPROVED_AT);
 		assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+		assertThat(payment.getActiveReservationId()).isEqualTo(1L);
 		verify(reservationWaitlistService).deleteByConfirmedReservation(reservation.getUser(), reservation.getSlot());
 	}
 
@@ -346,6 +347,21 @@ class PaymentTransactionServiceTest {
 		assertThat(refund.getStatus()).isEqualTo(PaymentRefundStatus.DONE);
 		assertThat(refund.getTransactionKey()).isEqualTo("transaction-key");
 		assertThat(refund.getCompletedAt()).isEqualTo(canceledAt);
+	}
+
+	@Test
+	@DisplayName("결제 취소 완료 시 활성 결제 유니크 키를 해제한다")
+	void clearActivePaymentKeyWhenPaymentCanceled() {
+		Reservation reservation = reservation(ReservationStatus.CONFIRMED, LocalDateTime.now().plusMinutes(5));
+		Payment payment = readyReservationPayment(reservation);
+
+		assertThat(payment.getActiveReservationId()).isEqualTo(1L);
+
+		payment.cancel();
+
+		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+		assertThat(payment.getActiveReservationId()).isNull();
+		assertThat(payment.getActiveGoodsOrderId()).isNull();
 	}
 
 	@Test

@@ -38,6 +38,12 @@ public interface PopupQueueEntryRepository extends JpaRepository<PopupQueueEntry
     // 복구 전용 — WAITING 행을 seq 오름차순으로 조회
     List<PopupQueueEntry> findByPopupIdAndStatusOrderBySeqAsc(Long popupId, QueueEntryStatus status);
 
+    // 테스트/검증용 — 특정 팝업의 대기열 행 전체 조회
+    List<PopupQueueEntry> findByPopupIdOrderBySeqAsc(Long popupId);
+
+    // 테스트 정리용 — 특정 팝업의 대기열 행 삭제
+    void deleteByPopupId(Long popupId);
+
     // 복구 전용 — status 무관 MAX(seq) 조회. 항목이 없으면 Optional.empty()
     @Query("SELECT MAX(e.seq) FROM PopupQueueEntry e WHERE e.popupId = :popupId")
     Optional<Long> findMaxSeqByPopupId(@Param("popupId") Long popupId);

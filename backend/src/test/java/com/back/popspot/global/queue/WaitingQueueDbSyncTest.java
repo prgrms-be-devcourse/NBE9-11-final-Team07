@@ -38,12 +38,14 @@ class WaitingQueueDbSyncTest extends IntegrationTestSupport {
 
     @BeforeEach
     void setUp() {
+        cleanupDbRows();
         cleanupRedisKeys();
     }
 
     @AfterEach
     void tearDown() {
         cleanupRedisKeys();
+        cleanupDbRows();
     }
 
     private void cleanupRedisKeys() {
@@ -51,6 +53,11 @@ class WaitingQueueDbSyncTest extends IntegrationTestSupport {
         if (keys != null && !keys.isEmpty()) {
             redisTemplate.delete(keys);
         }
+    }
+
+    private void cleanupDbRows() {
+        entryRepository.deleteByPopupId(POPUP_ID);
+        entryRepository.flush();
     }
 
     // ── DB_SYNC_1 ─────────────────────────────────────────────────────────
@@ -61,7 +68,7 @@ class WaitingQueueDbSyncTest extends IntegrationTestSupport {
         queueService.enqueue(POPUP_ID, "100", TEST_RESERVATION_END_AT);
 
         // DB 확인
-        List<PopupQueueEntry> entries = entryRepository.findAll();
+        List<PopupQueueEntry> entries = entryRepository.findByPopupIdOrderBySeqAsc(POPUP_ID);
         assertThat(entries).hasSize(1);
         PopupQueueEntry entry = entries.get(0);
         assertThat(entry.getUserId()).isEqualTo(100L);
@@ -82,7 +89,7 @@ class WaitingQueueDbSyncTest extends IntegrationTestSupport {
     @DisplayName("DB_SYNC_2: admitBatch 후 DB ADMITTED 전환 + ZSET 제거 + proceed 키 존재")
     void admitBatch_후_DB_ADMITTED_ZSET제거_proceed키존재() {
         queueService.enqueue(POPUP_ID, "200", TEST_RESERVATION_END_AT);
-        Long entryId = entryRepository.findAll().get(0).getId();
+        Long entryId = entryRepository.findByPopupIdOrderBySeqAsc(POPUP_ID).get(0).getId();
 
         queueService.admitBatch(POPUP_ID, 1);
 
@@ -111,7 +118,7 @@ class WaitingQueueDbSyncTest extends IntegrationTestSupport {
         queueService.admitBatch(POPUP_ID, 2);
 
         // DB 상태 확인
-        List<PopupQueueEntry> allEntries = entryRepository.findAll();
+        List<PopupQueueEntry> allEntries = entryRepository.findByPopupIdOrderBySeqAsc(POPUP_ID);
         List<PopupQueueEntry> admitted = allEntries.stream()
             .filter(e -> e.getStatus() == QueueEntryStatus.ADMITTED).toList();
         List<PopupQueueEntry> waiting = allEntries.stream()
@@ -164,6 +171,6 @@ class WaitingQueueDbSyncTest extends IntegrationTestSupport {
             RedisKeys.popupProceedFlag(POPUP_ID, "999"))).isTrue();
 
         // DB에 ADMITTED 행은 없음 (0행 업데이트이므로)
-        assertThat(entryRepository.findAll()).isEmpty();
+        assertThat(entryRepository.findByPopupIdOrderBySeqAsc(POPUP_ID)).isEmpty();
     }
 }
