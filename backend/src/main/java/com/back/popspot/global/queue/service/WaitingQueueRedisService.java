@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import org.springframework.data.redis.core.RedisCallback;
@@ -17,9 +18,13 @@ import org.springframework.transaction.annotation.Transactional;
 import com.back.popspot.domain.queue.entity.PopupQueueEntry;
 import com.back.popspot.domain.queue.entity.QueueEntryStatus;
 import com.back.popspot.domain.queue.repository.PopupQueueEntryRepository;
+import com.back.popspot.global.exception.BusinessException;
+import com.back.popspot.global.exception.ErrorCode;
 import com.back.popspot.global.queue.config.WaitingQueueProperties;
+import com.back.popspot.global.queue.exception.QueueCircuitOpenException;
 import com.back.popspot.global.redis.RedisKeys;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,10 +33,25 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class WaitingQueueRedisService {
 
+	private static final String CB_NAME = "waitingQueueRedis";
+
 	private final StringRedisTemplate redisTemplate;
 	private final WaitingQueueProperties properties;
 	private final PopupQueueEntryRepository popupQueueEntryRepository;
 
+	// Redis 장애 복구 중 플래그 — 인메모리여야 함 (Redis 장애 시 함께 날아가면 게이트 무의미)
+	// CB가 CLOSED로 전이해도 이 플래그가 true인 동안은 enqueue 게이트가 계속 막음
+	private final AtomicBoolean recovering = new AtomicBoolean(false);
+
+	public boolean isRecovering() {
+		return recovering.get();
+	}
+
+	public void setRecovering(boolean recovering) {
+		this.recovering.set(recovering);
+	}
+
+	@CircuitBreaker(name = CB_NAME, fallbackMethod = "enqueueFallback")
 	@Transactional
 	public void enqueue(long popupId, String userId, LocalDateTime reservationEndAt) {
 		Long seq = redisTemplate.opsForValue().increment(RedisKeys.popupQueueSeq(popupId));
@@ -55,10 +75,22 @@ public class WaitingQueueRedisService {
 		}
 	}
 
+	private void enqueueFallback(long popupId, String userId, LocalDateTime reservationEndAt, Throwable t) {
+		log.warn("waitingQueueRedis CB — enqueue fast-fail: popupId={}, userId={}", popupId, userId);
+		throw new QueueCircuitOpenException(t);
+	}
+
+	@CircuitBreaker(name = CB_NAME, fallbackMethod = "hasProceedPermissionFallback")
 	public boolean hasProceedPermission(long popupId, String userId) {
 		return Boolean.TRUE.equals(redisTemplate.hasKey(RedisKeys.popupProceedFlag(popupId, userId)));
 	}
 
+	private boolean hasProceedPermissionFallback(long popupId, String userId, Throwable t) {
+		log.warn("waitingQueueRedis CB — hasProceedPermission fail-closed: popupId={}", popupId);
+		throw new BusinessException(ErrorCode.QUEUE_TEMPORARILY_UNAVAILABLE);
+	}
+
+	@CircuitBreaker(name = CB_NAME, fallbackMethod = "admitBatchFallback")
 	@Transactional
 	public void admitBatch(long popupId, int n) {
 		Set<TypedTuple<String>> tuples =
@@ -91,12 +123,22 @@ public class WaitingQueueRedisService {
 		}
 	}
 
-	public void revokeProceedPermission(long popupId, String userId) {
-		redisTemplate.delete(RedisKeys.popupProceedFlag(popupId, userId));
+	private void admitBatchFallback(long popupId, int n, Throwable t) {
+		log.warn("waitingQueueRedis CB — admitBatch tick skipped: popupId={}", popupId);
 	}
 
+	@CircuitBreaker(name = CB_NAME, fallbackMethod = "getQueueRankFallback")
 	public Long getQueueRank(long popupId, String userId) {
 		return redisTemplate.opsForZSet().rank(RedisKeys.popupWaitingQueue(popupId), userId);
+	}
+
+	private Long getQueueRankFallback(long popupId, String userId, Throwable t) {
+		log.warn("waitingQueueRedis CB — getQueueRank fast-fail: popupId={}", popupId);
+		throw new BusinessException(ErrorCode.QUEUE_TEMPORARILY_UNAVAILABLE);
+	}
+
+	public void revokeProceedPermission(long popupId, String userId) {
+		redisTemplate.delete(RedisKeys.popupProceedFlag(popupId, userId));
 	}
 
 	public Set<Long> getActivePopupIds() {

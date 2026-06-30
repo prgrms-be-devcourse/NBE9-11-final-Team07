@@ -119,6 +119,7 @@ export function ReservationPaymentScreen({
           orderId: payment.orderId,
           orderName: payment.orderName,
           amount: payment.amount,
+          confirmIdempotencyKey: createIdempotencyKey(),
           customerName: name.trim(),
         })
         router.push('/payments/checkout')
