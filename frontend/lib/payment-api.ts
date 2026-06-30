@@ -8,6 +8,7 @@ export interface PaymentConfirmRequest {
   paymentKey: string
   orderId: string
   amount: number
+  idempotencyKey: string
 }
 
 export interface PaymentConfirmResponse {
@@ -25,6 +26,7 @@ export interface PendingPayment {
   orderId: string
   orderName: string
   amount: number
+  confirmIdempotencyKey: string
   customerName?: string
   customerEmail?: string
 }
@@ -48,6 +50,7 @@ export function getPendingPayment(): PendingPayment | null {
       typeof payment.orderId !== 'string' ||
       typeof payment.orderName !== 'string' ||
       typeof payment.amount !== 'number' ||
+      typeof payment.confirmIdempotencyKey !== 'string' ||
       (payment.customerName !== undefined && typeof payment.customerName !== 'string') ||
       (payment.customerEmail !== undefined && typeof payment.customerEmail !== 'string')
     ) {

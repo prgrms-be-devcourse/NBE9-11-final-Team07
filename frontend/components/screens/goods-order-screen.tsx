@@ -111,6 +111,7 @@ export function GoodsOrderScreen({ payload, onBack }: GoodsOrderScreenProps) {
         orderId: order.orderId,
         orderName: order.orderName,
         amount: order.amount,
+        confirmIdempotencyKey: createIdempotencyKey(),
         customerName: name.trim(),
       })
       router.push('/payments/checkout')

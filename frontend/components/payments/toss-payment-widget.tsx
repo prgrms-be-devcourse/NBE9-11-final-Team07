@@ -9,6 +9,7 @@ import type {
 } from '@tosspayments/tosspayments-sdk'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { createIdempotencyKey } from '@/lib/idempotency'
 import { clearPendingPayment, savePendingPayment } from '@/lib/payment-api'
 
 interface TossPaymentWidgetProps {
@@ -109,7 +110,7 @@ export function TossPaymentWidget({
     setRequesting(true)
     setError(null)
     try {
-      savePendingPayment({ orderId, orderName, amount })
+      savePendingPayment({ orderId, orderName, amount, confirmIdempotencyKey: createIdempotencyKey() })
       await widgetsRef.current.requestPayment({
         orderId,
         orderName,
