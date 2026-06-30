@@ -9,17 +9,14 @@ interface AppHeaderProps {
   className?: string
 }
 
-// 로그인 여부 판별용 플래그 쿠키 (access_token 은 HttpOnly 라 JS 로 읽을 수 없음)
-function hasLoggedInCookie(): boolean {
-  return document.cookie.split('; ').some((c) => c.startsWith('logged_in='))
-}
-
 export function AppHeader({ className }: AppHeaderProps) {
   const router = useRouter()
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
   useEffect(() => {
-    setIsLoggedIn(hasLoggedInCookie())
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, { credentials: 'include' })
+      .then((res) => setIsLoggedIn(res.ok))
+      .catch(() => setIsLoggedIn(false))
   }, [])
 
   async function handleLogout() {

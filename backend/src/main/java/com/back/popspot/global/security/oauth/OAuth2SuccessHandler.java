@@ -34,6 +34,12 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 	@Value("${jwt.access-token-validity-seconds}")
 	private long accessTokenValiditySeconds;
 
+	@Value("${app.cookie.secure:false}")
+	private boolean cookieSecure;
+
+	@Value("${app.cookie.same-site:Lax}")
+	private String cookieSameSite;
+
 	@Override
 	public void onAuthenticationSuccess(
 			HttpServletRequest request,
@@ -50,18 +56,18 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
 		ResponseCookie accessTokenCookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, accessToken)
 				.httpOnly(true)
-				.secure(false) // 로컬 http 환경. 운영(HTTPS)에서는 true 로 변경한다.
+				.secure(cookieSecure)
 				.path("/")
-				.sameSite("Lax")
+				.sameSite(cookieSameSite)
 				.maxAge(accessTokenValiditySeconds)
 				.build();
 
 		// JS 에서 읽을 수 있어야 하므로 httpOnly(false). 토큰 자체가 아닌 로그인 여부 플래그.
 		ResponseCookie loggedInCookie = ResponseCookie.from(LOGGED_IN_COOKIE, "true")
 				.httpOnly(false)
-				.secure(false)
+				.secure(cookieSecure)
 				.path("/")
-				.sameSite("Lax")
+				.sameSite(cookieSameSite)
 				.maxAge(accessTokenValiditySeconds)
 				.build();
 
