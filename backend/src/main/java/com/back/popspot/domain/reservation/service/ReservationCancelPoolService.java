@@ -2,12 +2,17 @@ package com.back.popspot.domain.reservation.service;
 
 import java.time.LocalDateTime;
 
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.reservation.entity.ReservationCancelPoolStatus;
 import com.back.popspot.domain.reservation.repository.ReservationCancelPoolRepository;
+import com.back.popspot.global.redis.RedisKeys;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,11 +24,33 @@ public class ReservationCancelPoolService {
 
 	private final ReservationCancelPoolRepository reservationCancelPoolRepository;
 	private final ReservationReopenPolicy reservationReopenPolicy;
+	private final RedisTemplate<String, Long> redisTemplate;
 
 	@Transactional
-	public void accrue(Long slotId, LocalDateTime canceledAt) {
+	public void accrue(ReservationSlot slot, LocalDateTime canceledAt) {
 		LocalDateTime reopenAt = reservationReopenPolicy.calculateReopenAt(canceledAt);
-		reservationCancelPoolRepository.accruePendingCount(slotId, reopenAt);
+		LocalDateTime slotStartAt = LocalDateTime.of(slot.getSlotDate(), slot.getStartTime());
+		LocalDateTime reservationEndAt = slot.getPopupStore().getReservationEndAt();
+		LocalDateTime reservableUntil = slotStartAt.isBefore(reservationEndAt) ? slotStartAt : reservationEndAt;
+
+		if (reopenAt.isBefore(reservableUntil)) {
+			reservationCancelPoolRepository.accruePendingCount(slot.getId(), reopenAt);
+			return;
+		}
+
+		if (canceledAt.isBefore(reservableUntil)) {
+			if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+				redisTemplate.opsForValue().increment(RedisKeys.reservationSlotRemaining(slot.getId()));
+				return;
+			}
+
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public void afterCommit() {
+					redisTemplate.opsForValue().increment(RedisKeys.reservationSlotRemaining(slot.getId()));
+				}
+			});
+		}
 	}
 
 	@Transactional(propagation = Propagation.REQUIRES_NEW)

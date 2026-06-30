@@ -63,14 +63,20 @@ public interface ReservationCancelPoolRepository extends JpaRepository<Reservati
 		from ReservationCancelPool pool
 		where pool.slot.id = :slotId
 		and pool.reopenStatus = :reopenStatus
+		and pool.reopenAt < :reopenAt
 		and pool.pendingCount > 0
 		""")
-	long sumPendingCountBySlotIdAndReopenStatus(
+	long sumPendingCountBySlotIdAndReopenStatusAndReopenAtBefore(
 		@Param("slotId") Long slotId,
-		@Param("reopenStatus") ReservationCancelPoolStatus reopenStatus
+		@Param("reopenStatus") ReservationCancelPoolStatus reopenStatus,
+		@Param("reopenAt") LocalDateTime reopenAt
 	);
 
-	default long sumScheduledPendingCountBySlotId(Long slotId) {
-		return sumPendingCountBySlotIdAndReopenStatus(slotId, ReservationCancelPoolStatus.SCHEDULED);
+	default long sumScheduledPendingCountBySlotIdAndReopenAtBefore(Long slotId, LocalDateTime reopenAt) {
+		return sumPendingCountBySlotIdAndReopenStatusAndReopenAtBefore(
+			slotId,
+			ReservationCancelPoolStatus.SCHEDULED,
+			reopenAt
+		);
 	}
 }
