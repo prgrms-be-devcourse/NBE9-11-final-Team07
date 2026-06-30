@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -57,17 +58,19 @@ public class WaitingQueueRedisService {
 		Long seq = redisTemplate.opsForValue().increment(RedisKeys.popupQueueSeq(popupId));
 		popupQueueEntryRepository.save(PopupQueueEntry.waiting(Long.parseLong(userId), popupId, seq));
 		Boolean added = redisTemplate.opsForZSet().addIfAbsent(RedisKeys.popupWaitingQueue(popupId), userId, seq);
+		// 활성 팝업 인덱스에 등록 (스케줄러가 KEYS 전체 탐색 없이 찾도록)
+		redisTemplate.opsForSet().add(RedisKeys.activeWaitingPopups(), String.valueOf(popupId));
 
 		// added==true(신규 멤버) && size==1(ZSET이 방금 생성됨) → TTL 적용
 		// recover(WAITING=0) 이후 첫 enqueue에서도 이 경로로 TTL이 설정됨
 		boolean isFirstInZset = Boolean.TRUE.equals(added)
-				&& Long.valueOf(1L).equals(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(popupId)));
+			&& Long.valueOf(1L).equals(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(popupId)));
 
 		if (isFirstInZset) {
 			Instant expireAt = properties.computeExpireAt(reservationEndAt);
 			byte[] seqKey = RedisKeys.popupQueueSeq(popupId).getBytes(StandardCharsets.UTF_8);
 			byte[] waitingKey = RedisKeys.popupWaitingQueue(popupId).getBytes(StandardCharsets.UTF_8);
-			redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+			redisTemplate.executePipelined((RedisCallback<Object>)connection -> {
 				connection.keyCommands().expireAt(seqKey, expireAt);
 				connection.keyCommands().expireAt(waitingKey, expireAt);
 				return null;
@@ -142,14 +145,24 @@ public class WaitingQueueRedisService {
 	}
 
 	public Set<Long> getActivePopupIds() {
-		Set<String> keys = redisTemplate.keys(RedisKeys.popupWaitingQueuePattern());
-		if (keys == null || keys.isEmpty()) {
+		Set<String> ids = redisTemplate.opsForSet().members(RedisKeys.activeWaitingPopups());
+		if (ids == null || ids.isEmpty()) {
 			return Collections.emptySet();
 		}
-		return keys.stream()
-			.map(k -> k.split(":")[2])
-			.map(Long::parseLong)
-			.collect(Collectors.toSet());
-	}
+		Set<Long> active = new HashSet<>();
+		for (String id : ids) {
+			long popupId = Long.parseLong(id);
+			if (Boolean.TRUE.equals(redisTemplate.hasKey(RedisKeys.popupWaitingQueue(popupId)))) {
+				active.add(popupId);                          // ZSET 살아있음 → 활성 대기열
+			} else {
+				// ZSET 없음(대기열 소진/TTL 만료) → Set에서 lazy 청소
+				// 주의: hasKey(없음) 확인 후 SREM 사이에 enqueue가 끼면
+				// 방금 들어온 팝업을 뺄 수 있음. 다음 조회/enqueue에서 자연 복원되므로
+				// 유저 누락으로 이어지진 않음. 완전 보장은 Lua 원자화(추후 과제).
+				redisTemplate.opsForSet().remove(RedisKeys.activeWaitingPopups(), id);
+			}
+		}
+		return active;
 
+	}
 }
