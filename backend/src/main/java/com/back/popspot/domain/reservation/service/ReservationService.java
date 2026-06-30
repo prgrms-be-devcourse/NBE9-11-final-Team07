@@ -143,7 +143,7 @@ public class ReservationService {
 
 	// @Transactional 제거 <- 검증+환불은 트랜잭션 밖, DB취소는 cancelIntx에 위임, 그 뒤 Redis INCR
 	public void cancelReservation(Long reservationId, Long userId) {
-		Reservation reservation = reservationRepository.findById(reservationId)
+		Reservation reservation = reservationRepository.findByIdWithUserAndSlotAndPopupStore(reservationId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		if (!reservation.getUser().getId().equals(userId)) {
@@ -170,10 +170,8 @@ public class ReservationService {
 			new PaymentCancelRequest("예약 취소", "refund-reservation-" + reservationId + "-" + userId)
 		));
 
-		Long slotId = reservation.getSlot().getId();
-
 		// DB 취소는 별도 트랜잭션 빈에 위임 (리턴 = 커밋 완료)
-		reservationCommandService.cancelInTx(reservationId, slotId, now);
+		reservationCommandService.cancelInTx(reservationId, reservation.getSlot(), now);
 
 	}
 

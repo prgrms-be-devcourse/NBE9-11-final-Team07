@@ -8,7 +8,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,7 +18,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import com.back.popspot.domain.popupStore.entity.PopupStore;
+import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.reservation.entity.ReservationStatus;
 import com.back.popspot.domain.reservation.repository.ReservationRepository;
 import com.back.popspot.global.exception.BusinessException;
@@ -69,24 +74,38 @@ class ReservationCommandServiceTest {
 	@DisplayName("CONFIRMED 취소가 0건이면 예외로 롤백시키고 슬롯 정원을 건드리지 않는다")
 	void cancelInTx_throwsWhenNoConfirmedReservation() {
 		LocalDateTime now = LocalDateTime.now();
+		ReservationSlot slot = slot();
 		when(reservationRepository.cancelConfirmedReservation(
 			100L, ReservationStatus.CONFIRMED, ReservationStatus.CANCELED, now)).thenReturn(0);
 
 		BusinessException exception = assertThrows(BusinessException.class,
-			() -> service.cancelInTx(100L, 1L, now));
+			() -> service.cancelInTx(100L, slot, now));
 
 		assertTrue(exception.getErrorCode() == ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS);
-		verify(reservationCancelPoolService, never()).accrue(1L, now);
+		verify(reservationCancelPoolService, never()).accrue(slot, now);
 	}
 
 	@Test
 	@DisplayName("취소 상태 변경이 성공하면 취소 예약 재오픈 pool에 적립한다")
 	void cancelInTx_success() {
 		LocalDateTime now = LocalDateTime.now();
+		ReservationSlot slot = slot();
 		when(reservationRepository.cancelConfirmedReservation(
 			100L, ReservationStatus.CONFIRMED, ReservationStatus.CANCELED, now)).thenReturn(1);
 
-		assertDoesNotThrow(() -> service.cancelInTx(100L, 1L, now));
-		verify(reservationCancelPoolService).accrue(1L, now);
+		assertDoesNotThrow(() -> service.cancelInTx(100L, slot, now));
+		verify(reservationCancelPoolService).accrue(slot, now);
+	}
+
+	private ReservationSlot slot() {
+		PopupStore popupStore = new PopupStore();
+		ReflectionTestUtils.setField(popupStore, "reservationEndAt", LocalDateTime.of(2026, 6, 27, 23, 0));
+
+		ReservationSlot slot = new ReservationSlot();
+		ReflectionTestUtils.setField(slot, "id", 1L);
+		ReflectionTestUtils.setField(slot, "popupStore", popupStore);
+		ReflectionTestUtils.setField(slot, "slotDate", LocalDate.of(2026, 6, 28));
+		ReflectionTestUtils.setField(slot, "startTime", LocalTime.of(10, 0));
+		return slot;
 	}
 }

@@ -42,7 +42,7 @@ public class ReservationCommandService {
 
 	//  취소 DB 트랜잭션. 정상 리턴 = 커밋 성공. 실패는 예외로 롤백.
 	@Transactional
-	public void cancelInTx(Long reservationId, Long slotId, LocalDateTime now) {
+	public void cancelInTx(Long reservationId, ReservationSlot slot, LocalDateTime now) {
 		int canceledCount = reservationRepository.cancelConfirmedReservation(
 			reservationId,
 			ReservationStatus.CONFIRMED,
@@ -53,7 +53,7 @@ public class ReservationCommandService {
 			throw new BusinessException(ErrorCode.RESERVATION_CANCEL_NOT_ALLOWED_STATUS);
 		}
 
-		reservationCancelPoolService.accrue(slotId, now);
+		reservationCancelPoolService.accrue(slot, now);
 	}
 
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
