@@ -1,6 +1,7 @@
 package com.back.popspot.global.queue.interceptor;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -55,7 +56,7 @@ public class WaitingQueueInterceptor implements HandlerInterceptor {
 		}
 
 		PopupStore popup = popupStoreRepository.findById(popupId).orElse(null);
-		if (popup == null) {
+		if (popup == null || !popup.getReservationEndAt().isAfter(LocalDateTime.now())) {
 			return true;
 		}
 
