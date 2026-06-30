@@ -16,13 +16,20 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
 @Getter
 @NoArgsConstructor
-@Table(name = "payment")
+@Table(
+	name = "payment",
+	uniqueConstraints = {
+		@UniqueConstraint(name = "uk_payment_active_reservation", columnNames = "active_reservation_id"),
+		@UniqueConstraint(name = "uk_payment_active_goods_order", columnNames = "active_goods_order_id")
+	}
+)
 public class Payment extends BaseEntity {
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "user_id", nullable = false)
@@ -64,6 +71,12 @@ public class Payment extends BaseEntity {
 	@Column(name = "idempotency_key", length = 255, unique = true, nullable = false)
 	private String idempotencyKey;
 
+	@Column(name = "active_reservation_id")
+	private Long activeReservationId;
+
+	@Column(name = "active_goods_order_id")
+	private Long activeGoodsOrderId;
+
 	// confirm 상태 확인용 멱등성 키
 	@Column(name = "confirm_idempotency_key", length = 255)
 	private String confirmIdempotencyKey;
@@ -93,6 +106,8 @@ public class Payment extends BaseEntity {
 		this.amount = amount;
 		this.status = status;
 		this.idempotencyKey = idempotencyKey;
+		this.activeReservationId = reservation != null ? reservation.getId() : null;
+		this.activeGoodsOrderId = goodsOrder != null ? goodsOrder.getId() : null;
 	}
 
 	// 대상을 특정하지 않은 READY 결제를 생성
@@ -212,6 +227,7 @@ public class Payment extends BaseEntity {
 	// 결제를 취소 완료 처리
 	public void cancel() {
 		this.status = PaymentStatus.CANCELED;
+		clearActivePaymentKeys();
 	}
 
 	// 결제 취소 진행 상태로 변경
@@ -259,5 +275,10 @@ public class Payment extends BaseEntity {
 	// 결제 승인 진행 상태가 만료되었는지 확인
 	public boolean isConfirmStale(LocalDateTime now, long stateSeconds) {
 		return confirmStartedAt != null && confirmStartedAt.plusSeconds(stateSeconds).isBefore(now);
+	}
+
+	private void clearActivePaymentKeys() {
+		this.activeReservationId = null;
+		this.activeGoodsOrderId = null;
 	}
 }
