@@ -133,7 +133,7 @@ class ReservationCapacityRebuildServiceTest {
 		when(reservationSlotRepository.findByIdWithPopupStore(SLOT_ID)).thenReturn(Optional.of(slot));
 		when(reservationRepository.countBySlotIdAndStatusIn(
 			eq(SLOT_ID), eq(List.of(ReservationStatus.HELD, ReservationStatus.CONFIRMED)))).thenReturn(activeCount);
-		when(reservationCancelPoolRepository.sumPendingCountBySlotId(SLOT_ID)).thenReturn(pendingCount);
+		when(reservationCancelPoolRepository.sumScheduledPendingCountBySlotId(SLOT_ID)).thenReturn(pendingCount);
 		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 	}
 

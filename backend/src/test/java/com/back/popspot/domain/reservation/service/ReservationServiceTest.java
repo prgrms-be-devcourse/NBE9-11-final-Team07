@@ -862,11 +862,56 @@ class ReservationServiceTest {
 		verify(reservationRedisService).increment(RedisKeys.reservationSlotRemaining(1L));
 	}
 
-	// TODO(이번 PR 범위 외 누락 테스트):
-	//  1. createReservation_fail_slotAlreadyStarted — RESERVATION_SLOT_ALREADY_STARTED
-	//     slotDate/startTime 이 현재 시각보다 과거인 케이스가 단위·통합 어디에도 없다.
-	//  2. createReservation_fail_userNotFound — RESOURCE_NOT_FOUND
-	//     userRepository.findById 가 empty 를 반환하는 케이스가 단위·통합 어디에도 없다.
+	@Test
+	@DisplayName("이미 지난 슬롯이면 선점 실패")
+	void createReservation_fail_slotAlreadyStarted() {
+		// given
+		ReservationService reservationService = createReservationService();
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+
+		ReflectionTestUtils.setField(slot, "slotDate", LocalDate.now().minusDays(1));
+		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
+
+		// when
+		BusinessException exception = assertThrows(
+			BusinessException.class,
+			() -> reservationService.createReservation(request, 2L)
+		);
+
+		// then
+		assertEquals(ErrorCode.RESERVATION_SLOT_ALREADY_STARTED, exception.getErrorCode());
+		verify(userRepository, never()).findById(any());
+		verify(reservationRedisService, never()).decrement(any());
+		verify(reservationCommandService, never()).save(any(), any(), any(), any());
+	}
+
+	@Test
+	@DisplayName("존재하지 않는 유저이면 선점 실패")
+	void createReservation_fail_userNotFound() {
+		// given
+		ReservationService reservationService = createReservationService();
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+
+		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
+		when(userRepository.findById(2L)).thenReturn(Optional.empty());
+
+		// when
+		BusinessException exception = assertThrows(
+			BusinessException.class,
+			() -> reservationService.createReservation(request, 2L)
+		);
+
+		// then
+		assertEquals(ErrorCode.RESOURCE_NOT_FOUND, exception.getErrorCode());
+		verify(reservationRedisService, never()).decrement(any());
+		verify(reservationCommandService, never()).save(any(), any(), any(), any());
+	}
 
 	private ReservationService createReservationService() {
 		return new ReservationService(

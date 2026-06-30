@@ -49,7 +49,7 @@ public class ReservationCapacityRebuildService {
 		// DB 예약 원장에서 현재 자리를 점유 중인 HELD, CONFIRMED 예약 수만 센다.
 		long activeReservationCount = reservationRepository.countBySlotIdAndStatusIn(slotId, ACTIVE_STATUSES);
 
-		long pendingCancelCount = reservationCancelPoolRepository.sumPendingCountBySlotId(slotId);
+		long pendingCancelCount = reservationCancelPoolRepository.sumScheduledPendingCountBySlotId(slotId);
 
 		// DB 원장 기준 남은 정원에서 아직 공개하지 않은 취소 예약 수량을 제외한다.
 		long remaining = capacity - activeReservationCount - pendingCancelCount;
