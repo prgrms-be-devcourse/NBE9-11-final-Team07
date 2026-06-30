@@ -6,11 +6,6 @@ import { cn } from '@/lib/utils'
 
 export type TabKey = 'home' | 'reservations' | 'coupons' | 'mypage'
 
-// 로그인 여부 판별용 플래그 쿠키 (access_token 은 HttpOnly 라 JS 로 읽을 수 없음)
-function hasLoggedInCookie(): boolean {
-  return document.cookie.split('; ').some((c) => c.startsWith('logged_in='))
-}
-
 const tabs: { key: TabKey; label: string; Icon: typeof Home }[] = [
   { key: 'home', label: '홈', Icon: Home },
   { key: 'reservations', label: '내 예약', Icon: CalendarCheck },
@@ -28,7 +23,9 @@ export function BottomNav({ active, onChange, onLogin }: BottomNavProps) {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
   useEffect(() => {
-    setIsLoggedIn(hasLoggedInCookie())
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, { credentials: 'include' })
+      .then((res) => setIsLoggedIn(res.ok))
+      .catch(() => setIsLoggedIn(false))
   }, [])
 
   return (
