@@ -21,7 +21,7 @@ public interface PopupQueueEntryRepository extends JpaRepository<PopupQueueEntry
     @Modifying(clearAutomatically = true)
     @Query("""
         UPDATE PopupQueueEntry e
-        SET e.status = :admitted
+        SET e.status = :admitted, e.dedupKey = null
         WHERE e.popupId = :popupId
           AND e.userId = :userId
           AND e.seq = :seq
@@ -34,6 +34,9 @@ public interface PopupQueueEntryRepository extends JpaRepository<PopupQueueEntry
         @Param("waiting") QueueEntryStatus waiting,
         @Param("admitted") QueueEntryStatus admitted
     );
+
+    // enqueue 사전체크 전용 — WAITING 중복 방지 최적화 레이어
+    boolean existsByUserIdAndPopupIdAndStatus(Long userId, Long popupId, QueueEntryStatus status);
 
     // 복구 전용 — WAITING 행을 seq 오름차순으로 조회
     List<PopupQueueEntry> findByPopupIdAndStatusOrderBySeqAsc(Long popupId, QueueEntryStatus status);

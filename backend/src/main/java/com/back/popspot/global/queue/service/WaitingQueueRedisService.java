@@ -54,8 +54,13 @@ public class WaitingQueueRedisService {
 	@CircuitBreaker(name = CB_NAME, fallbackMethod = "enqueueFallback")
 	@Transactional
 	public void enqueue(long popupId, String userId, LocalDateTime reservationEndAt) {
+		long userIdLong = Long.parseLong(userId);
+		if (popupQueueEntryRepository.existsByUserIdAndPopupIdAndStatus(
+				userIdLong, popupId, QueueEntryStatus.WAITING)) {
+			return;
+		}
 		Long seq = redisTemplate.opsForValue().increment(RedisKeys.popupQueueSeq(popupId));
-		popupQueueEntryRepository.save(PopupQueueEntry.waiting(Long.parseLong(userId), popupId, seq));
+		popupQueueEntryRepository.save(PopupQueueEntry.waiting(userIdLong, popupId, seq));
 		Boolean added = redisTemplate.opsForZSet().addIfAbsent(RedisKeys.popupWaitingQueue(popupId), userId, seq);
 
 		// added==true(신규 멤버) && size==1(ZSET이 방금 생성됨) → TTL 적용
