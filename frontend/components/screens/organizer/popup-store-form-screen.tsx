@@ -294,6 +294,8 @@ export function PopupStoreFormScreen({
 }: PopupStoreFormScreenProps) {
   const [name, setName] = useState('')
   const [location, setLocation] = useState('')
+  const [feeType, setFeeType] = useState<'FREE' | 'PAID'>('FREE')
+  const [price, setPrice] = useState('')
   const [opStart, setOpStart] = useState('')
   const [opEnd, setOpEnd] = useState('')
   const [regStart, setRegStart] = useState('')
@@ -320,6 +322,8 @@ export function PopupStoreFormScreen({
 
         setName(d.title)
         setLocation(d.location)
+        setFeeType(d.feeType)
+        setPrice(d.price != null ? String(d.price) : '')
         setDescription(d.description ?? '')
         setOpStart(start)
         setOpEnd(end)
@@ -419,7 +423,8 @@ export function PopupStoreFormScreen({
         const res = await createPopup({
           title: name,
           location,
-          feeType: 'FREE',
+          feeType,
+          price: feeType === 'PAID' ? Number(price) : null,
           reservationStartAt: toDateTime(regStart || opStart, '00:00:00'),
           reservationEndAt: toDateTime(regEnd || opEnd, '23:59:59'),
           openDate: toDateTime(opStart, '00:00:00'),
@@ -432,6 +437,8 @@ export function PopupStoreFormScreen({
         await updatePopup(storeId, {
           title: name,
           location,
+          feeType,
+          price: feeType === 'PAID' ? Number(price) : null,
           reservationStartAt: toDateTime(regStart || opStart, '00:00:00'),
           reservationEndAt: toDateTime(regEnd || opEnd, '23:59:59'),
           openDate: toDateTime(opStart, '00:00:00'),
@@ -496,6 +503,7 @@ export function PopupStoreFormScreen({
   })
 
   const canSave = name.trim() && location.trim() && opStart && opEnd
+    && (feeType === 'FREE' || Number(price) > 0)
 
   return (
     <div className="relative flex flex-col h-full overflow-hidden">
@@ -574,6 +582,42 @@ export function PopupStoreFormScreen({
           <Field label="위치">
             <TextInput value={location} onChange={setLocation} placeholder="예: 서울 성동구 성수동" />
           </Field>
+
+          {/* 요금 유형 */}
+          <Field label="요금 유형">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setFeeType('FREE')}
+                className={cn(
+                  'flex-1 py-3 rounded-xl text-sm font-semibold border transition-colors',
+                  feeType === 'FREE'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-card text-foreground border-border',
+                )}
+              >
+                무료
+              </button>
+              <button
+                type="button"
+                onClick={() => setFeeType('PAID')}
+                className={cn(
+                  'flex-1 py-3 rounded-xl text-sm font-semibold border transition-colors',
+                  feeType === 'PAID'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-card text-foreground border-border',
+                )}
+              >
+                유료
+              </button>
+            </div>
+          </Field>
+
+          {feeType === 'PAID' && (
+            <Field label="가격">
+              <TextInput value={price} onChange={setPrice} placeholder="예: 10000" type="number" />
+            </Field>
+          )}
 
           <Field label="운영 기간">
             <div className="flex items-center gap-2">
