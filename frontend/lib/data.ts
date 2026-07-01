@@ -250,54 +250,10 @@ export const popupStores: PopupStore[] = [
   },
 ]
 
-export interface PromoBanner {
-  id: string
-  storeId: string
-  couponId: string
-  storeName: string
-  couponTitle: string
-  discountInfo: string
-  cta: string
-  image: string
-}
-
 export interface CouponIssuancePayload {
   storeId: string
   couponId: string
 }
-
-export const promoBanners: PromoBanner[] = [
-  {
-    id: 'b1',
-    storeId: '1',
-    couponId: 'c1',
-    storeName: '성수 빈티지 토이 팝업',
-    couponTitle: '최대 5,000원 할인 쿠폰',
-    discountInfo: '현장 결제 10% + 굿즈 3,000원 할인',
-    cta: '지금 받기',
-    image: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80',
-  },
-  {
-    id: 'b2',
-    storeId: '3',
-    couponId: 'c4',
-    storeName: '더현대 한정 굿즈 팝업',
-    couponTitle: '현장 결제 10% 할인 쿠폰',
-    discountInfo: '더현대서울 단독 혜택',
-    cta: '지금 받기',
-    image: 'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?w=800&q=80',
-  },
-  {
-    id: 'b3',
-    storeId: '4',
-    couponId: 'c5',
-    storeName: '잠실 캐릭터 페어 팝업',
-    couponTitle: '음료 무료 + 굿즈 3,000원 할인',
-    discountInfo: '방문객 전원 쿠폰 증정',
-    cta: '지금 받기',
-    image: 'https://images.unsplash.com/photo-1591085686350-798c0f9faa7f?w=800&q=80',
-  },
-]
 
 export const userProfile = {
   name: '김지수',

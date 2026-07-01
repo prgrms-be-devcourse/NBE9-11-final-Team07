@@ -7,7 +7,6 @@ import { PopupStoreFormScreen } from '@/components/screens/organizer/popup-store
 import { CouponListScreen } from '@/components/screens/organizer/coupon-list-screen'
 import { GoodsListScreen } from '@/components/screens/organizer/goods-list-screen'
 import { GoodsFormScreen } from '@/components/screens/organizer/goods-form-screen'
-import { orgPopupStores } from '@/lib/data'
 
 type OrgViewKey =
   | 'popup-list'
@@ -52,17 +51,15 @@ export default function OrganizerPage() {
     setView('popup-edit')
   }
 
-  function handleGoGoods(storeId: string) {
-    const store = orgPopupStores.find((s) => s.id === storeId)
+  function handleGoGoods(storeId: string, storeName: string) {
     setGoodsStoreId(storeId)
-    setGoodsStoreName(store?.name ?? '')
+    setGoodsStoreName(storeName)
     setView('goods-list')
   }
 
-  function handleGoCoupons(storeId: string) {
-    const store = orgPopupStores.find((s) => s.id === storeId)
+  function handleGoCoupons(storeId: string, storeName: string) {
     setCouponStoreId(storeId)
-    setCouponStoreName(store?.name ?? '')
+    setCouponStoreName(storeName)
     setView('coupon-list')
   }
 
