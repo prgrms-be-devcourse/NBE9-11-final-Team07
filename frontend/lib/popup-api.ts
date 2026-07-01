@@ -62,6 +62,9 @@ export type PopupDetailEntryResult =
 export const getPopups = () =>
     apiRequest<Page<PopupStoreListResponse>>('/popups')
 
+export const getHostPopups = () =>
+    apiRequest<PopupStoreListResponse[]>('/host/popups')
+
 export const getPopupDetail = (popupStoreId: string) =>
     apiRequest<PopupStoreDetailResponse>(`/popups/${popupStoreId}`)
 
