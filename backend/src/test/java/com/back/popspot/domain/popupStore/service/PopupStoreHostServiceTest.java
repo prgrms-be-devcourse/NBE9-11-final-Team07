@@ -192,10 +192,9 @@ class PopupStoreHostServiceTest {
 	}
 
 	@Test
-	@DisplayName("수정: 운영 시작 후(openDate 과거)면 INVALID_INPUT_VALUE 이고 값이 바뀌지 않는다")
-	void updatePopupStore_afterOpen_throws() {
-		// 이미 오픈됨 (openDate 과거)
-		PopupStore popupStore = popupWithOpenDate(USER_ID, LocalDateTime.now().minusDays(1));
+	@DisplayName("수정: 예약 시작 이후면 INVALID_INPUT_VALUE 이고 값이 바뀌지 않는다")
+	void updatePopupStore_afterReservationStart_throws() {
+		PopupStore popupStore = popupWithReservationStartAt(USER_ID, LocalDateTime.now().minusDays(1));
 		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
 
 		PopupStoreUpdateRequest request = new PopupStoreUpdateRequest(
@@ -209,10 +208,9 @@ class PopupStoreHostServiceTest {
 	}
 
 	@Test
-	@DisplayName("수정: 운영 시작 전(openDate 미래)이면 정상 수정된다")
-	void updatePopupStore_beforeOpen_success() {
-		// 아직 오픈 안 됨 (openDate 미래)
-		PopupStore popupStore = popupWithOpenDate(USER_ID, LocalDateTime.now().plusDays(1));
+	@DisplayName("수정: 예약 시작 전이면 정상 수정된다")
+	void updatePopupStore_beforeReservationStart_success() {
+		PopupStore popupStore = popupWithReservationStartAt(USER_ID, LocalDateTime.now().plusDays(1));
 		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
 
 		PopupStoreUpdateRequest request = new PopupStoreUpdateRequest(
@@ -221,6 +219,53 @@ class PopupStoreHostServiceTest {
 		popupStoreHostService.updatePopupStore(USER_ID, 10L, request);
 
 		assertThat(popupStore.getTitle()).isEqualTo("새 제목"); // 정상 반영
+	}
+
+	@Test
+	@DisplayName("수정: PAID 인데 수정 후 price 가 0 이하면 INVALID_INPUT_VALUE")
+	void updatePopupStore_paidWithNonPositivePrice_throws() {
+		PopupStore popupStore = existingPopup(USER_ID);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+
+		PopupStoreUpdateRequest request = new PopupStoreUpdateRequest(
+			null, null, PopupFeeType.PAID, 0, null, null, null, null, null, null);
+
+		assertThatThrownBy(() -> popupStoreHostService.updatePopupStore(USER_ID, 10L, request))
+			.isInstanceOf(BusinessException.class)
+			.extracting(e -> ((BusinessException)e).getErrorCode())
+			.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+	}
+
+	@Test
+	@DisplayName("수정: 수정 후 예약 시작 >= 종료면 INVALID_INPUT_VALUE")
+	void updatePopupStore_invalidReservationPeriod_throws() {
+		PopupStore popupStore = existingPopup(USER_ID);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+
+		LocalDateTime reservationStartAt = LocalDateTime.now().plusDays(2);
+		PopupStoreUpdateRequest request = new PopupStoreUpdateRequest(
+			null, null, null, null, reservationStartAt, reservationStartAt, null, null, null, null);
+
+		assertThatThrownBy(() -> popupStoreHostService.updatePopupStore(USER_ID, 10L, request))
+			.isInstanceOf(BusinessException.class)
+			.extracting(e -> ((BusinessException)e).getErrorCode())
+			.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+	}
+
+	@Test
+	@DisplayName("수정: 수정 후 운영 시작 >= 종료면 INVALID_INPUT_VALUE")
+	void updatePopupStore_invalidOperationPeriod_throws() {
+		PopupStore popupStore = existingPopup(USER_ID);
+		when(popupStoreRepository.findById(10L)).thenReturn(Optional.of(popupStore));
+
+		LocalDateTime openDate = LocalDateTime.now().plusDays(3);
+		PopupStoreUpdateRequest request = new PopupStoreUpdateRequest(
+			null, null, null, null, null, null, openDate, openDate, null, null);
+
+		assertThatThrownBy(() -> popupStoreHostService.updatePopupStore(USER_ID, 10L, request))
+			.isInstanceOf(BusinessException.class)
+			.extracting(e -> ((BusinessException)e).getErrorCode())
+			.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
 	}
 
 	@Test
@@ -376,6 +421,19 @@ class PopupStoreHostServiceTest {
 
 		// 운영기간 2026-07-01 ~ 07-10, 슬롯 날짜 07-11 (마감 이후)
 		assertThatThrownBy(() -> popupStoreHostService.createSlot(USER_ID, 10L, slotRequest(LocalDate.of(2026, 7, 11))))
+			.isInstanceOf(BusinessException.class)
+			.extracting(e -> ((BusinessException)e).getErrorCode())
+			.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+		verify(reservationSlotRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("슬롯 생성: 예약 시작 이후면 INVALID_INPUT_VALUE 이고 저장하지 않는다")
+	void createSlot_afterReservationStart_throws() {
+		when(popupStoreRepository.findById(10L))
+			.thenReturn(Optional.of(popupForSlotManagement(USER_ID, 10L, LocalDateTime.now().minusDays(1))));
+
+		assertThatThrownBy(() -> popupStoreHostService.createSlot(USER_ID, 10L, slotRequest(LocalDate.of(2026, 7, 5))))
 			.isInstanceOf(BusinessException.class)
 			.extracting(e -> ((BusinessException)e).getErrorCode())
 			.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
@@ -566,6 +624,7 @@ class PopupStoreHostServiceTest {
 		ReflectionTestUtils.setField(owner, "id", ownerId);
 		PopupStore popupStore = new PopupStore();
 		ReflectionTestUtils.setField(popupStore, "user", owner);
+		ReflectionTestUtils.setField(popupStore, "reservationStartAt", LocalDateTime.now().plusDays(1));
 		ReflectionTestUtils.setField(popupStore, "openDate", LocalDateTime.of(2026, 7, 1, 10, 0));
 		ReflectionTestUtils.setField(popupStore, "closeDate", LocalDateTime.of(2026, 7, 10, 18, 0));
 		return popupStore;
@@ -577,6 +636,7 @@ class PopupStoreHostServiceTest {
 		ReflectionTestUtils.setField(owner, "id", ownerId);
 		PopupStore popupStore = new PopupStore();
 		ReflectionTestUtils.setField(popupStore, "user", owner);
+		ReflectionTestUtils.setField(popupStore, "reservationStartAt", LocalDateTime.now().plusDays(1));
 		ReflectionTestUtils.setField(popupStore, "openDate", LocalDateTime.now().minusDays(1));
 		ReflectionTestUtils.setField(popupStore, "closeDate", closeDate);
 		return popupStore;
@@ -608,8 +668,17 @@ class PopupStoreHostServiceTest {
 		PopupStore popupStore = new PopupStore();
 		ReflectionTestUtils.setField(popupStore, "user", owner);
 		ReflectionTestUtils.setField(popupStore, "openDate", openDate);
+		ReflectionTestUtils.setField(popupStore, "closeDate", openDate.plusDays(1));
 		// 삭제 가드는 reservationStartAt 을 기준으로 하므로 동일 시점으로 함께 설정한다.
 		ReflectionTestUtils.setField(popupStore, "reservationStartAt", openDate);
+		ReflectionTestUtils.setField(popupStore, "reservationEndAt", openDate.plusHours(1));
+		return popupStore;
+	}
+
+	private PopupStore popupWithReservationStartAt(Long ownerId, LocalDateTime reservationStartAt) {
+		PopupStore popupStore = popupWithOpenDate(ownerId, LocalDateTime.now().plusDays(2));
+		ReflectionTestUtils.setField(popupStore, "reservationStartAt", reservationStartAt);
+		ReflectionTestUtils.setField(popupStore, "reservationEndAt", reservationStartAt.plusHours(1));
 		return popupStore;
 	}
 
@@ -620,9 +689,12 @@ class PopupStoreHostServiceTest {
 		ReflectionTestUtils.setField(popupStore, "user", owner);
 		ReflectionTestUtils.setField(popupStore, "title", "기존 제목");
 		ReflectionTestUtils.setField(popupStore, "location", "기존 위치");
+		ReflectionTestUtils.setField(popupStore, "feeType", PopupFeeType.FREE);
 		ReflectionTestUtils.setField(popupStore, "price", 1000);
-		// 수정은 운영 시작 전(openDate 미래)에만 가능하므로 미래로 설정
-		ReflectionTestUtils.setField(popupStore, "openDate", LocalDateTime.now().plusDays(1));
+		ReflectionTestUtils.setField(popupStore, "reservationStartAt", LocalDateTime.now().plusDays(1));
+		ReflectionTestUtils.setField(popupStore, "reservationEndAt", LocalDateTime.now().plusDays(2));
+		ReflectionTestUtils.setField(popupStore, "openDate", LocalDateTime.now().plusDays(3));
+		ReflectionTestUtils.setField(popupStore, "closeDate", LocalDateTime.now().plusDays(4));
 		return popupStore;
 	}
 

@@ -109,7 +109,27 @@ public class PopupStoreHostService {
 			throw new BusinessException(ErrorCode.FORBIDDEN);
 		}
 
-		if (!LocalDateTime.now().isBefore(popupStore.getOpenDate())) {
+		if (!LocalDateTime.now().isBefore(popupStore.getReservationStartAt())) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		PopupFeeType targetFeeType = request.feeType() != null ? request.feeType() : popupStore.getFeeType();
+		Integer targetPrice = request.price() != null ? request.price() : popupStore.getPrice();
+		if (targetFeeType == PopupFeeType.PAID && (targetPrice == null || targetPrice <= 0)) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		LocalDateTime targetReservationStartAt =
+			request.reservationStartAt() != null ? request.reservationStartAt() : popupStore.getReservationStartAt();
+		LocalDateTime targetReservationEndAt =
+			request.reservationEndAt() != null ? request.reservationEndAt() : popupStore.getReservationEndAt();
+		if (!targetReservationStartAt.isBefore(targetReservationEndAt)) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+		}
+
+		LocalDateTime targetOpenDate = request.openDate() != null ? request.openDate() : popupStore.getOpenDate();
+		LocalDateTime targetCloseDate = request.closeDate() != null ? request.closeDate() : popupStore.getCloseDate();
+		if (!targetOpenDate.isBefore(targetCloseDate)) {
 			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 
@@ -191,6 +211,10 @@ public class PopupStoreHostService {
 
 		if (!popupStore.getUser().getId().equals(userId)) {
 			throw new BusinessException(ErrorCode.FORBIDDEN);
+		}
+
+		if (!LocalDateTime.now().isBefore(popupStore.getReservationStartAt())) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 
 		LocalDate openDate = popupStore.getOpenDate().toLocalDate();
