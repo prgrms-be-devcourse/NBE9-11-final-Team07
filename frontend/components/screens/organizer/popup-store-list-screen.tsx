@@ -161,7 +161,6 @@ export function PopupStoreListScreen({ onBack, onCreate, onEdit, onGoGoods, onGo
         ) : (
           <div className="space-y-3 px-4 pt-4">
             {stores.map((store) => {
-              const ratio = store.capacity > 0 ? store.reservations / store.capacity : 0
               return (
               <div
                 key={store.id}
@@ -189,28 +188,6 @@ export function PopupStoreListScreen({ onBack, onCreate, onEdit, onGoGoods, onGo
                     <p className="text-[11px] text-muted-foreground">
                       {store.operationStart} ~ {store.operationEnd}
                     </p>
-                  </div>
-                </div>
-
-                {/* Reservation stats */}
-                <div className="px-3.5 pb-2.5 flex items-center gap-3">
-                  <div className="flex-1">
-                    <span className="text-[11px] text-muted-foreground">예약 현황 </span>
-                    <span className="text-[12px] font-black text-foreground">{store.reservations}</span>
-                    <span className="text-[11px] text-muted-foreground"> / {store.capacity}</span>
-                    <div className="mt-1.5 h-1 w-24 bg-secondary rounded-full overflow-hidden">
-                      <div
-                        className={cn(
-                          'h-full rounded-full',
-                          ratio >= 1
-                            ? 'bg-[oklch(0.5_0_0)]'
-                            : ratio >= 0.8
-                            ? 'bg-[oklch(0.62_0.24_25)]'
-                            : 'bg-foreground',
-                        )}
-                        style={{ width: `${Math.min(ratio * 100, 100)}%` }}
-                      />
-                    </div>
                   </div>
                 </div>
 
