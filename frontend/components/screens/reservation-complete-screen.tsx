@@ -1,7 +1,7 @@
 'use client'
 
 import { CheckCircle, Calendar, Clock, MapPin, Home, Ticket } from 'lucide-react'
-import { popupStores, formatDateKorean } from '@/lib/data'
+import { formatDateKorean } from '@/lib/data'
 import type { ReservationPayload } from '@/lib/data'
 import type { ReservationPaymentResponse } from '@/lib/reservation-api'
 
@@ -18,11 +18,8 @@ export function ReservationCompleteScreen({
   onGoHome,
   onGoReservations,
 }: ReservationCompleteScreenProps) {
-  const store = popupStores.find((s) => s.id === payload.storeId)
-  if (!store) return null
-
-  const popupName = reservation?.popupName ?? store.name
-  const location = reservation?.location ?? store.location
+  const popupName = reservation?.popupName ?? '예약 팝업'
+  const location = reservation?.location ?? '장소 정보 없음'
   const reservationDate = reservation?.reservationDate ?? payload.date
   const reservationTime = reservation?.reservationTime?.slice(0, 5) ?? payload.time
   const reservationNumber = reservation?.reservationId ? `RSV-${reservation.reservationId}` : null

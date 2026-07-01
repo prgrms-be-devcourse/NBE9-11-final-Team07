@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, MapPin, Calendar, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { popupStores, formatDateKorean } from '@/lib/data'
+import { formatDateKorean } from '@/lib/data'
 import type { ReservationPayload } from '@/lib/data'
 import { ApiError } from '@/lib/api'
 import { reservationApi } from '@/lib/reservation-api'
@@ -61,10 +61,10 @@ export function ReservationPaymentScreen({
   onComplete,
 }: ReservationPaymentScreenProps) {
   const router = useRouter()
-  const store = popupStores.find((s) => s.id === payload.storeId)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [popupDetail, setPopupDetail] = useState<PopupStoreDetailResponse | null>(null)
+  const [detailError, setDetailError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const reservationIdRef = useRef<number | null>(null)
@@ -74,10 +74,15 @@ export function ReservationPaymentScreen({
     let cancelled = false
     reservationApi.getPopupDetail(payload.storeId)
       .then((response) => {
-        if (!cancelled) setPopupDetail(response)
+        if (!cancelled) {
+          setPopupDetail(response)
+          setDetailError(null)
+        }
       })
-      .catch(() => {
-        // The payment preparation response remains the source of truth for the amount.
+      .catch((loadError) => {
+        if (!cancelled) {
+          setDetailError(loadError instanceof Error ? loadError.message : '팝업 정보를 불러오지 못했습니다.')
+        }
       })
 
     return () => {
@@ -85,13 +90,31 @@ export function ReservationPaymentScreen({
     }
   }, [payload.storeId])
 
-  if (!store) return null
+  if (!popupDetail) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card shrink-0">
+          <button
+            onClick={onBack}
+            className="flex items-center justify-center w-9 h-9 -ml-1 rounded-full hover:bg-secondary transition-colors"
+            aria-label="뒤로 가기"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-base font-bold text-foreground">예약 정보 확인</h1>
+        </div>
+        <div className="flex-1 flex items-center justify-center px-6 text-center text-sm text-muted-foreground">
+          {detailError ?? '예약 정보를 불러오는 중...'}
+        </div>
+      </div>
+    )
+  }
 
-  const displayName = popupDetail?.title ?? store.name
-  const displayLocation = popupDetail?.location ?? store.location
-  const displayImage = popupDetail?.imageUrl ?? store.image
-  const ticketPrice = popupDetail?.price ?? store.ticketPrice
-  const isFree = popupDetail ? popupDetail.feeType === 'FREE' : ticketPrice === 0
+  const displayName = popupDetail.title
+  const displayLocation = popupDetail.location
+  const displayImage = popupDetail.imageUrl ?? '/placeholder.png'
+  const ticketPrice = popupDetail.price ?? 0
+  const isFree = popupDetail.feeType === 'FREE'
   const canProceed = name.trim().length > 0 && isValidPhoneNumber(phone)
 
   async function handleSubmit() {
