@@ -25,7 +25,6 @@ import type { TabKey } from '@/components/bottom-nav'
 import type { ReservationPayload, GoodsOrderPayload, CouponIssuancePayload } from '@/lib/data'
 import type { ReservationPaymentResponse } from '@/lib/reservation-api'
 import type { GoodsOrderCreateResponse } from '@/lib/goods-api'
-import { orgPopupStores } from '@/lib/data'
 
 type ViewKey =
   | TabKey
@@ -179,11 +178,6 @@ export default function Page() {
     setCurrentView('purchase-detail')
   }
 
-  function handleCouponBannerSelect(storeId: string) {
-    setSelectedStoreId(storeId)
-    setCurrentView('detail')
-  }
-
   function handleIssueCoupon(payload: CouponIssuancePayload) {
     setCouponIssuancePayload(payload)
     setCouponIssuancePrevView(currentView)
@@ -213,17 +207,15 @@ export default function Page() {
     setCurrentView('org-popup-edit')
   }
 
-  function handleOrgGoGoods(storeId: string) {
-    const store = orgPopupStores.find((s) => s.id === storeId)
+  function handleOrgGoGoods(storeId: string, storeName: string) {
     setOrgGoodsStoreId(storeId)
-    setOrgGoodsStoreName(store?.name ?? '')
+    setOrgGoodsStoreName(storeName)
     setCurrentView('org-goods-list')
   }
 
-  function handleOrgGoCoupons(storeId: string) {
-    const store = orgPopupStores.find((s) => s.id === storeId)
+  function handleOrgGoCoupons(storeId: string, storeName: string) {
     setOrgCouponStoreId(storeId)
-    setOrgCouponStoreName(store?.name ?? '')
+    setOrgCouponStoreName(storeName)
     setCurrentView('org-coupon-list')
   }
 
@@ -265,7 +257,6 @@ export default function Page() {
           {currentView === 'home' && (
             <HomeScreen
               onStoreSelect={handleStoreSelect}
-              onCouponBannerSelect={handleCouponBannerSelect}
             />
           )}
 

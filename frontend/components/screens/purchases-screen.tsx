@@ -74,11 +74,6 @@ export function PurchasesScreen({ onBack, onViewDetail }: PurchasesScreenProps) 
                                     className="w-full text-left bg-card rounded-xl border border-border p-3.5 active:opacity-70 transition-opacity"
                                 >
                                     <div className="flex items-start gap-3">
-                                        <img
-                                            src="/placeholder.png"
-                                            alt={rep?.goodsName ?? ''}
-                                            className="w-14 h-14 rounded-lg object-cover shrink-0"
-                                        />
                                         <div className="flex-1 min-w-0 space-y-0.5">
                                             <p className="text-[10px] text-muted-foreground">
                                                 #{order.goodsOrderId}

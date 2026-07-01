@@ -586,7 +586,7 @@ export function DetailScreen({ storeId, onBack, onWaiting, onReserve, onOrderGoo
           </div>
 
           {isClosed && (
-            <div className="absolute inset-0 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <span className="bg-black/70 text-white text-lg font-black px-6 py-3 rounded-full tracking-widest">
                 마감
               </span>

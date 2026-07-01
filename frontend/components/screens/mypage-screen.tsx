@@ -142,9 +142,6 @@ export function MyPageScreen({
           )}
           {recentReservations.map((r) => (
             <div key={r.reservationId} className="flex items-center gap-3 bg-card rounded-xl border border-border p-3">
-              <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                <CalendarCheck size={20} className="text-muted-foreground" />
-              </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[12px] font-semibold text-foreground line-clamp-1">{r.popupName}</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -186,11 +183,6 @@ export function MyPageScreen({
                 onClick={() => onViewPurchaseDetail(String(order.goodsOrderId))}
                 className="w-full flex items-center gap-3 bg-card rounded-xl border border-border p-3 text-left active:opacity-70 transition-opacity"
               >
-                <img
-                  src="/placeholder.png"
-                  alt={rep?.goodsName ?? '구매 상품'}
-                  className="w-12 h-12 rounded-lg object-cover shrink-0"
-                />
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] text-muted-foreground">#{order.goodsOrderId}</p>
                   <p className="text-[12px] font-semibold text-foreground line-clamp-1 mt-0.5">

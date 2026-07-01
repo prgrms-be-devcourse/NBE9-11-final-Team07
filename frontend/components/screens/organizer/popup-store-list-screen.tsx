@@ -11,8 +11,8 @@ interface PopupStoreListScreenProps {
   onBack: () => void
   onCreate: () => void
   onEdit: (storeId: string) => void
-  onGoGoods: (storeId: string) => void
-  onGoCoupons: (storeId: string) => void
+  onGoGoods: (storeId: string, storeName: string) => void
+  onGoCoupons: (storeId: string, storeName: string) => void
 }
 
 function DeleteConfirmModal({
@@ -217,14 +217,14 @@ export function PopupStoreListScreen({ onBack, onCreate, onEdit, onGoGoods, onGo
                 {/* 4-button action row */}
                 <div className="border-t border-border grid grid-cols-4 divide-x divide-border">
                   <button
-                    onClick={() => onGoGoods(store.id)}
+                    onClick={() => onGoGoods(store.id, store.name)}
                     className="flex flex-col items-center gap-1 py-2.5 active:bg-secondary transition-colors"
                   >
                     <ShoppingBag size={14} strokeWidth={2} className="text-foreground" />
                     <span className="text-[10px] font-semibold text-foreground">굿즈 관리</span>
                   </button>
                   <button
-                    onClick={() => onGoCoupons(store.id)}
+                    onClick={() => onGoCoupons(store.id, store.name)}
                     className="flex flex-col items-center gap-1 py-2.5 active:bg-secondary transition-colors"
                   >
                     <Tag size={14} strokeWidth={2} className="text-foreground" />

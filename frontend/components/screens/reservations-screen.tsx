@@ -98,16 +98,11 @@ export function ReservationsScreen() {
             <div className="space-y-3 px-4">
               {upcoming.map((r) => (
                 <div key={r.reservationId} className="bg-foreground rounded-2xl p-4 text-background">
-                  <div className="flex items-start gap-3">
-                    <div className="w-14 h-14 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-                      <CalendarCheck size={24} className="text-background" />
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-0.5">
-                      <p className="text-[13px] font-bold leading-snug line-clamp-2 text-background">{r.popupName}</p>
-                      <p className="text-[11px] text-background/70">{r.location}</p>
-                      <p className="text-[11px] text-background/70">{formatDate(r.reservationDate)} · {formatTime(r.reservationTime)} 입장</p>
-                      <p className="text-[10px] text-background/50 mt-0.5">{reservationNumber(r.reservationId)}</p>
-                    </div>
+                  <div className="space-y-0.5">
+                    <p className="text-[13px] font-bold leading-snug line-clamp-2 text-background">{r.popupName}</p>
+                    <p className="text-[11px] text-background/70">{r.location}</p>
+                    <p className="text-[11px] text-background/70">{formatDate(r.reservationDate)} · {formatTime(r.reservationTime)} 입장</p>
+                    <p className="text-[10px] text-background/50 mt-0.5">{reservationNumber(r.reservationId)}</p>
                   </div>
                   <div className="mt-3 pt-3 border-t border-white/20 flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -146,9 +141,6 @@ export function ReservationsScreen() {
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                        <CalendarCheck size={20} className="text-muted-foreground" />
-                      </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[12px] font-semibold text-foreground line-clamp-1">{r.popupName}</p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">{r.location}</p>
