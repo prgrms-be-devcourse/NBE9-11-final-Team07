@@ -9,6 +9,10 @@ spring:
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+    hikari: # 테스트 용 설정
+      maximum-pool-size: 3   # 기존 10 -> 3으로 임시 변경 (테스트용)
+      minimum-idle: 3        # 있다면 pool-size와 맞춰주는 게 깔끔함 (선택)
+
   data:
     redis:
       host: localhost

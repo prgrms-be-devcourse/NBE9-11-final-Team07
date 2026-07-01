@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "gen-tokens": "node generate-tokens.js",
-    "seed-proceed": "node ../load-test/seed/seed-proceed-keys.js"
+    "seed-proceed": "node seed-proceed-keys.js"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
