@@ -5,7 +5,8 @@ import com.back.popspot.global.queue.config.SchedulerLockConfig;
 public final class RedisKeys {
 	private static final String PREFIX = "popspot";
 
-	private RedisKeys() {}
+	private RedisKeys() {
+	}
 
 	public static String reservationSlotRemaining(Long slotId) {
 		return PREFIX + ":reservation:slot:" + slotId + ":remaining";
@@ -35,6 +36,10 @@ public final class RedisKeys {
 	// DEFAULT_KEY_PREFIX="job-lock" is ShedLock's built-in default (RedisLockProvider)
 	public static String admissionSchedulerLockKey() {
 		return "job-lock:" + SchedulerLockConfig.SHEDLOCK_ENV + ":popup-admission-scheduler";
+	}
+
+	public static String activeWaitingPopups() {
+		return "active:waiting:popups";
 	}
 
 }

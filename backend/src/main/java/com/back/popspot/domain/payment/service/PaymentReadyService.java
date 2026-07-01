@@ -1,6 +1,7 @@
 package com.back.popspot.domain.payment.service;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -52,7 +53,7 @@ public class PaymentReadyService {
 			return idempotentPayment;
 		}
 
-		Payment activePayment = findActiveReservationPayment(reservation.getId());
+		Payment activePayment = findActiveReservationPayment(reservation.getId()).orElse(null);
 
 		if (activePayment != null) {
 			return activePayment;
@@ -88,7 +89,7 @@ public class PaymentReadyService {
 			return idempotentPayment;
 		}
 
-		Payment activePayment = findActiveGoodsOrderPayment(goodsOrder.getId());
+		Payment activePayment = findActiveGoodsOrderPayment(goodsOrder.getId()).orElse(null);
 
 		if (activePayment != null) {
 			return activePayment;
@@ -137,27 +138,25 @@ public class PaymentReadyService {
 
 	// 같은 예약에 이미 활성 결제가 있는지 조회
 	// READY 생성 전 중복 생성을 1차적으로 막는다
-	private Payment findActiveReservationPayment(Long reservationId) {
+	private Optional<Payment> findActiveReservationPayment(Long reservationId) {
 		return paymentRepository.findFirstByReservationIdAndPaymentTypeAndStatusInOrderByIdDesc(
-				reservationId,
-				PaymentType.POPUP,
-				ACTIVE_PAYMENT_STATUSES
-			)
-			.orElse(null);
+			reservationId,
+			PaymentType.POPUP,
+			ACTIVE_PAYMENT_STATUSES
+		);
 	}
 
 	// 같은 굿즈 주문에 이미 결제가 존재하는지 조회
-	private Payment findActiveGoodsOrderPayment(Long goodsOrderId) {
+	private Optional<Payment> findActiveGoodsOrderPayment(Long goodsOrderId) {
 		return paymentRepository.findFirstByGoodsOrderIdAndPaymentTypeAndStatusInOrderByIdDesc(
-				goodsOrderId,
-				PaymentType.GOODS,
-				ACTIVE_PAYMENT_STATUSES
-			)
-			.orElse(null);
+			goodsOrderId,
+			PaymentType.GOODS,
+			ACTIVE_PAYMENT_STATUSES
+		);
 	}
 
 	// 예약 결제용 READY 결제를 새로 생성한다.
-	// saveAndFlush 중 유니크 제약 위반 발생 시 -> 다른 트랜잭션이 먼저 생성한 활성 결제를 다시 조회해 반환
+	// 활성 결제 유니크 제약 위반 시 다른 트랜잭션이 먼저 생성한 결제를 다시 조회해 반환
 	private Payment createReservationReadyPayment(
 		User user,
 		Reservation reservation,
@@ -177,19 +176,13 @@ public class PaymentReadyService {
 		try {
 			return paymentRepository.saveAndFlush(payment);
 		} catch (DataIntegrityViolationException exception) {
-			return paymentRepository
-				.findFirstByReservationIdAndPaymentTypeAndStatusInOrderByIdDesc(
-					reservation.getId(),
-					PaymentType.POPUP,
-					ACTIVE_PAYMENT_STATUSES
-				)
+			return findActiveReservationPayment(reservation.getId())
 				.orElseThrow(() -> exception);
 		}
 	}
 
 	// 굿즈 주문 결제용 READY 결제를 새로 생성한다.
-	// saveAndFlush 중에 유니크 제약을 위반할 경우
-	// 다른 트랜잭션이 먼저 생성된 결제를 조회해 반환한다
+	// 활성 결제 유니크 제약 위반 시 다른 트랜잭션이 먼저 생성한 결제를 다시 조회해 반환
 	private Payment createGoodsOrderReadyPayment(
 		User user,
 		GoodsOrder goodsOrder,
@@ -209,12 +202,7 @@ public class PaymentReadyService {
 		try {
 			return paymentRepository.saveAndFlush(payment);
 		} catch (DataIntegrityViolationException exception) {
-			return paymentRepository
-				.findFirstByGoodsOrderIdAndPaymentTypeAndStatusInOrderByIdDesc(
-					goodsOrder.getId(),
-					PaymentType.GOODS,
-					ACTIVE_PAYMENT_STATUSES
-				)
+			return findActiveGoodsOrderPayment(goodsOrder.getId())
 				.orElseThrow(() -> exception);
 		}
 	}

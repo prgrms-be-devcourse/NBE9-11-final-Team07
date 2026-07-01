@@ -3,6 +3,7 @@ package com.back.popspot.domain.reservation.repository;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,6 +22,16 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
 	// 사용자의 확정/취소 예약 목록 조회
 	Page<Reservation> findByUserIdAndStatusIn(Long userId, Collection<ReservationStatus> statuses, Pageable pageable);
+
+	@Query("""
+		select reservation
+		from Reservation reservation
+		join fetch reservation.user
+		join fetch reservation.slot slot
+		join fetch slot.popupStore
+		where reservation.id = :reservationId
+		""")
+	Optional<Reservation> findByIdWithUserAndSlotAndPopupStore(@Param("reservationId") Long reservationId);
 
 	long countBySlotIdAndStatusIn(Long slotId, Collection<ReservationStatus> statuses);
 

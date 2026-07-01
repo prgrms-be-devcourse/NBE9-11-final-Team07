@@ -15,6 +15,7 @@ import tools.jackson.databind.JsonNode;
 @Component
 @RequiredArgsConstructor
 public class TossPaymentsClient {
+	private static final String CONFIRM_IDEMPOTENCY_KEY_PREFIX = "confirm:";
 
 	private final RestClient tossPaymentsRestClient;
 
@@ -23,6 +24,7 @@ public class TossPaymentsClient {
 		return tossPaymentsRestClient.post()
 			.uri("/v1/payments/confirm")
 			.contentType(MediaType.APPLICATION_JSON)
+			.header("Idempotency-Key", confirmIdempotencyKey(request))
 			.body(request)
 			.retrieve()
 			.body(JsonNode.class);
@@ -37,5 +39,9 @@ public class TossPaymentsClient {
 			.body(new TossPaymentCancelRequest(command.cancelReason()))
 			.retrieve()
 			.body(JsonNode.class);
+	}
+
+	private String confirmIdempotencyKey(PaymentConfirmRequest request) {
+		return CONFIRM_IDEMPOTENCY_KEY_PREFIX + request.orderId();
 	}
 }

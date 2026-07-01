@@ -79,8 +79,11 @@ resilience4j:
         failure-rate-threshold: 50
         wait-duration-in-open-state: 10s
         sliding-window-size: 10
+        minimum-number-of-calls: 10
         sliding-window-type: COUNT_BASED
         permitted-number-of-calls-in-half-open-state: 3
+        slow-call-duration-threshold: 200ms
+        slow-call-rate-threshold: 50
       # CB 수치는 실측 데이터 부재로 인한 초기 추정값, 운영 후 재조정 예정
       waitingQueueRedis:
         sliding-window-type: TIME_BASED

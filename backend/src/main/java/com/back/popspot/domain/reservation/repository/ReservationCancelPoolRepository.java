@@ -31,10 +31,18 @@ public interface ReservationCancelPoolRepository extends JpaRepository<Reservati
 		@Param("reopenAt") LocalDateTime reopenAt
 	);
 
-	List<ReservationCancelPool> findByReopenStatusAndReopenAtLessThanEqualAndPendingCountGreaterThan(
-		ReservationCancelPoolStatus reopenStatus,
-		LocalDateTime now,
-		int pendingCount
+	@Query("""
+		select pool
+		from ReservationCancelPool pool
+		join fetch pool.slot
+		where pool.reopenStatus = :reopenStatus
+		and pool.reopenAt <= :now
+		and pool.pendingCount > :pendingCount
+		""")
+	List<ReservationCancelPool> findDuePoolsWithSlot(
+		@Param("reopenStatus") ReservationCancelPoolStatus reopenStatus,
+		@Param("now") LocalDateTime now,
+		@Param("pendingCount") int pendingCount
 	);
 
 	@Modifying
@@ -54,7 +62,21 @@ public interface ReservationCancelPoolRepository extends JpaRepository<Reservati
 		select coalesce(sum(pool.pendingCount), 0)
 		from ReservationCancelPool pool
 		where pool.slot.id = :slotId
+		and pool.reopenStatus = :reopenStatus
+		and pool.reopenAt < :reopenAt
 		and pool.pendingCount > 0
 		""")
-	long sumPendingCountBySlotId(@Param("slotId") Long slotId);
+	long sumPendingCountBySlotIdAndReopenStatusAndReopenAtBefore(
+		@Param("slotId") Long slotId,
+		@Param("reopenStatus") ReservationCancelPoolStatus reopenStatus,
+		@Param("reopenAt") LocalDateTime reopenAt
+	);
+
+	default long sumScheduledPendingCountBySlotIdAndReopenAtBefore(Long slotId, LocalDateTime reopenAt) {
+		return sumPendingCountBySlotIdAndReopenStatusAndReopenAtBefore(
+			slotId,
+			ReservationCancelPoolStatus.SCHEDULED,
+			reopenAt
+		);
+	}
 }
