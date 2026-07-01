@@ -1,0 +1,14 @@
+{
+  "name": "popspot-load-test-seed",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "gen-tokens": "node generate-tokens.js",
+    "seed-proceed": "node seed-proceed-keys.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "ioredis": "^5.4.1",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
