@@ -135,6 +135,7 @@ function GoodsCard({
 
 interface GoodsListScreenProps {
   storeId: string
+  storeName?: string
   onBack: () => void
   onAdd: () => void
   onEdit: (goodsId: string) => void
@@ -142,6 +143,7 @@ interface GoodsListScreenProps {
 
 export function GoodsListScreen({
   storeId,
+  storeName,
   onBack,
   onAdd,
   onEdit,
@@ -201,6 +203,9 @@ export function GoodsListScreen({
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-[15px] font-bold text-foreground leading-tight">굿즈 관리</h1>
+          {storeName && (
+            <p className="text-[11px] text-muted-foreground truncate mt-0.5">{storeName}</p>
+          )}
         </div>
         <button
           onClick={onAdd}
