@@ -3,6 +3,7 @@ package com.back.popspot.domain.popupStore.repository;
 import static org.assertj.core.api.Assertions.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -77,8 +78,28 @@ class PopupStoreRepositoryTest {
 			.containsExactly(closed.getId());
 	}
 
+	@Test
+	@DisplayName("findByUserIdOrderByCreatedAtDesc: 자신이 연 팝업 스토어만 조회된다")
+	void findByUserIdOrderByCreatedAtDesc_onlyOwnPopups() {
+		User otherUser = persistUser("other@test.com");
+		PopupStore otherPopup = persistPopup(otherUser, NOW.plusDays(3), NOW.plusDays(4));
+		entityManager.flush();
+		entityManager.clear();
+
+		List<PopupStore> result = popupStoreRepository.findByUserIdOrderByCreatedAtDesc(upcoming.getUser().getId());
+
+		assertThat(result)
+			.extracting(PopupStore::getId)
+			.contains(upcoming.getId(), open.getId(), closed.getId())
+			.doesNotContain(otherPopup.getId());
+	}
+
 	private User persistUser() {
-		return entityManager.persist(User.create("owner@test.com", "owner"));
+		return persistUser("owner@test.com");
+	}
+
+	private User persistUser(String email) {
+		return entityManager.persist(User.create(email, "owner"));
 	}
 
 	private PopupStore persistPopup(User user, LocalDateTime reservationStartAt, LocalDateTime reservationEndAt) {

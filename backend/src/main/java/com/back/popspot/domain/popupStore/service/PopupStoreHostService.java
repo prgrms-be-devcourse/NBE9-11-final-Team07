@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.data.redis.core.RedisTemplate;
@@ -13,10 +14,12 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
+import com.back.popspot.domain.popupStore.dto.PopupStoreListResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotUpdateRequest;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
+import com.back.popspot.domain.popupStore.entity.PopupStatus;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
 import com.back.popspot.domain.popupStore.entity.ReservationSlot;
 import com.back.popspot.domain.popupStore.repository.PopupStoreRepository;
@@ -47,6 +50,18 @@ public class PopupStoreHostService {
 
 	@PersistenceContext
 	private EntityManager entityManager;
+
+	@Transactional(readOnly = true)
+	public List<PopupStoreListResponse> getMyPopupStores(Long userId) {
+		LocalDateTime now = LocalDateTime.now();
+		return popupStoreRepository.findByUserIdOrderByCreatedAtDesc(userId)
+			.stream()
+			.map(popupStore -> {
+				PopupStatus status = popupStore.calculateStatus(now);
+				return PopupStoreListResponse.from(popupStore, status, presignedImageUrl(popupStore.getImageKey()));
+			})
+			.toList();
+	}
 
 	/**
 	 * 팝업스토어를 등록한다. (주최자)
@@ -272,6 +287,10 @@ public class PopupStoreHostService {
 	// 임시 키(temp/...)의 파일명을 팝업 정식 경로(popup/{id}/{fileName})로 변환
 	private String buildPopupImageKey(Long popupStoreId, String tempKey) {
 		return "popup/" + popupStoreId + "/" + s3Service.extractFileName(tempKey);
+	}
+
+	private String presignedImageUrl(String imageKey) {
+		return imageKey != null ? s3Service.generatePresignedGetUrl(imageKey) : null;
 	}
 
 	// 트랜잭션 커밋 성공 후에 슬롯 재고 카운터를 초기화한다. (remaining=capacity)
