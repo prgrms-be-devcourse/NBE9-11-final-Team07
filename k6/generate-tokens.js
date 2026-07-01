@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const secret = process.env.JWT_SECRET || '68f28b12fc570e4d40dfb17f6784e5f49ae9c1090b96cddcef19e6e72a01fee1';
+const secret = process.env.JWT_SECRET;
 const firstUserId = Number(process.env.FIRST_USER_ID || 900001);
 const count = Number(process.env.USER_COUNT || 171000);
 const output = process.env.OUTPUT || path.join(__dirname, 'tokens.json');

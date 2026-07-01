@@ -13,6 +13,8 @@ import com.back.popspot.domain.popupStore.entity.PopupStore;
 
 public interface PopupStoreRepository extends JpaRepository<PopupStore, Long> {
 
+	List<PopupStore> findByUserIdOrderByCreatedAtDesc(Long userId);
+
 	// UPCOMING: 예약 시작 전
 	@Query("SELECT p FROM PopupStore p WHERE p.reservationStartAt > :now")
 	Page<PopupStore> findUpcoming(@Param("now") LocalDateTime now, Pageable pageable);
