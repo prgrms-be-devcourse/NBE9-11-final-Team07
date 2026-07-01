@@ -1,10 +1,13 @@
 package com.back.popspot.domain.popupStore.controller;
 
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
+import com.back.popspot.domain.popupStore.dto.PopupStoreListResponse;
 import com.back.popspot.domain.popupStore.dto.PopupStoreUpdateRequest;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotCreateRequest;
 import com.back.popspot.domain.popupStore.dto.ReservationSlotUpdateRequest;
@@ -32,6 +36,14 @@ import lombok.RequiredArgsConstructor;
 public class PopupStoreHostController {
 
 	private final PopupStoreHostService popupStoreHostService;
+
+	@GetMapping
+	public ResponseEntity<CommonApiResponse<List<PopupStoreListResponse>>> getMyPopupStores(
+			@AuthenticationPrincipal Long userId
+	) {
+		List<PopupStoreListResponse> popupStores = popupStoreHostService.getMyPopupStores(userId);
+		return ResponseEntity.ok(CommonApiResponse.success(popupStores));
+	}
 
 	// 팝업스토어 등록 (주최자)
 	@PostMapping
