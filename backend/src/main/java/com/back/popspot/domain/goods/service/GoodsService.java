@@ -38,7 +38,9 @@ import com.back.popspot.global.s3.ImageDomain;
 import com.back.popspot.global.s3.S3Service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GoodsService {
@@ -125,7 +127,7 @@ public class GoodsService {
 				}
 				String fileName = s3Service.extractFileName(tempKey);
 				String finalKey = ImageDomain.GOODS.finalKey(goods.getId(), entry.imageType().code(), fileName);
-				s3Service.move(tempKey, finalKey);
+				registerAfterCommitMove(tempKey, finalKey);
 				return GoodsImage.create(goods, finalKey, entry.imageType());
 			})
 			.toList();
@@ -212,7 +214,7 @@ public class GoodsService {
 				}
 				String fileName = s3Service.extractFileName(tempKey);
 				String newKey = ImageDomain.GOODS.finalKey(goodsId, entry.imageType().code(), fileName);
-				s3Service.move(tempKey, newKey);
+				registerAfterCommitMove(tempKey, newKey);
 				oldKeys.add(image.getImageKey());
 				image.changeImageKey(newKey);
 			}
@@ -268,6 +270,27 @@ public class GoodsService {
 			@Override
 			public void afterCommit() {
 				keys.forEach(s3Service::delete);
+			}
+		});
+	}
+
+	private void registerAfterCommitMove(String srcKey, String destKey) {
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			try {
+				s3Service.move(srcKey, destKey);
+			} catch (Exception e) {
+				log.error("S3 move 실패 (트랜잭션 외부): srcKey={}, destKey={}", srcKey, destKey, e);
+			}
+			return;
+		}
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCommit() {
+				try {
+					s3Service.move(srcKey, destKey);
+				} catch (Exception e) {
+					log.error("S3 move 실패 (afterCommit): srcKey={}, destKey={}", srcKey, destKey, e);
+				}
 			}
 		});
 	}
