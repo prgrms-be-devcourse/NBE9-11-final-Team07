@@ -2,6 +2,7 @@ package com.back.popspot.domain.reservation.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -109,8 +110,22 @@ public class ReservationService {
 			.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
 
 		// 중복 예약 방지
-		if (reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(user.getId(), slot.getId())) {
-			throw new BusinessException(ErrorCode.RESERVATION_ALREADY_EXISTS);
+		Optional<Reservation> existing = reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(
+			user.getId(), slot.getId());
+		if (existing.isPresent()) {
+			Reservation activeReservation = existing.get();
+
+			if (activeReservation.getStatus() == ReservationStatus.CONFIRMED) {
+				throw new BusinessException(ErrorCode.RESERVATION_ALREADY_EXISTS);
+			}
+
+			// HELD
+			if (activeReservation.getHeldUntil().isAfter(now)) {
+				return ReservationCreateResponse.from(activeReservation);
+			}
+
+			// HELD 지만 만료 시각이 지났고 스케줄러가 아직 못 치운 경우 — 즉시 만료 처리 후 신규 생성으로 계속 진행
+			reservationExpirationService.expireOne(activeReservation, now);
 		}
 
 		Long slotId = slot.getId();
