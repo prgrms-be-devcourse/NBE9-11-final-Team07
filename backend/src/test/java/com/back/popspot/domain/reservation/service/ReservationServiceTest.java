@@ -7,8 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -214,7 +217,7 @@ class ReservationServiceTest {
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
+		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(Optional.empty());
 		// DB 저장은 별도 빈에 위임된다. createHeld 결과에 id 만 채워 반환하도록 흉내낸다.
 		when(reservationCommandService.save(
 			any(User.class),
@@ -254,7 +257,7 @@ class ReservationServiceTest {
 	}
 
 	@Test
-	@DisplayName("같은 유저 같은 슬롯 중복 선점 실패")
+	@DisplayName("이미 CONFIRMED 예약이 있으면 실패")
 	void createReservation_fail_duplicateHold() {
 		// given
 		ReservationService reservationService = createReservationService();
@@ -262,11 +265,13 @@ class ReservationServiceTest {
 		PopupStore popupStore = createPopupStore();
 		ReservationSlot slot = createReservationSlot(popupStore);
 		User user = createUser(2L);
+		Reservation confirmedReservation = createConfirmedReservation(100L, user, slot);
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(true);
+		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L))
+			.thenReturn(Optional.of(confirmedReservation));
 
 		// when
 		BusinessException exception = assertThrows(
@@ -276,6 +281,134 @@ class ReservationServiceTest {
 
 		// then
 		assertEquals(ErrorCode.RESERVATION_ALREADY_EXISTS, exception.getErrorCode());
+		verify(reservationRedisService, never()).decrement(any());
+		verify(reservationCommandService, never()).save(any(), any(), any(), any());
+	}
+
+	@Test
+	@DisplayName("유효한 HELD 예약이 있으면 새로 만들지 않고 그대로 반환한다")
+	void createReservation_returnsExistingHeld() {
+		// given
+		ReservationService reservationService = createReservationService();
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		LocalDateTime heldUntil = LocalDateTime.now().plusMinutes(2);
+		Reservation existingHeld = createHeldReservation(100L, user, slot, heldUntil);
+
+		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L))
+			.thenReturn(Optional.of(existingHeld));
+
+		// when
+		ReservationCreateResponse response = reservationService.createReservation(request, 2L);
+
+		// then
+		assertEquals(100L, response.reservationId());
+		assertEquals(ReservationStatus.HELD, response.status());
+		assertEquals(heldUntil, response.heldUntil());
+		verify(reservationRedisService, never()).decrement(any());
+		verify(waitingQueueRedisService, never()).revokeProceedPermission(1L, "2");
+		verify(reservationCommandService, never()).save(any(), any(), any(), any());
+	}
+
+	@Test
+	@DisplayName("HELD 예약이 있지만 만료 시각이 지났으면 즉시 만료 처리 후 새로 생성한다")
+	void createReservation_expiresStaleHeldAndCreatesNew() {
+		// given
+		ReservationService reservationService = createReservationService();
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		LocalDateTime heldUntil = LocalDateTime.now().minusSeconds(1);
+		Reservation staleHeld = createHeldReservation(100L, user, slot, heldUntil);
+
+		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L))
+			.thenReturn(Optional.of(staleHeld));
+		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationCommandService.save(
+			any(User.class),
+			any(ReservationSlot.class),
+			any(LocalDateTime.class),
+			any(LocalDateTime.class)
+		)).thenAnswer(invocation -> {
+			Reservation reservation = Reservation.createHeld(
+				invocation.getArgument(0),
+				invocation.getArgument(1),
+				invocation.getArgument(2),
+				invocation.getArgument(3)
+			);
+			ReflectionTestUtils.setField(reservation, "id", 200L);
+			return reservation;
+		});
+
+		// when
+		ReservationCreateResponse response = reservationService.createReservation(request, 2L);
+
+		// then
+		verify(reservationExpirationService).expireOne(eq(staleHeld), any(LocalDateTime.class));
+		assertEquals(200L, response.reservationId());
+		verify(reservationRedisService).decrement(RedisKeys.reservationSlotRemaining(1L));
+		verify(reservationCommandService).save(
+			any(User.class),
+			any(ReservationSlot.class),
+			any(LocalDateTime.class),
+			any(LocalDateTime.class)
+		);
+	}
+
+	@Test
+	@DisplayName("HELD 예약의 만료 시각이 정확히 현재 시각과 같으면 만료된 것으로 처리한다")
+	void createReservation_heldUntilEqualsNow_treatedAsExpired() {
+		// given
+		ReservationService reservationService = createReservationService();
+		ReservationCreateRequest request = new ReservationCreateRequest(1L);
+		PopupStore popupStore = createPopupStore();
+		ReservationSlot slot = createReservationSlot(popupStore);
+		User user = createUser(2L);
+		LocalDateTime fixedNow = LocalDateTime.now();
+		Reservation borderlineHeld = createHeldReservation(100L, user, slot, fixedNow);
+
+		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
+		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L))
+			.thenReturn(Optional.of(borderlineHeld));
+		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationCommandService.save(
+			any(User.class),
+			any(ReservationSlot.class),
+			any(LocalDateTime.class),
+			any(LocalDateTime.class)
+		)).thenAnswer(invocation -> {
+			Reservation reservation = Reservation.createHeld(
+				invocation.getArgument(0),
+				invocation.getArgument(1),
+				invocation.getArgument(2),
+				invocation.getArgument(3)
+			);
+			ReflectionTestUtils.setField(reservation, "id", 200L);
+			return reservation;
+		});
+
+		// when
+		ReservationCreateResponse response;
+		try (MockedStatic<LocalDateTime> mockedNow = mockStatic(LocalDateTime.class, CALLS_REAL_METHODS)) {
+			mockedNow.when(LocalDateTime::now).thenReturn(fixedNow);
+			response = reservationService.createReservation(request, 2L);
+		}
+
+		// then
+		verify(reservationExpirationService).expireOne(borderlineHeld, fixedNow);
+		assertEquals(200L, response.reservationId());
+		verify(reservationRedisService).decrement(RedisKeys.reservationSlotRemaining(1L));
 	}
 
 	@Test
@@ -338,7 +471,7 @@ class ReservationServiceTest {
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
+		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(Optional.empty());
 		when(reservationCommandService.save(
 			any(User.class),
 			any(ReservationSlot.class),
@@ -370,7 +503,7 @@ class ReservationServiceTest {
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
+		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(Optional.empty());
 		// remaining -1 결과가 -1 → 재고 없음
 		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);
 
@@ -751,7 +884,7 @@ class ReservationServiceTest {
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
+		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(Optional.empty());
 		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 		when(reservationCommandService.save(
 			any(User.class),
@@ -813,7 +946,7 @@ class ReservationServiceTest {
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
+		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(Optional.empty());
 		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);
 
 		// when
@@ -841,7 +974,7 @@ class ReservationServiceTest {
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
-		when(reservationRepository.existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(false);
+		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(Optional.empty());
 		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 		when(reservationCommandService.save(
 			any(User.class),

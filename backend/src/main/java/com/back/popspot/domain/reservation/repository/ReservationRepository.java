@@ -7,6 +7,7 @@ import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -17,8 +18,9 @@ import com.back.popspot.domain.reservation.entity.ReservationStatus;
 
 public interface ReservationRepository extends JpaRepository<Reservation, Long> {
 
-	// 같은 유저의 같은 슬롯 예약 존재 여부 확인
-	boolean existsByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(Long userId, Long slotId);
+	// 같은 유저의 같은 슬롯에 대한 활성(HELD/CONFIRMED) 예약 조회 (slot 함께 로딩 — 트랜잭션 밖 접근 대비)
+	@EntityGraph(attributePaths = "slot")
+	Optional<Reservation> findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(Long userId, Long slotId);
 
 	// 사용자의 확정/취소 예약 목록 조회
 	Page<Reservation> findByUserIdAndStatusIn(Long userId, Collection<ReservationStatus> statuses, Pageable pageable);
