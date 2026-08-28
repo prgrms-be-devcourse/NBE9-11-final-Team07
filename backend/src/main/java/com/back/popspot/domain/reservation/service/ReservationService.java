@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -63,6 +64,11 @@ public class ReservationService {
 	private final WaitingQueueRedisService waitingQueueRedisService;
 	private final PaymentReadyService paymentReadyService;
 	private final ReservationWaitlistService reservationWaitlistService;
+
+	// 부하 측정 시 대기 등록의 DB 조회가 재고 차감 성능을 가리므로 끌 수 있게 한다. 운영 기본값은 on.
+	// Spring 이 주입하기 전(순수 단위 테스트 등)에도 운영 기본값(on)이 되도록 필드 초기값을 둔다.
+	@Value("${reservation.waitlist.enabled:true}")
+	private boolean waitlistEnabled = true;
 
 	@Transactional(readOnly = true)
 	public Page<MyReservationResponse> getMyReservations(Long userId, Pageable pageable) {
@@ -254,6 +260,10 @@ public class ReservationService {
 	}
 
 	private void registerWaitlist(User user, ReservationSlot slot) {
+		if (!waitlistEnabled) {
+			return;
+		}
+
 		try {
 			reservationWaitlistService.registerIfAvailable(user, slot);
 		} catch (RuntimeException exception) {
