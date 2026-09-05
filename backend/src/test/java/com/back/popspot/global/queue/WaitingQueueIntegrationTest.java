@@ -24,6 +24,9 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 
 import org.springframework.data.domain.Pageable;
 
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.back.popspot.domain.popupStore.dto.PopupStoreCreateRequest;
 import com.back.popspot.domain.popupStore.entity.PopupFeeType;
 import com.back.popspot.domain.popupStore.entity.PopupStore;
@@ -38,6 +41,9 @@ import com.back.popspot.global.redis.RedisKeys;
 import com.back.popspot.support.IntegrationTestSupport;
 
 @DisplayName("대기열 엔진 통합 테스트")
+// enqueue 의 ZSET 등록은 afterCommit 시점이라 테스트 트랜잭션 안에서는 실행되지 않는다.
+// 정리용 DELETE 가 테이블 락을 잡아 동시성 테스트를 막는 문제도 함께 피한다.
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
 class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 
 	private static final long TEST_POPUP_ID = 99999L;
@@ -84,12 +90,9 @@ class WaitingQueueIntegrationTest extends IntegrationTestSupport {
 		redisTemplate.delete(RedisKeys.admissionSchedulerLockKey());
 
 		// 스레드풀 테스트(검증1)는 @Transactional 롤백이 자식 스레드까지 미치지 않아 DB에 커밋된 행이 남는다.
-		// existsByUserIdAndPopupIdAndStatus 사전체크가 stale 데이터를 읽으면 이후 enqueue가 ZSET을 건너뛰므로,
+		// findByUserIdAndPopupIdAndStatus 사전체크가 stale 행을 읽으면 이후 enqueue가 그 행의 옛 seq로 재등록하므로,
 		// 매 테스트 전후에 TEST_POPUP_ID 관련 DB 행을 직접 삭제한다.
-		List<Long> ids = popupQueueEntryRepository.findIdsByPopupId(TEST_POPUP_ID, Pageable.unpaged());
-		if (!ids.isEmpty()) {
-			popupQueueEntryRepository.deleteAllByIdInBatch(ids);
-		}
+		popupQueueEntryRepository.deleteAllInBatch();
 	}
 
 	// ── 검증 1: FIFO 순서 보장 ─────────────────────────────────────────────

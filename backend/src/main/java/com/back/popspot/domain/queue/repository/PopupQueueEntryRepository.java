@@ -35,8 +35,8 @@ public interface PopupQueueEntryRepository extends JpaRepository<PopupQueueEntry
         @Param("admitted") QueueEntryStatus admitted
     );
 
-    // enqueue 사전체크 전용 — WAITING 중복 방지 최적화 레이어
-    boolean existsByUserIdAndPopupIdAndStatus(Long userId, Long popupId, QueueEntryStatus status);
+    // enqueue 사전체크 전용 — WAITING 중복 방지 + 좀비(ZSET 누락) 복구 시 기존 seq 재사용
+    Optional<PopupQueueEntry> findByUserIdAndPopupIdAndStatus(Long userId, Long popupId, QueueEntryStatus status);
 
     // 복구 전용 — WAITING 행을 seq 오름차순으로 조회
     List<PopupQueueEntry> findByPopupIdAndStatusOrderBySeqAsc(Long popupId, QueueEntryStatus status);
