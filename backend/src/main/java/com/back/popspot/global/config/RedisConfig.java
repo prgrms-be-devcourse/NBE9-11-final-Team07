@@ -3,9 +3,11 @@ package com.back.popspot.global.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.serializer.GenericToStringSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
@@ -30,5 +32,13 @@ public class RedisConfig {
 		template.setKeySerializer(new StringRedisSerializer());
 		template.setValueSerializer(new GenericToStringSerializer<>(Long.class));
 		return template;
+	}
+
+	@Bean
+	public DefaultRedisScript<Long> decrementIfAvailableScript() {
+		DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+		script.setLocation(new ClassPathResource("redis/decrement_if_available.lua"));
+		script.setResultType(Long.class);
+		return script;
 	}
 }

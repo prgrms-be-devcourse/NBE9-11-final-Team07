@@ -1,6 +1,9 @@
 package com.back.popspot.domain.reservation.service;
 
+import java.util.Collections;
+
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import com.back.popspot.global.exception.BusinessException;
@@ -16,11 +19,18 @@ import lombok.extern.slf4j.Slf4j;
 public class ReservationRedisService {
 
 	private final RedisTemplate<String, Long> redisTemplate;
+	private final DefaultRedisScript<Long> decrementIfAvailableScript;
 
 	// 예약 생성 시 정원 선차감
 	@CircuitBreaker(name = "redisReservation", fallbackMethod = "decrementFallback")
 	public Long decrement(String key) {
 		return redisTemplate.opsForValue().decrement(key);
+	}
+
+	// 예약 생성 시 정원 확인+차감을 원자적 Lua 스크립트 1회 호출로 처리 (Lua 스파이크 버전)
+	@CircuitBreaker(name = "redisReservation", fallbackMethod = "decrementFallback")
+	public Long decrementIfAvailable(String key) {
+		return redisTemplate.execute(decrementIfAvailableScript, Collections.singletonList(key));
 	}
 
 	public Long decrementFallback(String key, Exception e) {

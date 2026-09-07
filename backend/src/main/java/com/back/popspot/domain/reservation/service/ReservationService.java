@@ -138,10 +138,8 @@ public class ReservationService {
 		String remainingKey = RedisKeys.reservationSlotRemaining(slotId);
 
 		// 2. 모든 검증 통과 후 단일 카운터(remaining) 선차감. DECR 반환값만으로 동시성 제어가 완결된다.
-		Long after = reservationRedisService.decrement(remainingKey);
+		Long after = reservationRedisService.decrementIfAvailable(remainingKey);
 		if (after == null || after < 0) {
-			// 남은 자리 없음/미초기화 → remaining 롤백
-			reservationRedisService.increment(remainingKey);
 			registerWaitlist(user, slot);
 			throw new BusinessException(ErrorCode.RESERVATION_CAPACITY_EXCEEDED);
 		}

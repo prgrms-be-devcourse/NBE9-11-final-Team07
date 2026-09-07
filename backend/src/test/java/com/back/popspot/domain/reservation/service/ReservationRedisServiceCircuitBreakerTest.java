@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.back.popspot.global.exception.BusinessException;
@@ -67,6 +68,9 @@ class ReservationRedisServiceCircuitBreakerTest {
 
 	@MockitoBean
 	private RedisTemplate<String, Long> redisTemplate;
+
+	@MockitoBean
+	private DefaultRedisScript<Long> decrementIfAvailableScript;
 
 	@Autowired
 	private ReservationRedisService reservationRedisService;

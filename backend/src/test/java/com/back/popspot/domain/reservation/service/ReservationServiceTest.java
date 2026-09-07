@@ -212,7 +212,7 @@ class ReservationServiceTest {
 		User user = createUser(2L);
 
 		// 단일 카운터: remaining -1 → 9 (0 이상) 통과
-		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationRedisService.decrementIfAvailable(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
@@ -252,7 +252,7 @@ class ReservationServiceTest {
 			any(LocalDateTime.class)
 		);
 		// 정상 흐름: remaining -1 만 일어나고 롤백(remaining +1)은 없어야 한다
-		verify(reservationRedisService).decrement(RedisKeys.reservationSlotRemaining(1L));
+		verify(reservationRedisService).decrementIfAvailable(RedisKeys.reservationSlotRemaining(1L));
 		verify(reservationRedisService, never()).increment(RedisKeys.reservationSlotRemaining(1L));
 	}
 
@@ -281,7 +281,7 @@ class ReservationServiceTest {
 
 		// then
 		assertEquals(ErrorCode.RESERVATION_ALREADY_EXISTS, exception.getErrorCode());
-		verify(reservationRedisService, never()).decrement(any());
+		verify(reservationRedisService, never()).decrementIfAvailable(any());
 		verify(reservationCommandService, never()).save(any(), any(), any(), any());
 	}
 
@@ -310,7 +310,7 @@ class ReservationServiceTest {
 		assertEquals(100L, response.reservationId());
 		assertEquals(ReservationStatus.HELD, response.status());
 		assertEquals(heldUntil, response.heldUntil());
-		verify(reservationRedisService, never()).decrement(any());
+		verify(reservationRedisService, never()).decrementIfAvailable(any());
 		verify(waitingQueueRedisService, never()).revokeProceedPermission(1L, "2");
 		verify(reservationCommandService, never()).save(any(), any(), any(), any());
 	}
@@ -332,7 +332,7 @@ class ReservationServiceTest {
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L))
 			.thenReturn(Optional.of(staleHeld));
-		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationRedisService.decrementIfAvailable(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 		when(reservationCommandService.save(
 			any(User.class),
 			any(ReservationSlot.class),
@@ -355,7 +355,7 @@ class ReservationServiceTest {
 		// then
 		verify(reservationExpirationService).expireOne(eq(staleHeld), any(LocalDateTime.class));
 		assertEquals(200L, response.reservationId());
-		verify(reservationRedisService).decrement(RedisKeys.reservationSlotRemaining(1L));
+		verify(reservationRedisService).decrementIfAvailable(RedisKeys.reservationSlotRemaining(1L));
 		verify(reservationCommandService).save(
 			any(User.class),
 			any(ReservationSlot.class),
@@ -381,7 +381,7 @@ class ReservationServiceTest {
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L))
 			.thenReturn(Optional.of(borderlineHeld));
-		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationRedisService.decrementIfAvailable(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 		when(reservationCommandService.save(
 			any(User.class),
 			any(ReservationSlot.class),
@@ -408,7 +408,7 @@ class ReservationServiceTest {
 		// then
 		verify(reservationExpirationService).expireOne(borderlineHeld, fixedNow);
 		assertEquals(200L, response.reservationId());
-		verify(reservationRedisService).decrement(RedisKeys.reservationSlotRemaining(1L));
+		verify(reservationRedisService).decrementIfAvailable(RedisKeys.reservationSlotRemaining(1L));
 	}
 
 	@Test
@@ -466,7 +466,7 @@ class ReservationServiceTest {
 		User user = createUser(2L);
 
 		// remaining -1 → 9 통과했지만 DB 저장이 실패 → remaining 롤백되어야 함
-		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationRedisService.decrementIfAvailable(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 
 		when(reservationSlotRepository.findByIdWithPopupStore(1L)).thenReturn(Optional.of(slot));
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
@@ -491,7 +491,7 @@ class ReservationServiceTest {
 	}
 
 	@Test
-	@DisplayName("남은 재고(remaining)가 음수면 롤백하고 DB 까지 가지 않는다")
+	@DisplayName("남은 재고(remaining)가 음수면 차감 없이 DB 까지 가지 않는다")
 	void createReservation_fail_remainingExhausted() {
 		// given
 		ReservationService reservationService = createReservationService();
@@ -505,7 +505,7 @@ class ReservationServiceTest {
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(Optional.empty());
 		// remaining -1 결과가 -1 → 재고 없음
-		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);
+		when(reservationRedisService.decrementIfAvailable(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);
 
 		// when
 		BusinessException exception = assertThrows(
@@ -515,8 +515,8 @@ class ReservationServiceTest {
 
 		// then
 		assertEquals(ErrorCode.RESERVATION_CAPACITY_EXCEEDED, exception.getErrorCode());
-		// 롤백: remaining +1
-		verify(reservationRedisService).increment(RedisKeys.reservationSlotRemaining(1L));
+		// Lua 스크립트가 실패 시 상태를 바꾸지 않으므로 보상 increment가 필요 없다
+		verify(reservationRedisService, never()).increment(any());
 		verify(reservationCommandService, never()).save(
 			any(User.class),
 			any(ReservationSlot.class),
@@ -885,7 +885,7 @@ class ReservationServiceTest {
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(Optional.empty());
-		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationRedisService.decrementIfAvailable(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 		when(reservationCommandService.save(
 			any(User.class),
 			any(ReservationSlot.class),
@@ -947,7 +947,7 @@ class ReservationServiceTest {
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(Optional.empty());
-		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);
+		when(reservationRedisService.decrementIfAvailable(RedisKeys.reservationSlotRemaining(1L))).thenReturn(-1L);
 
 		// when
 		BusinessException exception = assertThrows(
@@ -975,7 +975,7 @@ class ReservationServiceTest {
 		when(waitingQueueRedisService.hasProceedPermission(1L, "2")).thenReturn(true);
 		when(userRepository.findById(2L)).thenReturn(Optional.of(user));
 		when(reservationRepository.findByUserIdAndSlotIdAndActiveUniqueKeyIsNotNull(2L, 1L)).thenReturn(Optional.empty());
-		when(reservationRedisService.decrement(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
+		when(reservationRedisService.decrementIfAvailable(RedisKeys.reservationSlotRemaining(1L))).thenReturn(9L);
 		when(reservationCommandService.save(
 			any(User.class),
 			any(ReservationSlot.class),
@@ -1017,7 +1017,7 @@ class ReservationServiceTest {
 		// then
 		assertEquals(ErrorCode.RESERVATION_SLOT_ALREADY_STARTED, exception.getErrorCode());
 		verify(userRepository, never()).findById(any());
-		verify(reservationRedisService, never()).decrement(any());
+		verify(reservationRedisService, never()).decrementIfAvailable(any());
 		verify(reservationCommandService, never()).save(any(), any(), any(), any());
 	}
 
@@ -1042,7 +1042,7 @@ class ReservationServiceTest {
 
 		// then
 		assertEquals(ErrorCode.RESOURCE_NOT_FOUND, exception.getErrorCode());
-		verify(reservationRedisService, never()).decrement(any());
+		verify(reservationRedisService, never()).decrementIfAvailable(any());
 		verify(reservationCommandService, never()).save(any(), any(), any(), any());
 	}
 
