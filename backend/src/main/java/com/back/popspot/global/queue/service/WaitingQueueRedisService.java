@@ -5,7 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +36,35 @@ import lombok.extern.slf4j.Slf4j;
 public class WaitingQueueRedisService {
 
 	private static final String CB_NAME = "waitingQueueRedis";
+
+	/**
+	 * SMEMBERS → 각 id에 대해 EXISTS(waiting:popup:{id}) 확인 → 없으면 SREM을
+	 * 단일 원자 Lua 스크립트로 실행한다.
+	 *
+	 * N개 개별 Lua 호출 대신 1회 배치 호출을 선택한 이유:
+	 * 개별 호출은 O(N) 네트워크 왕복이 필요하지만, 배치 호출은 1회 왕복으로
+	 * 모든 id를 처리한다. 활성 팝업 수가 수십 건 내외인 이 서비스에서 Lua
+	 * 블로킹 시간 증가보다 RTT 절약 효과가 크다.
+	 *
+	 * KEYS[1] = active:waiting:popups
+	 * (waiting:popup:{id} 키들은 스크립트 내부에서 동적으로 생성)
+	 */
+	@SuppressWarnings("rawtypes")
+	private static final RedisScript<List> FILTER_ACTIVE_POPUPS_SCRIPT = RedisScript.of(
+		"""
+		local members = redis.call('SMEMBERS', KEYS[1])
+		local result = {}
+		for _, id in ipairs(members) do
+		    if redis.call('EXISTS', 'waiting:popup:' .. id) == 1 then
+		        result[#result + 1] = id
+		    else
+		        redis.call('SREM', KEYS[1], id)
+		    end
+		end
+		return result
+		""",
+		List.class
+	);
 
 	private final StringRedisTemplate redisTemplate;
 	private final WaitingQueueProperties properties;
@@ -150,24 +180,16 @@ public class WaitingQueueRedisService {
 	}
 
 	public Set<Long> getActivePopupIds() {
-		Set<String> ids = redisTemplate.opsForSet().members(RedisKeys.activeWaitingPopups());
-		if (ids == null || ids.isEmpty()) {
+		@SuppressWarnings("unchecked")
+		List<String> result = redisTemplate.execute(
+			FILTER_ACTIVE_POPUPS_SCRIPT,
+			List.of(RedisKeys.activeWaitingPopups())
+		);
+		if (result == null || result.isEmpty()) {
 			return Collections.emptySet();
 		}
-		Set<Long> active = new HashSet<>();
-		for (String id : ids) {
-			long popupId = Long.parseLong(id);
-			if (Boolean.TRUE.equals(redisTemplate.hasKey(RedisKeys.popupWaitingQueue(popupId)))) {
-				active.add(popupId);                          // ZSET 살아있음 → 활성 대기열
-			} else {
-				// ZSET 없음(대기열 소진/TTL 만료) → Set에서 lazy 청소
-				// 주의: hasKey(없음) 확인 후 SREM 사이에 enqueue가 끼면
-				// 방금 들어온 팝업을 뺄 수 있음. 다음 조회/enqueue에서 자연 복원되므로
-				// 유저 누락으로 이어지진 않음. 완전 보장은 Lua 원자화(추후 과제).
-				redisTemplate.opsForSet().remove(RedisKeys.activeWaitingPopups(), id);
-			}
-		}
-		return active;
-
+		return result.stream()
+			.map(Long::parseLong)
+			.collect(Collectors.toSet());
 	}
 }
