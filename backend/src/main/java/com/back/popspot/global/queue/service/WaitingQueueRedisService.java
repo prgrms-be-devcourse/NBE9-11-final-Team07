@@ -38,7 +38,7 @@ public class WaitingQueueRedisService {
 	private static final String CB_NAME = "waitingQueueRedis";
 
 	/**
-	 * SMEMBERS → 각 id에 대해 EXISTS(waiting:popup:{id}) 확인 → 없으면 SREM을
+	 * SMEMBERS → 각 id에 대해 EXISTS({prefix}{id}) 확인 → 없으면 SREM을
 	 * 단일 원자 Lua 스크립트로 실행한다.
 	 *
 	 * N개 개별 Lua 호출 대신 1회 배치 호출을 선택한 이유:
@@ -47,15 +47,16 @@ public class WaitingQueueRedisService {
 	 * 블로킹 시간 증가보다 RTT 절약 효과가 크다.
 	 *
 	 * KEYS[1] = active:waiting:popups
-	 * (waiting:popup:{id} 키들은 스크립트 내부에서 동적으로 생성)
+	 * ARGV[1] = waiting:popup: (RedisKeys.popupWaitingQueuePrefix() — 하드코딩 방지)
 	 */
 	@SuppressWarnings("rawtypes")
 	private static final RedisScript<List> FILTER_ACTIVE_POPUPS_SCRIPT = RedisScript.of(
 		"""
 		local members = redis.call('SMEMBERS', KEYS[1])
+		local prefix = ARGV[1]
 		local result = {}
 		for _, id in ipairs(members) do
-		    if redis.call('EXISTS', 'waiting:popup:' .. id) == 1 then
+		    if redis.call('EXISTS', prefix .. id) == 1 then
 		        result[#result + 1] = id
 		    else
 		        redis.call('SREM', KEYS[1], id)
@@ -183,7 +184,8 @@ public class WaitingQueueRedisService {
 		@SuppressWarnings("unchecked")
 		List<String> result = redisTemplate.execute(
 			FILTER_ACTIVE_POPUPS_SCRIPT,
-			List.of(RedisKeys.activeWaitingPopups())
+			List.of(RedisKeys.activeWaitingPopups()),
+			RedisKeys.popupWaitingQueuePrefix()
 		);
 		if (result == null || result.isEmpty()) {
 			return Collections.emptySet();
