@@ -55,6 +55,9 @@ public enum ErrorCode {
 	PAYMENT_IDEMPOTENCY_KEY_MISMATCH(HttpStatus.CONFLICT, "결제 승인 멱등성 키가 일치하지 않습니다."),
 
 	RESERVATION_TEMPORARILY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "예약이 일시 중단됩니다. 잠시 후 다시 시도해주세요."),
+	// 복구 게이트발 차단. 사용자 응답은 RESERVATION_TEMPORARILY_UNAVAILABLE 과 동일(503·동일 메시지)하지만,
+	// 로그/추적에서 "복구 중 차단"과 "CB 장애 차단"을 구분하기 위해 별도 코드로 둔다.
+	RESERVATION_RECOVERY_IN_PROGRESS(HttpStatus.SERVICE_UNAVAILABLE, "예약이 일시 중단됩니다. 잠시 후 다시 시도해주세요."),
 	QUEUE_TEMPORARILY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "대기열 서비스가 일시 중단됩니다. 잠시 후 다시 시도해주세요."),
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
