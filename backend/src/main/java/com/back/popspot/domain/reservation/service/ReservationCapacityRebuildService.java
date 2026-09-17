@@ -74,11 +74,45 @@ public class ReservationCapacityRebuildService {
 		// slotId에 해당하는 Redis remaining key 이름을 구한다.
 		String remainingKey = RedisKeys.reservationSlotRemaining(slotId);
 
-		// 운영자가 복구 전후 값을 비교할 수 있도록 현재 Redis 값을 먼저 읽어 둔다.
+		// 운영자가 복구 전후 값을 비교할 수 있도록 현재 Redis 값을 먼저 읽어 둔다. 조건부 SET의 비교 기준이기도 하다.
 		Long previousRedisRemaining = redisTemplate.opsForValue().get(remainingKey);
 
+		// 조건부 SET — 복구가 신규 차감(DECR)을 덮어써 초과판매를 내는 것을 막는다.
+		//  1) 현재 Redis 값이 없으면(null): 차감할 게 없던 상태(미초기화/TTL 만료/장애 소실)라 덮어써도
+		//     초과판매 위험이 없다. 오히려 복구가 초기화해줘야 정상이므로 그냥 SET.
+		//  2) 현재 값이 있고 계산값 > 현재값: "복구가 자리를 실제보다 많이 봤다 = 방금 나간 차감을 아직 못 봤다"는
+		//     신호. 덮어쓰면 초과판매가 나므로 SET하지 않고 skip한다(로그만 남기고 예외는 던지지 않는다).
+		//  3) 계산값 <= 현재값: 복구가 차감을 반영했거나 하향 교정이므로 덮어써도 초과판매가 안 난다. SET.
+		//
+		// [알려진 비대칭 부작용] 이 규칙은 "계산값 > 현재값이면 skip"이라 초과판매(remaining 과대)는 막지만,
+		// 취소로 자리가 실제로 늘었는데 INCR 실패로 Redis가 과소인 경우 복구가 정당한 상향 교정을 하지 못해
+		// 과소판매 쪽으로 보수적으로 치우칠 수 있다. 초과판매(돈·분쟁)가 과소판매(기회손실)보다 나쁘므로
+		// 이 트레이드오프는 의도적으로 감수한다. (B 게이트가 켜진 동안엔 신규 DECR이 없어 이 부작용이 완화된다.)
+		boolean overwriteWouldInflate = previousRedisRemaining != null && remaining > previousRedisRemaining;
+
+		if (overwriteWouldInflate) {
+			// 덮어쓰지 않고 현재값을 유지한다. 결과 DTO의 rebuiltRedisRemaining도 "실제 기록된 값"인 현재값으로 반환해
+			// previousRedisRemaining == rebuiltRedisRemaining 이 곧 "이번 복구는 SET을 건너뛰었다"는 신호가 되게 한다.
+			log.warn(
+				"[RESERVATION_REDIS_REBUILD_SKIPPED] 복구 계산값이 현재 Redis 값보다 커서 덮어쓰지 않음(초과판매 방지): "
+					+ "slotId={}, capacity={}, activeReservationCount={}, currentRedisRemaining={}, calculatedRemaining={}",
+				slotId,
+				capacity,
+				activeReservationCount,
+				previousRedisRemaining,
+				remaining
+			);
+			return ReservationCapacityRebuildResult.from(
+				slotId,
+				capacity,
+				activeReservationCount,
+				previousRedisRemaining,
+				previousRedisRemaining
+			);
+		}
+
 		try {
-			// Redis remaining 값을 DB 원장 기준 계산값으로 재설정한다.
+			// Redis remaining 값을 DB 원장 기준 계산값으로 재설정한다. (현재값이 null이거나 계산값 <= 현재값인 경우만 진입)
 			LocalDateTime closeDate = slot.getPopupStore().getCloseDate();
 			long ttlSeconds = ChronoUnit.SECONDS.between(LocalDateTime.now(), closeDate);
 			if (ttlSeconds > 0) {
