@@ -63,6 +63,13 @@ queue-recovery:
   lock-at-most-for-seconds: 300
   retry-deadline-seconds: 360
 
+# 예약 정원 복구 코디네이터 — 대기열(queue-recovery) 수준 기본값, 운영 후 조정
+reservation-capacity-recovery:
+  max-attempts: 60
+  poll-interval-seconds: 5
+  lock-at-most-for-seconds: 300
+  retry-deadline-seconds: 360
+
 management:
   endpoints:
     web:
