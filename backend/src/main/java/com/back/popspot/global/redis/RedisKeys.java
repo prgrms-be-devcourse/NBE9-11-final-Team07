@@ -16,12 +16,18 @@ public final class RedisKeys {
 		return "seq:popup:" + popupId;
 	}
 
+	private static final String POPUP_WAITING_QUEUE_PREFIX = "waiting:popup:";
+
 	public static String popupWaitingQueue(Long popupId) {
-		return "waiting:popup:" + popupId;
+		return POPUP_WAITING_QUEUE_PREFIX + popupId;
+	}
+
+	public static String popupWaitingQueuePrefix() {
+		return POPUP_WAITING_QUEUE_PREFIX;
 	}
 
 	public static String popupWaitingQueuePattern() {
-		return "waiting:popup:*";
+		return POPUP_WAITING_QUEUE_PREFIX + "*";
 	}
 
 	public static String popupProceedFlag(Long popupId, String userId) {

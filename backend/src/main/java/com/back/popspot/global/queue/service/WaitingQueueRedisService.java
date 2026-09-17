@@ -1,21 +1,18 @@
 package com.back.popspot.global.queue.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -41,6 +38,60 @@ import lombok.extern.slf4j.Slf4j;
 public class WaitingQueueRedisService {
 
 	private static final String CB_NAME = "waitingQueueRedis";
+
+	/**
+	 * ZADD(NX) + ZCARD + (조건부) EXPIREAT 를 단일 원자 Lua 스크립트로 실행한다.
+	 *
+	 * KEYS[1] = waiting ZSET  (waiting:popup:{id})
+	 * KEYS[2] = seq counter   (seq:popup:{id})
+	 * ARGV[1] = seq score, ARGV[2] = userId(ZSET member), ARGV[3] = expireAt(Unix epoch seconds)
+	 *
+	 * ZSET에 첫 번째 멤버가 추가된 경우(added==1 && ZCARD==1)에만 두 키 모두 EXPIREAT를 적용한다.
+	 * ZADD 와 ZCARD 가 원자 단위로 묶여 있으므로, 동시 enqueue 시 TTL 이 누락되는
+	 * race condition(ZADD ↔ ZCARD 사이 윈도우)이 제거된다.
+	 */
+	private static final RedisScript<Long> ENQUEUE_WITH_TTL_SCRIPT = RedisScript.of(
+		"""
+		local added = redis.call('ZADD', KEYS[1], 'NX', ARGV[1], ARGV[2])
+		if added == 1 and redis.call('ZCARD', KEYS[1]) == 1 then
+		    redis.call('EXPIREAT', KEYS[1], tonumber(ARGV[3]))
+		    redis.call('EXPIREAT', KEYS[2], tonumber(ARGV[3]))
+		    return 1
+		end
+		return 0
+		""",
+		Long.class
+	);
+
+	/**
+	 * SMEMBERS → 각 id에 대해 EXISTS({prefix}{id}) 확인 → 없으면 SREM을
+	 * 단일 원자 Lua 스크립트로 실행한다.
+	 *
+	 * N개 개별 Lua 호출 대신 1회 배치 호출을 선택한 이유:
+	 * 개별 호출은 O(N) 네트워크 왕복이 필요하지만, 배치 호출은 1회 왕복으로
+	 * 모든 id를 처리한다. 활성 팝업 수가 수십 건 내외인 이 서비스에서 Lua
+	 * 블로킹 시간 증가보다 RTT 절약 효과가 크다.
+	 *
+	 * KEYS[1] = active:waiting:popups
+	 * ARGV[1] = waiting:popup: (RedisKeys.popupWaitingQueuePrefix() — 하드코딩 방지)
+	 */
+	@SuppressWarnings("rawtypes")
+	private static final RedisScript<List> FILTER_ACTIVE_POPUPS_SCRIPT = RedisScript.of(
+		"""
+		local members = redis.call('SMEMBERS', KEYS[1])
+		local prefix = ARGV[1]
+		local result = {}
+		for _, id in ipairs(members) do
+		    if redis.call('EXISTS', prefix .. id) == 1 then
+		        result[#result + 1] = id
+		    else
+		        redis.call('SREM', KEYS[1], id)
+		    end
+		end
+		return result
+		""",
+		List.class
+	);
 
 	// 좀비(DB WAITING + ZSET 누락) 발생 건수. 실패를 삼키므로 이 지표가 유일한 관측 수단이다.
 	private static final String ZSET_REGISTER_FAILURE_METRIC = "popspot.queue.enqueue.zset_register_failures";
@@ -88,6 +139,16 @@ public class WaitingQueueRedisService {
 		Long seq = redisTemplate.opsForValue().increment(RedisKeys.popupQueueSeq(popupId));
 		popupQueueEntryRepository.save(PopupQueueEntry.waiting(userIdLong, popupId, seq));
 
+		// ZADD(NX) + ZCARD + (조건부) EXPIREAT 를 원자 Lua 스크립트로 실행.
+		// 첫 번째 멤버 추가 시(added==1 && ZCARD==1) reservationEndAt + buffer 시각에 두 키 모두 만료.
+		// recover(WAITING=0) 이후 첫 enqueue 에서도 이 경로로 TTL 이 설정됨.
+		long expireAtEpochSec = properties.computeExpireAt(reservationEndAt).getEpochSecond();
+		redisTemplate.execute(
+			ENQUEUE_WITH_TTL_SCRIPT,
+			List.of(RedisKeys.popupWaitingQueue(popupId), RedisKeys.popupQueueSeq(popupId)),
+			String.valueOf(seq), userId, String.valueOf(expireAtEpochSec)
+		);
+
 		// ZSET/인덱스 등록은 DB 커밋 이후로 미룬다.
 		// 커밋 전에 넣으면 롤백 시 "ZSET 에는 있는데 DB 원장에는 없는" 유령 항목이 남고,
 		// 그 유저가 admit 될 때 admitOne 이 0 row 를 업데이트한다.
@@ -110,22 +171,6 @@ public class WaitingQueueRedisService {
 		Boolean added = redisTemplate.opsForZSet().addIfAbsent(RedisKeys.popupWaitingQueue(popupId), userId, seq);
 		// 활성 팝업 인덱스에 등록 (스케줄러가 KEYS 전체 탐색 없이 찾도록)
 		redisTemplate.opsForSet().add(RedisKeys.activeWaitingPopups(), String.valueOf(popupId));
-
-		// added==true(신규 멤버) && size==1(ZSET이 방금 생성됨) → TTL 적용
-		// recover(WAITING=0) 이후 첫 enqueue에서도 이 경로로 TTL이 설정됨
-		boolean isFirstInZset = Boolean.TRUE.equals(added)
-			&& Long.valueOf(1L).equals(redisTemplate.opsForZSet().size(RedisKeys.popupWaitingQueue(popupId)));
-
-		if (isFirstInZset) {
-			Instant expireAt = properties.computeExpireAt(reservationEndAt);
-			byte[] seqKey = RedisKeys.popupQueueSeq(popupId).getBytes(StandardCharsets.UTF_8);
-			byte[] waitingKey = RedisKeys.popupWaitingQueue(popupId).getBytes(StandardCharsets.UTF_8);
-			redisTemplate.executePipelined((RedisCallback<Object>)connection -> {
-				connection.keyCommands().expireAt(seqKey, expireAt);
-				connection.keyCommands().expireAt(waitingKey, expireAt);
-				return null;
-			});
-		}
 	}
 
 	// 트랜잭션 동기화가 살아 있으면 커밋 이후로, 아니면 즉시 실행한다.
@@ -229,24 +274,17 @@ public class WaitingQueueRedisService {
 	}
 
 	public Set<Long> getActivePopupIds() {
-		Set<String> ids = redisTemplate.opsForSet().members(RedisKeys.activeWaitingPopups());
-		if (ids == null || ids.isEmpty()) {
+		@SuppressWarnings("unchecked")
+		List<String> result = redisTemplate.execute(
+			FILTER_ACTIVE_POPUPS_SCRIPT,
+			List.of(RedisKeys.activeWaitingPopups()),
+			RedisKeys.popupWaitingQueuePrefix()
+		);
+		if (result == null || result.isEmpty()) {
 			return Collections.emptySet();
 		}
-		Set<Long> active = new HashSet<>();
-		for (String id : ids) {
-			long popupId = Long.parseLong(id);
-			if (Boolean.TRUE.equals(redisTemplate.hasKey(RedisKeys.popupWaitingQueue(popupId)))) {
-				active.add(popupId);                          // ZSET 살아있음 → 활성 대기열
-			} else {
-				// ZSET 없음(대기열 소진/TTL 만료) → Set에서 lazy 청소
-				// 주의: hasKey(없음) 확인 후 SREM 사이에 enqueue가 끼면
-				// 방금 들어온 팝업을 뺄 수 있음. 다음 조회/enqueue에서 자연 복원되므로
-				// 유저 누락으로 이어지진 않음. 완전 보장은 Lua 원자화(추후 과제).
-				redisTemplate.opsForSet().remove(RedisKeys.activeWaitingPopups(), id);
-			}
-		}
-		return active;
-
+		return result.stream()
+			.map(Long::parseLong)
+			.collect(Collectors.toSet());
 	}
 }
