@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -14,7 +15,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
+
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.back.popspot.domain.queue.entity.PopupQueueEntry;
 import com.back.popspot.domain.queue.repository.PopupQueueEntryRepository;
@@ -64,6 +69,11 @@ class QueueRecoveryServiceTest extends ContainerIntegrationTestSupport {
             Set<String> proceedKeys = redisTemplate.keys(RedisKeys.popupProceedFlagPattern(id));
             if (proceedKeys != null && !proceedKeys.isEmpty()) {
                 redisTemplate.delete(proceedKeys);
+            }
+            // NOT_SUPPORTED 테스트는 롤백되지 않으므로 DB 행도 직접 정리한다.
+            List<Long> ids = entryRepository.findIdsByPopupId(id, Pageable.unpaged());
+            if (!ids.isEmpty()) {
+                entryRepository.deleteAllByIdInBatch(ids);
             }
         }
     }
@@ -129,6 +139,8 @@ class QueueRecoveryServiceTest extends ContainerIntegrationTestSupport {
 
     @Test
     @DisplayName("시나리오3: recover() 직후 enqueue() 시 seq = (복구 MAX + 1), 충돌 없음, TTL 유지")
+    // enqueue 의 ZSET 등록은 afterCommit 시점이므로, 테스트 트랜잭션 안에서는 실행되지 않는다.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void recover_후_enqueue_seq_충돌_없음() {
         // given — ADMITTED seq=3, WAITING seq=4
         PopupQueueEntry a3 = PopupQueueEntry.waiting(20L, POPUP_C, 3L);
@@ -164,6 +176,8 @@ class QueueRecoveryServiceTest extends ContainerIntegrationTestSupport {
 
     @Test
     @DisplayName("TTL공백회귀: recover(WAITING=0) 후 enqueue() → 신규 ZSET에 TTL 정상 적용")
+    // enqueue 의 ZSET 등록은 afterCommit 시점이므로, 테스트 트랜잭션 안에서는 실행되지 않는다.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void recover_WAITING_0_후_enqueue_ZSET_TTL_정상적용() {
         // given — ADMITTED만 있는 popup (seq=5), WAITING=0 상태로 recover
         PopupQueueEntry a5 = PopupQueueEntry.waiting(50L, POPUP_B, 5L);

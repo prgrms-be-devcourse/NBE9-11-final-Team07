@@ -13,6 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.back.popspot.domain.queue.entity.PopupQueueEntry;
 import com.back.popspot.domain.queue.entity.QueueEntryStatus;
 import com.back.popspot.domain.queue.repository.PopupQueueEntryRepository;
@@ -21,6 +24,8 @@ import com.back.popspot.global.redis.RedisKeys;
 import com.back.popspot.support.IntegrationTestSupport;
 
 @DisplayName("WAITING 중복 진입 방지(멱등 enqueue) 통합 테스트")
+// enqueue 의 ZSET 등록은 afterCommit 시점이므로 테스트 트랜잭션 안에서는 실행되지 않는다.
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
 class WaitingQueueIdempotentEnqueueTest extends IntegrationTestSupport {
 
     private static final long POPUP_A = 88881L;
@@ -47,6 +52,8 @@ class WaitingQueueIdempotentEnqueueTest extends IntegrationTestSupport {
     }
 
     private void cleanRedis() {
+        // NOT_SUPPORTED 라 롤백이 없으므로 DB 행도 직접 정리한다.
+        repo.deleteAllInBatch();
         for (long popupId : List.of(POPUP_A, POPUP_B)) {
             Set<String> keys = redisTemplate.keys("*popup:" + popupId + "*");
             if (keys != null && !keys.isEmpty()) {
