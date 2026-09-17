@@ -131,6 +131,12 @@ public class ReservationService {
 		Long slotId = slot.getId();
 		String remainingKey = RedisKeys.reservationSlotRemaining(slotId);
 
+		// 복구 게이트: Redis 잔여 정원 재구축이 도는 동안엔 신규 차감을 막는다.
+		// 복구 스냅샷과 DECR이 겹치면 정원이 어긋날 수 있으므로 DECR 바로 직전에 확인한다.
+		if (reservationRedisService.isRecovering()) {
+			throw new BusinessException(ErrorCode.RESERVATION_RECOVERY_IN_PROGRESS);
+		}
+
 		// 2. 모든 검증 통과 후 단일 카운터(remaining) 선차감. DECR 반환값만으로 동시성 제어가 완결된다.
 		Long after = reservationRedisService.decrement(remainingKey);
 		if (after == null || after < 0) {
