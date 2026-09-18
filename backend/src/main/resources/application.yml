@@ -25,6 +25,9 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # RedisConfig 가 이 값으로 Lettuce command/connect timeout 을 건다 (미설정 시 Lettuce 기본 60s)
+      timeout: 1s
+      connect-timeout: 1s
 
 aws:
   s3:
@@ -75,15 +78,20 @@ management:
 resilience4j:
   circuitbreaker:
     instances:
+      # 부하테스트 실측 기준(정상 부하 호출 p99.9 ≤103ms, max ≤202ms).
+      # 5초 창 + slow 80% 라 2초 이하 순간 정지에는 열리지 않고, 지속 저하·장애는 약 4초 안에 차단한다.
       redisReservation:
+        sliding-window-type: TIME_BASED
+        sliding-window-size: 5
+        minimum-number-of-calls: 100
         failure-rate-threshold: 50
-        wait-duration-in-open-state: 10s
-        sliding-window-size: 10
-        minimum-number-of-calls: 10
-        sliding-window-type: COUNT_BASED
-        permitted-number-of-calls-in-half-open-state: 3
-        slow-call-duration-threshold: 200ms
-        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 500ms
+        slow-call-rate-threshold: 80
+        wait-duration-in-open-state: 5s
+        permitted-number-of-calls-in-half-open-state: 10
+        record-exceptions:
+          - org.springframework.data.redis.RedisConnectionFailureException
+          - org.springframework.dao.QueryTimeoutException
       # CB 수치는 실측 데이터 부재로 인한 초기 추정값, 운영 후 재조정 예정
       waitingQueueRedis:
         sliding-window-type: TIME_BASED
