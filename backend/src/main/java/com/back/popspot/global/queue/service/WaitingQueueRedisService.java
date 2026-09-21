@@ -117,13 +117,15 @@ public class WaitingQueueRedisService {
 	public void enqueue(long popupId, String userId, LocalDateTime reservationEndAt) {
 		long userIdLong = Long.parseLong(userId);
 
-		// ZSET 에 이미 있으면 정상 대기 중 — DB 조회 없이 종료 (폴링 요청 대부분이 이 경로)
+		// ZSET 에 이미 있으면 정상 대기 중 — DB 조회 없이 종료 (대기 중 상세 재진입·새로고침이 이 경로)
+		// 대기 화면 폴링(waiting-status)은 인터셉터를 거치지 않으므로 enqueue 를 호출하지 않는다.
 		if (redisTemplate.opsForZSet().score(RedisKeys.popupWaitingQueue(popupId), userId) != null) {
 			return;
 		}
 
 		// ZSET 에 없는데 DB 에 WAITING 행이 남아 있으면 좀비다.
-		// (커밋 성공 후 ZADD 실패, 또는 admitBatch 의 popMin 이후 DB 롤백)
+		// (ZSET 등록 누락 또는 ZSET 키 유실)
+		// 복구는 이 분기뿐이며, 유저가 상세(GET /popups/{id})에 재진입해야 실행된다.
 		// 새 seq 를 발급하면 대기열 맨 뒤로 밀리므로, 행에 저장된 seq 를 그대로 재등록한다.
 		Optional<PopupQueueEntry> orphan = popupQueueEntryRepository
 			.findByUserIdAndPopupIdAndStatus(userIdLong, popupId, QueueEntryStatus.WAITING);
@@ -158,7 +160,8 @@ public class WaitingQueueRedisService {
 			} catch (RuntimeException e) {
 				// DB 커밋은 이미 성공했으므로 이 유저는 원장상 대기 중이다.
 				// 예외를 전파하면 500 을 주게 되는데, 실제로는 등록돼 있어 정보가 어긋난다.
-				// ZSET 누락은 다음 폴링의 좀비 복구 경로가 기존 seq 그대로 바로잡는다.
+				// ZSET 누락은 유저의 다음 상세 재진입 시 좀비 복구 분기가 기존 seq 그대로 바로잡는다.
+				// (폴링은 enqueue 를 타지 않으므로, 대기 화면이 NOT_IN_QUEUE 시 재진입해야 한다)
 				log.warn("enqueue ZSET 등록 실패 — 다음 폴링에서 복구: popupId={}, userId={}, seq={}",
 					popupId, userId, seq, e);
 				Metrics.counter(ZSET_REGISTER_FAILURE_METRIC).increment();
